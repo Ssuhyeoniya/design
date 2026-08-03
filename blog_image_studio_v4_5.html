@@ -272,7 +272,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .asset-card .acts button{flex:1;border:1px solid var(--border-strong);background:#fff;border-radius:6px;font-family:inherit;font-size:11px;font-weight:600;padding:4px 0;cursor:pointer;}
   .asset-card .acts button:hover{background:#f3f4f6;}
   .asset-card .acts .ins{border-color:var(--accent);color:var(--accent);}
-  .asset-card .acts .del:hover{color:var(--danger);border-color:var(--danger);}
+  .asset-card .acts .del{color:var(--danger);border-color:var(--danger);}
+  .asset-card .acts .del:hover{background:var(--danger);color:#fff;border-color:var(--danger);}
   .asset-empty{padding:36px 0;text-align:center;font-size:12.5px;color:var(--text-faint);line-height:1.7;}
 
   #busy{position:fixed;inset:0;background:rgba(255,255,255,.78);display:none;align-items:center;justify-content:center;z-index:200;flex-direction:column;gap:12px;}
@@ -449,6 +450,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <h2>⭐ 이미지 보관함</h2>
       <div class="right">
         <button class="btn small" id="assetUpBtn">＋ 파일 업로드로 보관</button>
+        <button class="btn small" id="assetClearBtn" style="color:var(--danger);border-color:var(--danger);">🗑 전체 삭제</button>
         <button class="m-close" id="assetClose">✕</button>
       </div>
     </div>
@@ -2959,6 +2961,14 @@ async function assetDel(id){
     tx.oncomplete=res;tx.onerror=()=>rej(tx.error);
   });
 }
+async function assetClear(){
+  const db=await idb();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('assets','readwrite');
+    tx.objectStore('assets').clear();
+    tx.oncomplete=res;tx.onerror=()=>rej(tx.error);
+  });
+}
 async function renderAssets(){
   const body=$('#assetBody');
   let list;
@@ -2999,7 +3009,7 @@ async function renderAssets(){
     card.querySelector('.th').onclick=insert;
     card.querySelector('.ins').onclick=insert;
     card.querySelector('.del').onclick=async()=>{
-      const yes=await askConfirm(`"${item.name}"\n보관함에서 삭제하시겠습니까?`,'삭제');
+      const yes=await askConfirm(`"${item.name}"\n\n보관함에서 영구 삭제할까요?\n삭제하면 복구할 수 없습니다.`,'영구 삭제');
       if(!yes)return;
       try{await assetDel(id);await renderAssets();}
       catch(err){alert('삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
@@ -3008,6 +3018,15 @@ async function renderAssets(){
 }
 $('#assetBtn').onclick=()=>{$('#assetBack').classList.add('show');renderAssets();};
 $('#assetClose').onclick=()=>$('#assetBack').classList.remove('show');
+$('#assetClearBtn').onclick=async()=>{
+  let list;
+  try{list=await assetList();}catch(e){list=[];}
+  if(!list.length){alert('보관함이 비어 있습니다.');return;}
+  const yes=await askConfirm(`보관함의 이미지 ${list.length}개를 모두 영구 삭제할까요?\n삭제하면 복구할 수 없습니다.`,'전체 영구 삭제');
+  if(!yes)return;
+  try{await assetClear();await renderAssets();}
+  catch(err){alert('전체 삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
+};
 $('#assetBack').addEventListener('click',e=>{if(e.target.id==='assetBack')$('#assetBack').classList.remove('show');});
 $('#assetUpBtn').onclick=()=>$('#assetUpInput').click();
 $('#assetUpInput').onchange=async e=>{
