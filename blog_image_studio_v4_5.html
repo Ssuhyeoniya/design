@@ -76,6 +76,33 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   #topbar{flex-shrink:0;min-height:3.25rem;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;padding:.4rem .9rem;position:relative;z-index:20;row-gap:.4rem;}
   #topbar .logo{font-weight:800;font-size:15px;letter-spacing:-0.02em;}
   #topbar .logo span{color:var(--accent);}
+  #navSec{display:flex;gap:4px;background:#f1f3f5;border:1px solid var(--border);border-radius:8px;padding:3px;}
+  #navSec .nav-item{border:none;background:none;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--text-sub);padding:5px 12px;border-radius:6px;cursor:pointer;white-space:nowrap;}
+  #navSec .nav-item:hover{color:var(--text);}
+  #navSec .nav-item.on{background:#fff;color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  /* 이미지 소스 페이지 */
+  #srcPage{position:fixed;inset:0;background:var(--bg);z-index:130;display:none;flex-direction:column;}
+  #srcPage.show{display:flex;}
+  #srcPage .sp-head{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:16px 26px;background:var(--panel);border-bottom:1px solid var(--border);}
+  #srcPage .sp-head h1{font-size:17px;font-weight:800;}
+  #srcPage .sp-head .cnt{font-size:12.5px;color:var(--text-faint);font-weight:600;}
+  #srcPage .sp-head .sp-actions{margin-left:auto;display:flex;gap:8px;}
+  #srcBody{flex:1;overflow-y:auto;padding:22px 26px;}
+  .src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;}
+  .src-card{border:1px solid var(--border);border-radius:12px;background:#fff;overflow:hidden;display:flex;flex-direction:column;}
+  .src-card .sc-th{height:150px;background:repeating-conic-gradient(#f1f2f5 0 25%,#fff 0 50%) 0 0/18px 18px;display:flex;align-items:center;justify-content:center;}
+  .src-card .sc-th img{max-width:94%;max-height:140px;object-fit:contain;}
+  .src-card .sc-meta{padding:11px 13px 0;}
+  .src-card .sc-name{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .src-card .sc-sub{font-size:11px;color:var(--text-faint);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;}
+  .src-card .sc-sub b{color:var(--text-sub);font-weight:600;}
+  .src-card textarea.sc-src{width:100%;height:62px;margin-top:9px;border:1px solid var(--border);border-radius:7px;padding:7px 9px;font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--text-sub);resize:vertical;background:#fafbfc;box-sizing:border-box;}
+  .src-card .sc-acts{display:flex;gap:6px;padding:9px 13px 13px;}
+  .src-card .sc-acts button{flex:1;border:1px solid var(--border-strong);background:#fff;border-radius:7px;font-family:inherit;font-size:11.5px;font-weight:600;padding:6px 0;cursor:pointer;}
+  .src-card .sc-acts button:hover{background:#f3f4f6;}
+  .src-card .sc-acts .sc-del{color:var(--danger);border-color:var(--danger);}
+  .src-card .sc-acts .sc-del:hover{background:var(--danger);color:#fff;}
+  .src-empty{padding:60px 0;text-align:center;color:var(--text-faint);font-size:13px;line-height:1.9;}
   #docTitle{width:130px;height:32px;font-size:12.5px;}
   .divider{width:1px;height:24px;background:var(--border);margin:0 3px;}
   .btn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--border-strong);background:#fff;color:var(--text);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .12s;}
@@ -355,6 +382,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
 <div id="topbar">
   <div class="logo">이미지 <span>스튜디오</span></div>
+  <nav id="navSec" aria-label="페이지 이동">
+    <button class="nav-item on" id="navStudio">🎨 스튜디오</button>
+    <button class="nav-item" id="navSources">🖼 이미지 소스</button>
+  </nav>
+  <div class="divider"></div>
   <input type="text" id="docTitle" value="블로그이미지" title="파일명 접두어">
   <div class="divider"></div>
   <button class="btn" id="undoBtn" title="실행 취소 (Ctrl+Z)" disabled>↶</button>
@@ -456,6 +488,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
     <div id="assetBody"><div class="asset-empty">불러오는 중…</div></div>
   </div>
+</div>
+
+<div id="srcPage">
+  <div class="sp-head">
+    <h1>🖼 이미지 소스 보관함</h1>
+    <span class="cnt" id="srcCount"></span>
+    <div class="sp-actions">
+      <button class="btn small" id="srcRefresh">↻ 새로고침</button>
+      <button class="btn small" id="srcClear" style="color:var(--danger);border-color:var(--danger);">🗑 전체 삭제</button>
+      <button class="btn" id="srcBack">← 스튜디오로</button>
+    </div>
+  </div>
+  <div id="srcBody"></div>
 </div>
 
 <div id="busy"><div class="spin"></div><p id="busyMsg">처리 중…</p></div>
@@ -3025,6 +3070,94 @@ $('#assetClearBtn').onclick=async()=>{
   const yes=await askConfirm(`보관함의 이미지 ${list.length}개를 모두 영구 삭제할까요?\n삭제하면 복구할 수 없습니다.`,'전체 영구 삭제');
   if(!yes)return;
   try{await assetClear();await renderAssets();}
+  catch(err){alert('전체 삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
+};
+
+/* ================= 이미지 소스 페이지 ================= */
+function srcMeta(src){
+  const m=/^data:([^;,]*)[;,]/.exec(src||'');
+  const mime=m&&m[1]?m[1]:'(알 수 없음)';
+  let bytes=0;const c=(src||'').indexOf(',');
+  if(c>=0){bytes=Math.floor((src.length-c-1)*3/4);}else{bytes=(src||'').length;}
+  const kb=bytes/1024;
+  const size=kb>=1024?(kb/1024).toFixed(1)+' MB':kb.toFixed(0)+' KB';
+  return {mime,size};
+}
+function fmtTs(ts){
+  if(!ts)return '-';
+  const d=new Date(ts),p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+async function renderSources(){
+  const body=$('#srcBody'),cntEl=$('#srcCount');
+  let list;
+  try{list=await assetList();}
+  catch(err){
+    body.innerHTML='<div class="src-empty">이 환경에서는 보관함(브라우저 저장소)을 사용할 수 없어.<br>HTML 파일을 다운로드해 크롬 등 브라우저에서 직접 열면 정상 동작해.</div>';
+    cntEl.textContent='';return;
+  }
+  cntEl.textContent=list.length?`총 ${list.length}개`:'';
+  if(!list.length){
+    body.innerHTML='<div class="src-empty">보관된 이미지가 없어.<br>스튜디오에서 이미지의 <b>☆ 저장</b> 또는 보관함의 <b>＋ 파일 업로드로 보관</b> 을 하면<br>여기에서 이미지 소스를 확인할 수 있어.</div>';
+    return;
+  }
+  body.innerHTML='<div class="src-grid">'+list.map(a=>{
+    const meta=srcMeta(a.src);
+    return `<div class="src-card" data-aid="${a.id}">
+      <div class="sc-th"><img src="${a.src}" loading="lazy" alt=""></div>
+      <div class="sc-meta">
+        <div class="sc-name" title="${esc(a.name||'이름없음')}">${esc(a.name||'이름없음')}</div>
+        <div class="sc-sub"><span><b>형식</b> ${esc(meta.mime)}</span><span><b>크기</b> ${meta.size}</span><span><b>저장</b> ${fmtTs(a.ts)}</span></div>
+        <textarea class="sc-src" readonly spellcheck="false">${esc(a.src)}</textarea>
+      </div>
+      <div class="sc-acts">
+        <button class="sc-copy">소스 복사</button>
+        <button class="sc-dl">다운로드</button>
+        <button class="sc-del">삭제</button>
+      </div>
+    </div>`;
+  }).join('')+'</div>';
+  body.querySelectorAll('.src-card').forEach(card=>{
+    const id=+card.dataset.aid;
+    const item=list.find(x=>x.id===id);
+    if(!item)return;
+    card.querySelector('.sc-copy').onclick=async()=>{
+      const btn=card.querySelector('.sc-copy');
+      try{await navigator.clipboard.writeText(item.src);}
+      catch(e){const ta=card.querySelector('.sc-src');ta.focus();ta.select();try{document.execCommand('copy');}catch(_){}}
+      const old=btn.textContent;btn.textContent='복사됨 ✓';setTimeout(()=>btn.textContent=old,1200);
+    };
+    card.querySelector('.sc-dl').onclick=async()=>{
+      try{
+        const resp=await fetch(item.src);const blob=await resp.blob();
+        const ext=(srcMeta(item.src).mime.split('/')[1]||'png').replace('+xml','');
+        saveBlob(blob,(item.name||'image').replace(/[\\/:*?"<>|]/g,'_')+'.'+ext);
+      }catch(e){alert('다운로드 실패: '+(e&&e.message||e));}
+    };
+    card.querySelector('.sc-del').onclick=async()=>{
+      const yes=await askConfirm(`"${item.name}"\n\n보관함에서 영구 삭제할까요?\n삭제하면 복구할 수 없습니다.`,'영구 삭제');
+      if(!yes)return;
+      try{await assetDel(id);await renderSources();}
+      catch(err){alert('삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
+    };
+  });
+}
+function showSources(on){
+  $('#srcPage').classList.toggle('show',on);
+  $('#navStudio').classList.toggle('on',!on);
+  $('#navSources').classList.toggle('on',on);
+  if(on)renderSources();
+}
+$('#navSources').onclick=()=>showSources(true);
+$('#navStudio').onclick=()=>showSources(false);
+$('#srcBack').onclick=()=>showSources(false);
+$('#srcRefresh').onclick=renderSources;
+$('#srcClear').onclick=async()=>{
+  let list;try{list=await assetList();}catch(e){list=[];}
+  if(!list.length){alert('보관함이 비어 있습니다.');return;}
+  const yes=await askConfirm(`보관함의 이미지 ${list.length}개를 모두 영구 삭제할까요?\n삭제하면 복구할 수 없습니다.`,'전체 영구 삭제');
+  if(!yes)return;
+  try{await assetClear();await renderSources();}
   catch(err){alert('전체 삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
 };
 $('#assetBack').addEventListener('click',e=>{if(e.target.id==='assetBack')$('#assetBack').classList.remove('show');});
