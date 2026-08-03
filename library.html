@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>이미지 소스 라이브러리 · 이미지 스튜디오</title>
+<style>
+  :root{
+    --bg:#f5f5f7;--panel:#ffffff;--border:#e5e7eb;--border-strong:#d0d3da;
+    --text:#1f2328;--text-sub:#4b5563;--text-faint:#9aa1ab;--accent:#0068ff;--danger:#dc2626;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{background:var(--bg);color:var(--text);font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;display:flex;flex-direction:column;}
+
+  /* 네비 바 */
+  #navbar{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:12px 26px;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:20;}
+  #navbar .brand{font-weight:800;font-size:15px;letter-spacing:-.02em;}
+  #navbar .brand span{color:var(--accent);}
+  #navbar .nav{display:flex;gap:4px;background:#f1f3f5;border:1px solid var(--border);border-radius:8px;padding:3px;}
+  #navbar .nav a{text-decoration:none;border:none;background:none;font-size:12.5px;font-weight:700;color:var(--text-sub);padding:5px 12px;border-radius:6px;cursor:pointer;white-space:nowrap;}
+  #navbar .nav a:hover{color:var(--text);}
+  #navbar .nav a.on{background:#fff;color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  #navbar .cnt{font-size:12.5px;color:var(--text-faint);font-weight:600;}
+  #navbar .actions{margin-left:auto;display:flex;gap:8px;}
+  .btn{border:1px solid var(--border-strong);background:#fff;border-radius:8px;font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 13px;cursor:pointer;color:var(--text);}
+  .btn:hover{background:#f3f4f6;}
+  .btn.small{padding:6px 11px;font-size:12px;}
+  .btn.danger{color:var(--danger);border-color:var(--danger);}
+  .btn.danger:hover{background:var(--danger);color:#fff;}
+
+  #body{flex:1;overflow-y:auto;padding:24px 26px 60px;}
+  .src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;}
+  .src-card{border:1px solid var(--border);border-radius:12px;background:#fff;overflow:hidden;display:flex;flex-direction:column;}
+  .src-card .sc-th{height:150px;background:repeating-conic-gradient(#f1f2f5 0 25%,#fff 0 50%) 0 0/18px 18px;display:flex;align-items:center;justify-content:center;}
+  .src-card .sc-th img{max-width:94%;max-height:140px;object-fit:contain;}
+  .src-card .sc-meta{padding:11px 13px 0;}
+  .src-card .sc-name{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .src-card .sc-sub{font-size:11px;color:var(--text-faint);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;}
+  .src-card .sc-sub b{color:var(--text-sub);font-weight:600;}
+  .src-card textarea.sc-src{width:100%;height:62px;margin-top:9px;border:1px solid var(--border);border-radius:7px;padding:7px 9px;font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--text-sub);resize:vertical;background:#fafbfc;box-sizing:border-box;}
+  .src-card .sc-acts{display:flex;gap:6px;padding:9px 13px 13px;}
+  .src-card .sc-acts button{flex:1;border:1px solid var(--border-strong);background:#fff;border-radius:7px;font-family:inherit;font-size:11.5px;font-weight:600;padding:6px 0;cursor:pointer;}
+  .src-card .sc-acts button:hover{background:#f3f4f6;}
+  .src-card .sc-acts .sc-del{color:var(--danger);border-color:var(--danger);}
+  .src-card .sc-acts .sc-del:hover{background:var(--danger);color:#fff;}
+  .empty{padding:70px 0;text-align:center;color:var(--text-faint);font-size:13px;line-height:1.9;}
+
+  /* 확인 모달 */
+  #confirmBack{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:300;display:none;align-items:center;justify-content:center;}
+  #confirmBack.show{display:flex;}
+  #confirmBox{background:#fff;border-radius:12px;padding:22px 24px;width:340px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  #confirmBox .msg{font-size:13.5px;line-height:1.6;white-space:pre-wrap;color:var(--text);}
+  #confirmBox .row{display:flex;gap:8px;margin-top:18px;justify-content:flex-end;}
+  #confirmBox .row button{border-radius:8px;font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 16px;cursor:pointer;border:1px solid var(--border-strong);background:#fff;}
+  #confirmBox .row .ok{background:var(--danger);border-color:var(--danger);color:#fff;}
+</style>
+</head>
+<body>
+  <div id="navbar">
+    <div class="brand">이미지 <span>라이브러리</span></div>
+    <nav class="nav" aria-label="페이지 이동">
+      <a id="toStudio" href="blog_image_studio_v4_5.html">🎨 스튜디오</a>
+      <a class="on" href="library.html">🖼 이미지 소스</a>
+    </nav>
+    <span class="cnt" id="count"></span>
+    <div class="actions">
+      <button class="btn small" id="refresh">↻ 새로고침</button>
+      <button class="btn small danger" id="clearAll">🗑 전체 삭제</button>
+    </div>
+  </div>
+  <div id="body"><div class="empty">불러오는 중…</div></div>
+
+  <div id="confirmBack"><div id="confirmBox">
+    <div class="msg"></div>
+    <div class="row"><button class="cancel">취소</button><button class="ok">삭제</button></div>
+  </div></div>
+
+<script>
+const $=s=>document.querySelector(s);
+
+/* ===== IndexedDB (스튜디오와 동일 DB 공유) ===== */
+function idb(){
+  return new Promise((res,rej)=>{
+    if(!window.indexedDB)return rej(new Error('no idb'));
+    const q=indexedDB.open('thumb_studio_assets',2);
+    q.onblocked=()=>rej(new Error('보관함 DB가 다른 탭에서 사용 중이야. 다른 탭을 닫고 새로고침해줘.'));
+    q.onupgradeneeded=()=>{
+      const db=q.result;
+      if(!db.objectStoreNames.contains('assets'))
+        db.createObjectStore('assets',{keyPath:'id',autoIncrement:true});
+      if(!db.objectStoreNames.contains('settings'))
+        db.createObjectStore('settings',{keyPath:'key'});
+    };
+    q.onsuccess=()=>res(q.result);
+    q.onerror=()=>rej(q.error);
+  });
+}
+async function assetList(){
+  const db=await idb();
+  return new Promise((res,rej)=>{
+    const q=db.transaction('assets','readonly').objectStore('assets').getAll();
+    q.onsuccess=()=>res(q.result.sort((a,b)=>b.ts-a.ts));
+    q.onerror=()=>rej(q.error);
+  });
+}
+async function assetDel(id){
+  const db=await idb();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('assets','readwrite');
+    tx.objectStore('assets').delete(id);
+    tx.oncomplete=res;tx.onerror=()=>rej(tx.error);
+  });
+}
+async function assetClear(){
+  const db=await idb();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('assets','readwrite');
+    tx.objectStore('assets').clear();
+    tx.oncomplete=res;tx.onerror=()=>rej(tx.error);
+  });
+}
+
+/* ===== 유틸 ===== */
+function esc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function srcMeta(src){
+  const m=/^data:([^;,]*)[;,]/.exec(src||'');
+  const mime=m&&m[1]?m[1]:'(알 수 없음)';
+  let bytes=0;const c=(src||'').indexOf(',');
+  if(c>=0){bytes=Math.floor((src.length-c-1)*3/4);}else{bytes=(src||'').length;}
+  const kb=bytes/1024;
+  const size=kb>=1024?(kb/1024).toFixed(1)+' MB':kb.toFixed(0)+' KB';
+  return {mime,size};
+}
+function fmtTs(ts){
+  if(!ts)return '-';
+  const d=new Date(ts),p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function saveBlob(blob,name){
+  const a=document.createElement('a');const u=URL.createObjectURL(blob);
+  a.href=u;a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(u);a.remove();},400);
+}
+function askConfirm(msg,okLabel){
+  return new Promise(res=>{
+    const back=$('#confirmBack'),box=$('#confirmBox');
+    box.querySelector('.msg').textContent=msg;
+    const okB=box.querySelector('.ok'),cnB=box.querySelector('.cancel');
+    okB.textContent=okLabel||'삭제';
+    const close=v=>{back.classList.remove('show');okB.onclick=null;cnB.onclick=null;back.onclick=null;document.removeEventListener('keydown',key);res(v);};
+    const key=e=>{if(e.key==='Escape')close(false);if(e.key==='Enter')close(true);};
+    okB.onclick=()=>close(true);cnB.onclick=()=>close(false);
+    back.onclick=e=>{if(e.target===back)close(false);};
+    document.addEventListener('keydown',key);
+    back.classList.add('show');setTimeout(()=>okB.focus(),50);
+  });
+}
+
+/* ===== 렌더 ===== */
+async function render(){
+  const body=$('#body'),cntEl=$('#count');
+  let list;
+  try{list=await assetList();}
+  catch(err){
+    body.innerHTML='<div class="empty">이 환경에서는 보관함(브라우저 저장소)을 사용할 수 없어.<br>이 파일을 PC에 저장해 크롬 등 브라우저에서 직접 열면 정상 동작해.<br>(스튜디오와 같은 폴더·같은 브라우저에서 열어야 보관 이미지가 보여.)</div>';
+    cntEl.textContent='';return;
+  }
+  cntEl.textContent=list.length?`총 ${list.length}개`:'';
+  if(!list.length){
+    body.innerHTML='<div class="empty">보관된 이미지가 없어.<br>스튜디오에서 이미지의 <b>☆ 저장</b> 또는 보관함의 <b>＋ 파일 업로드로 보관</b> 을 하면<br>여기에서 이미지 소스를 확인할 수 있어.</div>';
+    return;
+  }
+  body.innerHTML='<div class="src-grid">'+list.map(a=>{
+    const meta=srcMeta(a.src);
+    return `<div class="src-card" data-aid="${a.id}">
+      <div class="sc-th"><img src="${a.src}" loading="lazy" alt=""></div>
+      <div class="sc-meta">
+        <div class="sc-name" title="${esc(a.name||'이름없음')}">${esc(a.name||'이름없음')}</div>
+        <div class="sc-sub"><span><b>형식</b> ${esc(meta.mime)}</span><span><b>크기</b> ${meta.size}</span><span><b>저장</b> ${fmtTs(a.ts)}</span></div>
+        <textarea class="sc-src" readonly spellcheck="false">${esc(a.src)}</textarea>
+      </div>
+      <div class="sc-acts">
+        <button class="sc-copy">소스 복사</button>
+        <button class="sc-dl">다운로드</button>
+        <button class="sc-del">삭제</button>
+      </div>
+    </div>`;
+  }).join('')+'</div>';
+  body.querySelectorAll('.src-card').forEach(card=>{
+    const id=+card.dataset.aid;
+    const item=list.find(x=>x.id===id);
+    if(!item)return;
+    card.querySelector('.sc-copy').onclick=async()=>{
+      const btn=card.querySelector('.sc-copy');
+      try{await navigator.clipboard.writeText(item.src);}
+      catch(e){const ta=card.querySelector('.sc-src');ta.focus();ta.select();try{document.execCommand('copy');}catch(_){}}
+      const old=btn.textContent;btn.textContent='복사됨 ✓';setTimeout(()=>btn.textContent=old,1200);
+    };
+    card.querySelector('.sc-dl').onclick=async()=>{
+      try{
+        const resp=await fetch(item.src);const blob=await resp.blob();
+        const ext=(srcMeta(item.src).mime.split('/')[1]||'png').replace('+xml','');
+        saveBlob(blob,(item.name||'image').replace(/[\\/:*?"<>|]/g,'_')+'.'+ext);
+      }catch(e){alert('다운로드 실패: '+(e&&e.message||e));}
+    };
+    card.querySelector('.sc-del').onclick=async()=>{
+      const yes=await askConfirm(`"${item.name}"\n\n보관함에서 영구 삭제할까요?\n삭제하면 복구할 수 없습니다.`,'영구 삭제');
+      if(!yes)return;
+      try{await assetDel(id);await render();}
+      catch(err){alert('삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
+    };
+  });
+}
+
+$('#refresh').onclick=render;
+$('#clearAll').onclick=async()=>{
+  let list;try{list=await assetList();}catch(e){list=[];}
+  if(!list.length){alert('보관함이 비어 있습니다.');return;}
+  const yes=await askConfirm(`보관함의 이미지 ${list.length}개를 모두 영구 삭제할까요?\n삭제하면 복구할 수 없습니다.`,'전체 영구 삭제');
+  if(!yes)return;
+  try{await assetClear();await render();}
+  catch(err){alert('전체 삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
+};
+render();
+</script>
+</body>
+</html>
