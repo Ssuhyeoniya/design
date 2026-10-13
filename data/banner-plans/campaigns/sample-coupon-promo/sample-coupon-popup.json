@@ -1,0 +1,44 @@
+{
+  "bannerId": "sample-coupon-popup",
+  "campaignId": "sample-coupon-promo",
+  "bannerName": "[샘플] 쿠폰 혜택 팝업",
+  "templateId": "popup",
+  "optionValues": {
+    "type": "popup",
+    "bg": {
+      "mode": "solid",
+      "c1": "#1e2a44",
+      "c2": "#5a6478",
+      "angle": 90
+    }
+  },
+  "purpose": "구조 검증용 샘플 — 실제 캠페인 아님 (쿠폰 혜택 인지·앱 결제 유도)",
+  "target": "식권대장 앱 사용자 전체",
+  "content": {
+    "brandText": "식권대장",
+    "mainCopy": "점심 결제하고\n쿠폰 받아가세요",
+    "subCopy": "앱 결제 시 자동 적용",
+    "cta": "혜택 확인하기"
+  },
+  "assets": {
+    "mainImageAssetId": "asset-promotion-002"
+  },
+  "designConcept": "네이비 단색 배경 + 3D 쿠폰 오브젝트, 혜택 중심의 간결한 구성",
+  "period": {
+    "start": "2026-11-01",
+    "end": "2026-11-30"
+  },
+  "version": 1,
+  "updatedAt": "2026-10-13T14:14:55.492Z",
+  "history": [
+    {
+      "version": 1,
+      "at": "2026-10-13T14:14:55.492Z",
+      "by": "agent-04",
+      "summary": "샘플 기획안 생성",
+      "changed": [
+        "(신규)"
+      ]
+    }
+  ]
+}

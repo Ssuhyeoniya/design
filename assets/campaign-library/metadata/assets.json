@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "assetId": "asset-food-001",
+      "fileName": "도시락.png",
+      "originalName": "도시락.png",
+      "category": "food",
+      "description": "3D 도시락 오브젝트 (투명 배경)",
+      "keywords": [
+        "도시락",
+        "점심",
+        "식사",
+        "식권",
+        "런치",
+        "3d"
+      ],
+      "width": 600,
+      "height": 600,
+      "ratio": "1:1",
+      "generator": {
+        "tool": "기존 스톡(배너 스튜디오 기본 제공)",
+        "model": null,
+        "prompt": null
+      },
+      "createdAt": "2026-10-13",
+      "path": "banner_studio/stock/데모 오브젝트/도시락.png",
+      "checksum": "da85f62753df1f9146b03b2d529a8347b0aa7e8cf1fb684d8e5907212843b2d9",
+      "bytes": 14671,
+      "license": "사내 보유 스톡 · 앱 배너 재사용 가능",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-food-002",
+      "fileName": "커피컵.png",
+      "originalName": "커피컵.png",
+      "category": "food",
+      "description": "3D 테이크아웃 커피컵 오브젝트 (투명 배경)",
+      "keywords": [
+        "커피",
+        "카페",
+        "음료",
+        "디저트",
+        "3d"
+      ],
+      "width": 600,
+      "height": 600,
+      "ratio": "1:1",
+      "generator": {
+        "tool": "기존 스톡(배너 스튜디오 기본 제공)",
+        "model": null,
+        "prompt": null
+      },
+      "createdAt": "2026-10-13",
+      "path": "banner_studio/stock/데모 오브젝트/커피컵.png",
+      "checksum": "8d3b287b4995de5e8a9257887af0375044240aac1c7a430eef9de56b58e191b5",
+      "bytes": 18576,
+      "license": "사내 보유 스톡 · 앱 배너 재사용 가능",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-promotion-001",
+      "fileName": "결제카드.png",
+      "originalName": "결제카드.png",
+      "category": "promotion",
+      "description": "3D 결제카드 오브젝트 (투명 배경)",
+      "keywords": [
+        "결제",
+        "카드",
+        "간편결제",
+        "페이",
+        "3d"
+      ],
+      "width": 600,
+      "height": 600,
+      "ratio": "1:1",
+      "generator": {
+        "tool": "기존 스톡(배너 스튜디오 기본 제공)",
+        "model": null,
+        "prompt": null
+      },
+      "createdAt": "2026-10-13",
+      "path": "banner_studio/stock/데모 오브젝트/결제카드.png",
+      "checksum": "441c5a79b5c1ce99d51d8e52d80c89222d684b6e98fe3457396f9061add0dc2d",
+      "bytes": 12021,
+      "license": "사내 보유 스톡 · 앱 배너 재사용 가능",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-promotion-002",
+      "fileName": "쿠폰.png",
+      "originalName": "쿠폰.png",
+      "category": "promotion",
+      "description": "3D 할인 쿠폰 오브젝트 (투명 배경)",
+      "keywords": [
+        "쿠폰",
+        "할인",
+        "혜택",
+        "프로모션",
+        "3d"
+      ],
+      "width": 600,
+      "height": 600,
+      "ratio": "1:1",
+      "generator": {
+        "tool": "기존 스톡(배너 스튜디오 기본 제공)",
+        "model": null,
+        "prompt": null
+      },
+      "createdAt": "2026-10-13",
+      "path": "banner_studio/stock/데모 오브젝트/쿠폰.png",
+      "checksum": "8ff980de3c40cea32eda5b549ca9e4fd0209fd96391689efcef752cf45a03e79",
+      "bytes": 23408,
+      "license": "사내 보유 스톡 · 앱 배너 재사용 가능",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": [
+        {
+          "bannerId": "sample-coupon-popup",
+          "campaignId": "sample-coupon-promo",
+          "slot": "main",
+          "planVersion": 1
+        },
+        {
+          "bannerId": "sample-coupon-main",
+          "campaignId": "sample-coupon-promo",
+          "slot": "main",
+          "planVersion": 1
+        }
+      ]
+    },
+    {
+      "assetId": "asset-promotion-003",
+      "fileName": "선물상자.png",
+      "originalName": "선물상자.png",
+      "category": "promotion",
+      "description": "3D 선물상자 오브젝트 (투명 배경)",
+      "keywords": [
+        "선물",
+        "이벤트",
+        "경품",
+        "리워드",
+        "3d"
+      ],
+      "width": 600,
+      "height": 600,
+      "ratio": "1:1",
+      "generator": {
+        "tool": "기존 스톡(배너 스튜디오 기본 제공)",
+        "model": null,
+        "prompt": null
+      },
+      "createdAt": "2026-10-13",
+      "path": "banner_studio/stock/데모 오브젝트/선물상자.png",
+      "checksum": "97730b7a4b8462ad4c1290de24b802d60ce578899438a3e7150311526eecd275",
+      "bytes": 14094,
+      "license": "사내 보유 스톡 · 앱 배너 재사용 가능",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-lifestyle-001",
+      "fileName": "제휴점1.png",
+      "originalName": "제휴점1.png",
+      "category": "lifestyle",
+      "description": "3D 제휴 매장(가게) 일러스트 1 (투명 배경)",
+      "keywords": [
+        "제휴점",
+        "매장",
+        "가게",
+        "식당",
+        "가맹점",
+        "3d"
+      ],
+      "width": 1448,
+      "height": 1203,
+      "ratio": "1448:1203",
+      "generator": {
+        "tool": "기존 스톡(배너 스튜디오 기본 제공)",
+        "model": null,
+        "prompt": null
+      },
+      "createdAt": "2026-10-13",
+      "path": "banner_studio/stock/기본/제휴점1.png",
+      "checksum": "9fab5d00628ddf506cb24a2a1ab7df799de5e6fc6890c1d03b50d58c73d699bf",
+      "bytes": 296004,
+      "license": "사내 보유 스톡 · 앱 배너 재사용 가능",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-lifestyle-002",
+      "fileName": "제휴점2.png",
+      "originalName": "제휴점2.png",
+      "category": "lifestyle",
+      "description": "3D 제휴 매장(가게) 일러스트 2 (투명 배경)",
+      "keywords": [
+        "제휴점",
+        "매장",
+        "가게",
+        "식당",
+        "가맹점",
+        "3d"
+      ],
+      "width": 1611,
+      "height": 1126,
+      "ratio": "1611:1126",
+      "generator": {
+        "tool": "기존 스톡(배너 스튜디오 기본 제공)",
+        "model": null,
+        "prompt": null
+      },
+      "createdAt": "2026-10-13",
+      "path": "banner_studio/stock/기본/제휴점2.png",
+      "checksum": "12ee22a5b7642de5e44908ccf9c4027a775a949445f528e2a02ff3c834594e1d",
+      "bytes": 341609,
+      "license": "사내 보유 스톡 · 앱 배너 재사용 가능",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-lifestyle-003",
+      "fileName": "제휴점3.png",
+      "originalName": "제휴점3.png",
+      "category": "lifestyle",
+      "description": "3D 제휴 매장(가게) 일러스트 3 (투명 배경)",
+      "keywords": [
+        "제휴점",
+        "매장",
+        "가게",
+        "식당",
+        "가맹점",
+        "3d"
+      ],
+      "width": 1496,
+      "height": 1278,
+      "ratio": "748:639",
+      "generator": {
+        "tool": "기존 스톡(배너 스튜디오 기본 제공)",
+        "model": null,
+        "prompt": null
+      },
+      "createdAt": "2026-10-13",
+      "path": "banner_studio/stock/기본/제휴점3.png",
+      "checksum": "1d704af6998b535df1c63d1289484febf5c5c24eb91ef943d990c0c57a0f275b",
+      "bytes": 298975,
+      "license": "사내 보유 스톡 · 앱 배너 재사용 가능",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-lifestyle-004",
+      "fileName": "제휴점4.png",
+      "originalName": "제휴점4.png",
+      "category": "lifestyle",
+      "description": "3D 제휴 매장(가게) 일러스트 4 (투명 배경)",
+      "keywords": [
+        "제휴점",
+        "매장",
+        "가게",
+        "식당",
+        "가맹점",
+        "3d"
+      ],
+      "width": 1437,
+      "height": 1417,
+      "ratio": "1437:1417",
+      "generator": {
+        "tool": "기존 스톡(배너 스튜디오 기본 제공)",
+        "model": null,
+        "prompt": null
+      },
+      "createdAt": "2026-10-13",
+      "path": "banner_studio/stock/기본/제휴점4.png",
+      "checksum": "e35df8b74c40a3ae513f9e1aacc392e2217252ef95aa06f668efbd80aa3952e4",
+      "bytes": 274194,
+      "license": "사내 보유 스톡 · 앱 배너 재사용 가능",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    }
+  ]
+}

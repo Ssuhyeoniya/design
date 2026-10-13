@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "plans": [
+    {
+      "bannerId": "sample-coupon-popup",
+      "campaignId": "sample-coupon-promo",
+      "bannerName": "[샘플] 쿠폰 혜택 팝업",
+      "templateId": "popup",
+      "version": 1,
+      "path": "data/banner-plans/campaigns/sample-coupon-promo/sample-coupon-popup.json",
+      "updatedAt": "2026-10-13T14:14:55.492Z"
+    },
+    {
+      "bannerId": "sample-coupon-main",
+      "campaignId": "sample-coupon-promo",
+      "bannerName": "[샘플] 쿠폰 혜택 메인 배너",
+      "templateId": "main_banner",
+      "version": 1,
+      "path": "data/banner-plans/campaigns/sample-coupon-promo/sample-coupon-main.json",
+      "updatedAt": "2026-10-13T14:14:55.550Z"
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "_note": "templateId = banner_studio/data/banner_specs.json 의 배너 타입 키. 규격 원문은 banner_specs.json 이 기준이며 이 파일은 조회용 목록이다.",
+  "templates": [
+    {
+      "templateId": "splash",
+      "label": "스플래시 이미지",
+      "track": "일반 인앱광고",
+      "guidelineVersion": "Ver. 2026.01",
+      "canvas": null,
+      "placement": "식권대장 앱 실행 시 3.5초 노출"
+    },
+    {
+      "templateId": "popup",
+      "label": "팝업 배너",
+      "track": "일반 인앱광고",
+      "guidelineVersion": "Ver. 2026.01",
+      "canvas": [
+        1000,
+        1000
+      ],
+      "placement": "식권대장 앱 > 홈탭"
+    },
+    {
+      "templateId": "pick_banner",
+      "label": "식권대장 PICK - 배너",
+      "track": "일반 인앱광고",
+      "guidelineVersion": "Ver. 2026.01",
+      "canvas": [
+        1000,
+        380
+      ],
+      "placement": "식권대장 앱 > 홈탭"
+    },
+    {
+      "templateId": "pick_detail",
+      "label": "식권대장 PICK - 상세페이지",
+      "track": "일반 인앱광고",
+      "guidelineVersion": "Ver. 2026.01",
+      "canvas": [
+        1000,
+        null
+      ],
+      "placement": "식권대장 앱 > 홈탭 > PICK 배너 클릭 > 상세페이지"
+    },
+    {
+      "templateId": "shortcut",
+      "label": "숏컷 배너",
+      "track": "일반 인앱광고",
+      "guidelineVersion": "Ver. 2026.01",
+      "canvas": [
+        1440,
+        284
+      ],
+      "placement": "식권대장 앱 > 식권대장탭 / 비즈니스탭 / 식품관 페이지"
+    },
+    {
+      "templateId": "main_banner",
+      "label": "메인 배너 (식품관)",
+      "track": "일반 인앱광고",
+      "guidelineVersion": "Ver. 2026.01",
+      "canvas": [
+        1000,
+        380
+      ],
+      "placement": "식권대장 앱 > 식품관 페이지"
+    },
+    {
+      "templateId": "event_banner",
+      "label": "이벤트 배너 (식품관)",
+      "track": "일반 인앱광고",
+      "guidelineVersion": "Ver. 2026.01",
+      "canvas": [
+        800,
+        867
+      ],
+      "placement": "식권대장 앱 > 식품관 페이지"
+    },
+    {
+      "templateId": "bow_splash",
+      "label": "[이주의 브랜드] 스플래시 이미지",
+      "track": "이주의 브랜드",
+      "guidelineVersion": "Ver. 2026.02",
+      "canvas": null,
+      "placement": "식권대장 앱 실행 시 3.5초 노출"
+    },
+    {
+      "templateId": "bow_popup",
+      "label": "[이주의 브랜드] 팝업 배너",
+      "track": "이주의 브랜드",
+      "guidelineVersion": "Ver. 2026.02",
+      "canvas": [
+        1000,
+        1000
+      ],
+      "placement": "식권대장 앱 > 홈탭"
+    },
+    {
+      "templateId": "bow_pick_banner",
+      "label": "[이주의 브랜드] 식권대장 PICK - 배너",
+      "track": "이주의 브랜드",
+      "guidelineVersion": "Ver. 2026.02",
+      "canvas": [
+        1000,
+        380
+      ],
+      "placement": "식권대장 앱 > 홈탭"
+    },
+    {
+      "templateId": "bow_pick_detail",
+      "label": "[이주의 브랜드] 식권대장 PICK - 상세페이지",
+      "track": "이주의 브랜드",
+      "guidelineVersion": "Ver. 2026.02",
+      "canvas": [
+        1000,
+        null
+      ],
+      "placement": "식권대장 앱 > 홈탭 > PICK 배너 클릭 > 상세페이지"
+    }
+  ]
+}

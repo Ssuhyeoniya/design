@@ -2,7 +2,11 @@
    design 저장소용 정적 버전 — 서버 없이 브라우저만으로 동작한다.
    규격 원문: data/banner_specs.json   가이드 PNG: assets/*.png   폰트: fonts/*
    저장소: 브라우저 IndexedDB ('banner_studio' — stock · projects)
-           기본 제공 스톡은 stock/manifest.json 목록을 읽는다 (읽기 전용)          */
+           기본 제공 스톡은 stock/manifest.json 목록을 읽는다 (읽기 전용)
+   캠페인 에셋 라이브러리: ../assets/campaign-library/metadata/assets.json (읽기 전용, Asset ID 로 참조)
+   배너 기획안: ../data/banner-plans/index.json → campaigns/{campaignId}/{bannerId}.json
+           스튜디오에서 고친 기획안은 브라우저 'banner_plans' DB 에 수정본으로 두고 JSON 으로 내려받는다.
+           저장소 반영은 tools/creative-lib.mjs plan:save 로 한다 (정적 사이트라 직접 쓰지 못한다).   */
 'use strict';
 
 // ══════════════════════════════════ 유틸 ══════════════════════════════════
@@ -279,6 +283,13 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 
+// 기획안의 크롭 설정 — 원본 대비 비율(0~1)로 저장한다. 없으면 원본 전체
+function srcRect(img, l) {
+  const c = l.crop;
+  if (!c) return [0, 0, img.width, img.height];
+  return [c.x * img.width, c.y * img.height, c.w * img.width, c.h * img.height];
+}
+
 function drawLayer(ctx, l) {
   ctx.save();
   ctx.globalAlpha = l.opacity == null ? 1 : l.opacity;
@@ -291,11 +302,11 @@ function drawLayer(ctx, l) {
       if (l.white) {           // BI 화이트 버전 — 알파는 살리고 색만 흰색으로
         const t = el('canvas'); t.width = Math.max(1, Math.round(l.w)); t.height = Math.max(1, Math.round(l.h));
         const tx = t.getContext('2d');
-        tx.drawImage(img, 0, 0, t.width, t.height);
+        tx.drawImage(img, ...srcRect(img, l), 0, 0, t.width, t.height);
         tx.globalCompositeOperation = 'source-in';
         tx.fillStyle = '#fff'; tx.fillRect(0, 0, t.width, t.height);
         ctx.drawImage(t, l.x, l.y, l.w, l.h);
-      } else ctx.drawImage(img, l.x, l.y, l.w, l.h);
+      } else ctx.drawImage(img, ...srcRect(img, l), l.x, l.y, l.w, l.h);
       ctx.restore();
     } else {
       ctx.fillStyle = 'rgba(120,130,150,.25)'; ctx.fillRect(l.x, l.y, l.w, l.h);
@@ -694,6 +705,8 @@ function paintProps() {
     if (l.role === 'bi') h += `<label class="hint"><input type="checkbox" data-k="white" ${l.white ? 'checked' : ''}> 화이트</label>`;
     h += `</div>`;
     if (l.role !== 'bi') h += `<div class="row"><button class="btn sm grow" data-act="fitZone">권장 영역에 맞추기</button><button class="btn sm grow" data-act="fitRatio">원본 비율</button></div>`;
+    if (l.assetId) h += `<p class="hint">라이브러리 에셋 <b class="mono">${esc(l.assetId)}</b>${l.slot ? ' · 슬롯 ' + esc(l.slot) : ''}${l.crop ? ' · 크롭 적용' : ''}</p>`;
+    else if (l.role !== 'bi') h += `<p class="hint">브라우저 보관함 이미지 — 라이브러리에 등록되지 않아 기획안에는 저장되지 않습니다.</p>`;
     if (l.role === 'bi') h += `<p class="hint">BI 는 사이즈·좌우 위치 고정입니다. 상하(Y)만 조정할 수 있습니다.</p>`;
   } else if (l.kind === 'rect') {
     h += num('X', 'x') + num('Y', 'y') + num('폭', 'w') + num('높이', 'h');
@@ -741,20 +754,22 @@ function layerAct(a, l) {
   if (a === 'dup') { const c = { ...l, id: uid(), x: l.x + 20, y: l.y + 20, name: l.name + ' 사본' }; S.layers.splice(i + 1, 0, c); sel = c.id; }
   if (a === 'up' && i < S.layers.length - 1) S.layers.splice(i + 1, 0, S.layers.splice(i, 1)[0]);
   if (a === 'down' && i > 0) S.layers.splice(i - 1, 0, S.layers.splice(i, 1)[0]);
-  if (a === 'fitZone') {
-    const z = zonesOf(SPECS[S.type], S.w, S.h).find(x => x.kind === 'image');
-    if (z) {
-      const zw = z.r[2] - z.r[0], zh = z.r[3] - z.r[1];
-      const im = imgCache.get(l.src), ar = im ? im.width / im.height : l.w / l.h;
-      let w = zw, h = w / ar; if (h > zh) { h = zh; w = h * ar; }
-      Object.assign(l, { x: Math.round(z.r[0] + (zw - w) / 2), y: Math.round(z.r[1] + (zh - h) / 2), w: Math.round(w), h: Math.round(h) });
-    }
-  }
+  if (a === 'fitZone') fitToZone(l);
   if (a === 'fitRatio') {
     const im = imgCache.get(l.src);
     if (im) l.h = Math.round(l.w * im.height / im.width);
   }
   push(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
+}
+
+// 이미지 레이어를 규격의 권장 이미지 영역 안에 원본 비율로 맞춘다
+function fitToZone(l) {
+  const z = zonesOf(SPECS[S.type], S.w, S.h).find(x => x.kind === 'image');
+  if (!z) return;
+  const zw = z.r[2] - z.r[0], zh = z.r[3] - z.r[1];
+  const im = imgCache.get(l.src), ar = im ? im.width / im.height : l.w / l.h;
+  let w = zw, h = w / ar; if (h > zh) { h = zh; w = h * ar; }
+  Object.assign(l, { x: Math.round(z.r[0] + (zw - w) / 2), y: Math.round(z.r[1] + (zh - h) / 2), w: Math.round(w), h: Math.round(h) });
 }
 
 // ══════════════════════════════════ 캔버스 조작 ══════════════════════════════════
@@ -1037,6 +1052,20 @@ const fileToDataURL = f => new Promise((res, rej) => {
 
 let stock = [];
 let builtinStock = null;   // stock/manifest.json — 저장소에 동봉된 기본 스톡 (삭제 불가)
+// 캠페인 에셋 라이브러리 — 기획안이 Asset ID 로 참조하는 이미지 (읽기 전용)
+const ROOT = '../';
+const LIB_REG = ROOT + 'assets/campaign-library/metadata/assets.json';
+let library = { assets: [] };
+let libraryStock = [];
+async function loadLibrary() {
+  library = await fetch(LIB_REG, { cache: 'no-cache' }).then(r => r.ok ? r.json() : { assets: [] }).catch(() => ({ assets: [] }));
+  // 라이브러리 이미지는 원본 파일을 그대로 가리킨다 — 보관함이나 배너별로 복제하지 않는다
+  libraryStock = (library.assets || []).filter(a => a.reusable !== false).map(a => ({
+    rel: a.path, name: a.fileName, category: '라이브러리 · ' + a.category,
+    kb: Math.round((a.bytes || 0) / 1024), builtin: true, mtime: 0,
+    url: BannerPlans.assetUrl(a, ROOT), assetId: a.assetId, description: a.description,
+  }));
+}
 async function loadStock() {
   if (!builtinStock) {
     const m = await fetch('stock/manifest.json').then(r => r.json()).catch(() => ({ items: [] }));
@@ -1053,9 +1082,11 @@ async function loadStock() {
     }));
   } catch (e) { toast('보관함을 열지 못했습니다 — ' + e.message, true); }
   mine.sort((a, b) => b.mtime - a.mtime);
-  stock = [...mine, ...builtinStock];
+  // 라이브러리에 등록된 기본 스톡은 라이브러리 항목(Asset ID 있음)으로만 보여준다
+  const inLib = new Set(libraryStock.map(i => i.url));
+  stock = [...libraryStock, ...mine, ...builtinStock.filter(i => !inLib.has(i.url))];
   const categories = [...new Set(stock.map(i => i.category))].sort();
-  $('#stockDir').textContent = '브라우저 보관함 · 기본 ' + builtinStock.length + '장 + 내 이미지 ' + mine.length + '장';
+  $('#stockDir').textContent = '라이브러리 ' + libraryStock.length + '장 · 기본 ' + builtinStock.length + '장 + 내 이미지 ' + mine.length + '장';
   $('#stockCnt').textContent = stock.length + '장';
   const cur = $('#catSel').value;
   $('#catSel').innerHTML = '<option value="">전체 카테고리</option>' +
@@ -1069,7 +1100,7 @@ function paintStock() {
   $('#stockEmpty').style.display = stock.length ? 'none' : 'block';
   for (const it of items) {
     const d = el('div', 'stock');
-    d.title = `${it.category} / ${it.name} · ${it.kb}KB${it.builtin ? ' · 기본 제공' : ''}\n클릭하면 캔버스에 추가`;
+    d.title = `${it.category} / ${it.name} · ${it.kb}KB${it.assetId ? ' · ' + it.assetId + (it.description ? '\n' + it.description : '') : it.builtin ? ' · 기본 제공' : ''}\n클릭하면 캔버스에 추가`;
     d.innerHTML = `<img src="${esc(it.url)}" loading="lazy">` +
       (it.builtin ? '' : '<span class="del" title="보관함에서 삭제">×</span>');
     d.querySelector('img').onclick = () => addStockImage(it);
@@ -1097,6 +1128,7 @@ async function addStockImage(it) {
     x: Math.round(box.x + (box.w - w) / 2), y: Math.round(box.y + (box.h - h) / 2),
     w: Math.round(w), h: Math.round(h), src: it.url, opacity: 1, radius: 0,
   };
+  if (it.assetId) l.assetId = it.assetId;   // 라이브러리 이미지 — 기획안에는 이 ID 만 저장된다
   // 오브젝트는 텍스트 아래에 깔리지 않도록 텍스트 앞에 넣는다
   const firstText = S.layers.findIndex(x => x.kind === 'text');
   if (firstText >= 0) S.layers.splice(firstText, 0, l); else S.layers.push(l);
@@ -1145,6 +1177,7 @@ async function openProject() {
   }
   const it = items[+pick - 1]; if (!it) return;
   S = it.data; sel = null;
+  curPlan = null; $('#planSel').value = ''; paintPlanMeta();   // 프로젝트 저장본은 기획안과 별개다
   $('#typeSel').value = S.type; $('#projName').value = S.name || it.name;
   await preloadImgs();
   syncCanvasInputs(); paintSpecInfo(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
@@ -1178,6 +1211,115 @@ async function doExport() {
   const a = el('a'); a.href = URL.createObjectURL(blob); a.download = fname;
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+
+// ══════════════════════════════════ 배너 기획안 ══════════════════════════════════
+// 저장소의 기획안(읽기 전용) + 이 브라우저에서 고친 수정본('banner_plans' DB). 수정본이 있으면 수정본이 우선이다.
+const PLAN_INDEX = ROOT + 'data/banner-plans/index.json';
+let planIndex = { plans: [] };
+let curPlan = null;          // 지금 캔버스에 열린 기획안 (수정 비교 기준)
+
+function plansDB() {
+  return new Promise((res, rej) => {
+    if (!window.indexedDB) return rej(new Error('이 브라우저에서는 IndexedDB 를 쓸 수 없습니다'));
+    const q = indexedDB.open('banner_plans', 1);
+    q.onupgradeneeded = () => q.result.createObjectStore('drafts', { keyPath: 'bannerId' });
+    q.onsuccess = () => res(q.result);
+    q.onerror = () => rej(q.error);
+  });
+}
+async function draftsDo(mode, fn) {
+  const db = await plansDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('drafts', mode), r = fn(tx.objectStore('drafts'));
+    tx.oncomplete = () => res(r && 'result' in r ? r.result : undefined);
+    tx.onerror = () => rej(tx.error);
+  });
+}
+const draftsAll = () => draftsDo('readonly', os => os.getAll()).catch(() => []);
+const draftPut = v => draftsDo('readwrite', os => os.put(v));
+
+async function loadPlanList() {
+  planIndex = await fetch(PLAN_INDEX, { cache: 'no-cache' }).then(r => r.ok ? r.json() : { plans: [] }).catch(() => ({ plans: [] }));
+  const drafts = await draftsAll();
+  const rows = new Map(planIndex.plans.map(p => [p.bannerId, { ...p, draft: null }]));
+  for (const d of drafts) {
+    const r = rows.get(d.bannerId) || { bannerId: d.bannerId, bannerName: d.plan.bannerName, templateId: d.plan.templateId, campaignId: d.plan.campaignId };
+    rows.set(d.bannerId, { ...r, draft: d });
+  }
+  const s = $('#planSel'), cur = s.value;
+  s.innerHTML = '<option value="">— 기획안 선택 —</option>' + [...rows.values()].map(r => {
+    const lb = SPECS[r.templateId] ? SPECS[r.templateId].label.replace(/^\[이주의 브랜드\]\s*/, '') : r.templateId;
+    return `<option value="${esc(r.bannerId)}">${r.draft ? '[수정본] ' : ''}${esc(r.bannerName)} · ${esc(lb)}</option>`;
+  }).join('');
+  s.value = rows.has(cur) ? cur : '';
+  s._rows = rows;
+  $('#planInfo').textContent = `저장소 ${planIndex.plans.length}건 · 수정본 ${drafts.length}건`;
+}
+
+/* 선택한 배너 → 기획안 조회 → Asset ID 로 이미지 경로 확인 → 컴포넌트에 카피·이미지·배치 적용 → 미리보기 */
+async function openPlan(bannerId) {
+  const row = $('#planSel')._rows && $('#planSel')._rows.get(bannerId);
+  if (!row) return;
+  let plan = row.draft ? row.draft.plan : await fetch(ROOT + row.path, { cache: 'no-cache' }).then(r => r.json()).catch(() => null);
+  if (!plan) return toast('기획안을 불러오지 못했습니다 — ' + (row.path || bannerId), true);
+  if (!SPECS[plan.templateId]) return toast(`알 수 없는 배너 타입 ${plan.templateId} — banner_specs.json 에 없는 템플릿입니다`, true);
+
+  closeEdit();
+  S = blankState(plan.templateId);
+  await seedLayers();
+  const { state, missing } = BannerPlans.applyPlan(S, plan, library, ROOT);
+  S = state; sel = null;
+  await preloadImgs();
+  for (const l of S.layers) if (l.needsFit) { fitToZone(l); delete l.needsFit; }
+  // 비교 기준 = 연 직후의 화면 상태. 자동 배치·기본 캔버스 값이 사용자 수정으로 잡히지 않게 한다
+  curPlan = { ...BannerPlans.stateToPlan(S, plan).plan, version: plan.version, history: plan.history };
+  $('#typeSel').value = S.type; $('#projName').value = plan.bannerName;
+  syncCanvasInputs(); paintSpecInfo(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
+  history = []; hIdx = -1; push();
+  paintPlanMeta();
+  if (missing.length) toast('라이브러리에 없는 Asset ID — ' + missing.join(', '), true);
+  else toast(`기획안을 열었습니다 — ${plan.bannerName} v${plan.version}${row.draft ? ' (수정본)' : ''}`);
+}
+
+function paintPlanMeta() {
+  const p = curPlan;
+  $('#planMeta').innerHTML = !p ? '' : [
+    ['Banner ID', p.bannerId], ['캠페인', p.campaignId], ['버전', 'v' + p.version],
+    ['이미지', BannerPlans.imageSlots(p).map(s => `${s.slot}: ${s.assetId}`).join(', ') || '-'],
+    ['기간', p.period ? `${p.period.start || ''} ~ ${p.period.end || ''}` : '-'],
+  ].map(([k, v]) => `<div class="kv"><b>${esc(k)}</b><span class="mono">${esc(v)}</span></div>`).join('');
+}
+
+/* 바뀐 기획안만 저장한다 — 이미지는 Asset ID·배치만, 파일·dataURL 은 넣지 않는다 */
+async function savePlan() {
+  commitEdit();
+  let base = curPlan;
+  if (!base) {
+    const bannerId = (prompt('새 기획안의 Banner ID (영문 소문자·숫자·하이픈)', '') || '').trim();
+    if (!/^[a-z0-9-]+$/.test(bannerId)) return bannerId && toast('Banner ID 형식이 올바르지 않습니다', true);
+    const campaignId = (prompt('캠페인 ID', '') || '').trim();
+    if (!/^[a-z0-9-]+$/.test(campaignId)) return campaignId && toast('캠페인 ID 형식이 올바르지 않습니다', true);
+    base = { bannerId, campaignId, bannerName: ($('#projName').value || bannerId).trim(), purpose: '', target: '',
+      content: {}, assets: {}, designConcept: '', period: { start: null, end: null }, version: 0, history: [] };
+  }
+  const { plan, unlinked } = BannerPlans.stateToPlan(S, base);
+  plan.bannerName = ($('#projName').value || plan.bannerName).trim();
+  const next = BannerPlans.nextVersion(curPlan, plan, { by: 'banner-studio' });
+  if (!next) return toast('바뀐 내용이 없어 저장하지 않았습니다');
+  const errs = BannerPlans.validatePlan(next, library);
+  if (errs.length) return toast('기획안 검증 실패 — ' + errs[0], true);
+  try { await draftPut({ bannerId: next.bannerId, plan: next, ts: Date.now() }); }
+  catch (e) { return toast('수정본 저장 실패 — ' + e.message, true); }
+  curPlan = next;
+  const a = el('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(next, null, 2)], { type: 'application/json' }));
+  a.download = `${next.bannerId}.json`;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  await loadPlanList(); $('#planSel').value = next.bannerId; paintPlanMeta();
+  const ch = next.history[next.history.length - 1].changed.join(', ');
+  toast(`v${next.version} 저장 (변경: ${ch})${unlinked.length ? ` — 라이브러리 밖 이미지 ${unlinked.length}개는 제외됨` : ''}`, !!unlinked.length);
 }
 
 // ══════════════════════════════════ 테마 ══════════════════════════════════
@@ -1343,8 +1485,26 @@ async function boot() {
   });
   document.querySelectorAll('.sect > h3').forEach(h3 => h3.onclick = () => h3.parentElement.classList.toggle('closed'));
 
+  // 배너 기획안
+  $('#planSel').onchange = () => {
+    if ($('#planSel').value) openPlan($('#planSel').value);
+    else { curPlan = null; paintPlanMeta(); }
+  };
+  $('#btnPlanSave').onclick = savePlan;
+
+  await loadLibrary();
   await loadStock();
   await switchType('popup');
+  await loadPlanList();
+
+  // ?plan=<bannerId>&view=clean — 기획안을 바로 열어 미리보기 (헤드리스 캡처·공유 링크용)
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('view') === 'clean') { $('#guideMode').value = 'clean'; syncGuideControls(); }
+  if (qs.get('plan')) {
+    if ($('#planSel')._rows.has(qs.get('plan'))) { $('#planSel').value = qs.get('plan'); await openPlan(qs.get('plan')); }
+    else toast('기획안을 찾지 못했습니다 — ' + qs.get('plan'), true);
+  }
+  document.body.dataset.ready = '1';
 }
 
 boot().catch(e => { console.error(e); document.body.insertAdjacentHTML('afterbegin', '<pre style="color:#f2596a;padding:20px">' + esc(e.stack || e) + '</pre>'); });

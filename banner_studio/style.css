@@ -141,11 +141,12 @@ select option { background: var(--panel2); color: var(--fg); }
 .mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
 
 /* ---------- 타입 선택 ---------- */
-#typeSel { width: 100%; padding: 6px 8px; font-size: 12px; }
-#specInfo { margin-top: 8px; }
-#specInfo .kv { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
-#specInfo .kv b { color: var(--fg2); font-weight: 500; font-size: 11px; }
-#specInfo .kv span { color: var(--fg); font-size: 11px; text-align: right; }
+#typeSel, #planSel { width: 100%; padding: 6px 8px; font-size: 12px; }
+#specInfo, #planMeta { margin-top: 8px; }
+#planMeta:empty { margin-top: 0; }
+:is(#specInfo, #planMeta) .kv { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+:is(#specInfo, #planMeta) .kv b { color: var(--fg2); font-weight: 500; font-size: 11px; }
+:is(#specInfo, #planMeta) .kv span { color: var(--fg); font-size: 11px; text-align: right; overflow-wrap: anywhere; }
 
 /* ---------- 스톡 라이브러리 ---------- */
 #stockGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }

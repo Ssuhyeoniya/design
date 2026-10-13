@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>배너 스튜디오 · 이미지 스튜디오</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=20261013-1">
+<link rel="stylesheet" href="style.css?v=20261013-2">
 <style id="fontface"></style>
 </head>
 <body>
@@ -37,6 +37,18 @@
         <div class="body">
           <select id="typeSel"></select>
           <div id="specInfo"></div>
+        </div>
+      </div>
+
+      <div class="sect">
+        <h3>배너 기획안</h3>
+        <div class="body">
+          <select id="planSel"><option value="">— 기획안 선택 —</option></select>
+          <div id="planMeta"></div>
+          <div class="row">
+            <button class="btn sm grow" id="btnPlanSave" title="바뀐 카피·이미지 참조·배치만 새 버전으로 저장 (JSON 다운로드)">기획안 저장</button>
+          </div>
+          <p class="hint" id="planInfo"></p>
         </div>
       </div>
 
@@ -162,6 +174,7 @@
 </div>
 <div id="toast"></div>
 <input type="file" id="filePick" accept="image/*" multiple hidden>
-<script src="app.js?v=20261013-1"></script>
+<script src="plans.js?v=20261013-2"></script>
+<script src="app.js?v=20261013-2"></script>
 </body>
 </html>
