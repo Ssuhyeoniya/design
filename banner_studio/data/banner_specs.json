@@ -1,0 +1,1403 @@
+{
+  "_meta": {
+    "version": "2026.01",
+    "source": "식권대장 In-App AD Design Guidelines Ver. 2026.01 (일반) + 식권대장 In-App AD 이주의 브랜드 Design Guidelines Ver. 2026.02 (이주의 브랜드) + 양 트랙 배포 PSD 템플릿 실측 (일반 6종 / 이주의 브랜드 4종)",
+    "coord_note": "zones의 rect_px는 배포 PSD 템플릿의 레이어 bbox 실측값(캔버스 픽셀 기준)이다. 추정값이 아님.",
+    "asset_note": "assets/{type}_guide.png 는 PSD의 '텍스트'·'가이드 영역' 레이어만 투명 배경으로 렌더한 공식 오버레이. assets/{type}_full.png 는 템플릿 전체 렌더.",
+    "font_note": "PSD 타입 레이어의 FontSize 값은 레이어 변형 배율이 반영되지 않아 그대로 신뢰할 수 없다. 폰트 크기 규격은 가이드 PDF 명시값을 기준으로 하고, PSD에서는 서체명(FontSet)만 참고한다.",
+    "rect_px_format": "[x0, y0, x1, y1] — 캔버스 좌상단 원점, 픽셀",
+    "track_note": "배너 타입 키는 두 트랙으로 나뉜다. 접두사 없는 키(splash, popup, pick_banner, pick_detail, shortcut, main_banner, event_banner)는 일반 인앱광고 Ver.2026.01 기준, bow_ 접두사 키(bow_splash, bow_popup, bow_pick_banner, bow_pick_detail)는 이주의 브랜드 Ver.2026.02 기준이다. 이주의 브랜드는 4종만 운영하며 숏컷·메인·이벤트 배너가 없다.",
+    "fit_mode_note": "fit_mode는 가이드 에셋을 소재에 맞추는 방식. stretch=단순 확대(기본), anchor_top_bottom=상하 고정부를 각각 정착(상세페이지), width_top=가로 기준 배율로 상단 정착(스플래시). 스플래시는 1:1~2:3로 세로가 가변이라 늘리면 BI 위치·크기가 틀어진다.",
+    "image_zone_policy": "**전 배너 공통** — 가이드에 표시된 이미지/오브젝트 영역은 모두 '권장 배치'이며 그 자체로는 반려 사유가 아니다. PSD에서 진한 빨간색 = 권장 영역, 옅은 빨간색 = 최대 영역이고, 판정 기준은 언제나 바깥쪽(최대)이다. 오브젝트가 권장 영역을 벗어나 최대 영역에 걸쳐 있어도 통과(승인)로 판정한다. 최대 영역이 별도로 없는 배너(스플래시·상세페이지)는 캔버스 경계 또는 고정 구조가 한계선이며, 그 안에 있으면 이미지 배치는 자유다. 반려는 한계선을 벗어나 앱 UI를 침범할 때만 적용한다."
+  },
+  "splash": {
+    "label": "스플래시 이미지",
+    "placement": "식권대장 앱 실행 시 3.5초 노출",
+    "canvas": null,
+    "ratio_rule": "1:1 ~ 2:3 (가로:세로). height/width 비율이 1.0 이상 1.5 이하",
+    "ratio_range": [
+      1.0,
+      1.5
+    ],
+    "min_size": [
+      500,
+      500
+    ],
+    "formats": [
+      "PNG",
+      "JPG",
+      "JPEG"
+    ],
+    "max_kb": 500,
+    "has_psd_template": false,
+    "text_x_range": null,
+    "fonts": null,
+    "logo_required": false,
+    "bg_solid_only": false,
+    "bg_no_white": false,
+    "zones_ratio": [
+      {
+        "name": "브랜드 표현 영역",
+        "rect": [
+          0.0,
+          0.0,
+          1.0,
+          0.5
+        ],
+        "kind": "margin"
+      },
+      {
+        "name": "이미지 영역 (전체 높이의 1/2 프레임)",
+        "rect": [
+          0.0,
+          0.5,
+          1.0,
+          1.0
+        ],
+        "kind": "image"
+      }
+    ],
+    "rules": [
+      "전체 높이의 절반에 대한 프레임 영역이 제공된다",
+      "브랜드 광고형의 심플한 이미지 및 텍스트로 표현할 것",
+      "이미지 영역(높이 1/2 프레임)은 권장 배치 — 벗어나도 통과, 캔버스 이탈만 반려"
+    ],
+    "note": "8종 중 유일하게 PSD 템플릿이 배포되지 않는다. 존 좌표는 가이드 도식 기준 참고값이므로 반려 근거로 쓰지 말 것.",
+    "track": "일반 인앱광고",
+    "guideline_version": "Ver. 2026.01",
+    "image_zone_policy": "'전체 높이의 1/2 프레임'은 권장 배치일 뿐이다. 이미지가 이를 벗어나 상단부까지 올라와도 통과. 캔버스를 벗어나거나 앱 UI를 침범하는 경우에만 반려"
+  },
+  "popup": {
+    "label": "팝업 배너",
+    "placement": "식권대장 앱 > 홈탭",
+    "canvas": [
+      1000,
+      1000
+    ],
+    "formats": [
+      "PNG",
+      "JPG",
+      "JPEG"
+    ],
+    "max_kb": 500,
+    "has_psd_template": true,
+    "psd_canvas": [
+      1000,
+      1000
+    ],
+    "text_x_range": null,
+    "fonts": {
+      "main": {
+        "family": "S-core Dream 6Bold",
+        "lines": 2,
+        "lines_fixed": true,
+        "psd_font": "S-CoreDream-6Bold"
+      },
+      "sub": {
+        "family": "Pretendard Regular",
+        "lines": 1,
+        "lines_fixed": true,
+        "psd_font": "Pretendard-Regular"
+      },
+      "logo_text": {
+        "psd_font": "Pretendard-Bold / Pretendard-Light"
+      }
+    },
+    "logo_required": false,
+    "logo_note": "가이드 Ver.2026.01 팝업 배너 규정에는 브랜드 로고에 대한 필수 여부도, 위치 기준도 없다. PSD 상단 영역의 레이어명은 '서브 텍스트 영역 가이드'이고 플레이스홀더 문구만 '브랜드 로고 (텍스트 표기 가능)'로 적혀 있을 뿐이다. '규격 내에서 자유롭게 디자인 가능'이 명시되어 있으므로 로고 유무나 위치를 반려 사유로 삼지 말 것",
+    "bg_solid_only": false,
+    "bg_no_white": true,
+    "zones": [
+      {
+        "name": "서브 텍스트 영역 (상단) — 로고 배치 가능",
+        "rect_px": [
+          287,
+          84,
+          714,
+          121
+        ],
+        "kind": "text_sub",
+        "align": "center",
+        "zone_note": "PSD 플레이스홀더 문구가 '브랜드 로고 (텍스트 표기 가능)'일 뿐 로고 전용 영역이 아니다. 위치 기준 아님"
+      },
+      {
+        "name": "메인 텍스트 영역 (2줄)",
+        "rect_px": [
+          82,
+          171,
+          916,
+          339
+        ],
+        "kind": "text_main"
+      },
+      {
+        "name": "서브 텍스트 영역 (1줄)",
+        "rect_px": [
+          313,
+          389,
+          687,
+          425
+        ],
+        "kind": "text_sub",
+        "align": "center"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (최대)",
+        "rect_px": [
+          0,
+          472,
+          1000,
+          1000
+        ],
+        "kind": "image_max"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (권장)",
+        "rect_px": [
+          82,
+          550,
+          917,
+          934
+        ],
+        "kind": "image"
+      }
+    ],
+    "rules": [
+      "규격 내에서 자유롭게 디자인 가능하며, 상세 가이드 필요 시 PSD 템플릿 참고",
+      "브랜드 광고형의 심플한 이미지 및 텍스트 표현",
+      "배경은 오브젝트와 어울리는 컬러로 자유롭게 구성",
+      "UI 영역과 유사한 흰색, 흰색에 가까운 컬러(연한 그레이) 사용 불가",
+      "오브젝트 이미지는 '최대' 영역 내에 있으면 통과 — 권장 영역 이탈은 반려 사유가 아님"
+    ],
+    "track": "일반 인앱광고",
+    "guideline_version": "Ver. 2026.01",
+    "image_zone_policy": "오브젝트가 권장 영역(진한 빨강)을 벗어나 최대 영역(옅은 빨강)에 걸쳐도 통과. 최대 영역까지 벗어난 경우에만 반려"
+  },
+  "pick_banner": {
+    "label": "식권대장 PICK - 배너",
+    "placement": "식권대장 앱 > 홈탭",
+    "canvas": [
+      1000,
+      380
+    ],
+    "formats": [
+      "PNG",
+      "JPG",
+      "JPEG"
+    ],
+    "max_kb": 500,
+    "has_psd_template": true,
+    "psd_canvas": [
+      1000,
+      380
+    ],
+    "text_x_range": [
+      390,
+      620
+    ],
+    "text_x_range_note": "텍스트 블록 우측 끝 x좌표의 허용 범위. PSD 가이드 텍스트 실제 우측 끝은 메인 603px / 서브 402px",
+    "fonts": {
+      "main": {
+        "family": "S-core Dream 6Bold",
+        "size_pt": 52,
+        "lines": 2,
+        "lines_fixed": true,
+        "psd_font": "S-CoreDream-6Bold"
+      },
+      "sub": {
+        "family": "Pretendard Regular",
+        "size_pt": 36,
+        "lines": 1,
+        "lines_fixed": true,
+        "psd_font": "Pretendard-Regular"
+      }
+    },
+    "logo_required": false,
+    "bg_solid_only": true,
+    "bg_no_white": true,
+    "zones": [
+      {
+        "name": "서브 텍스트 영역 (1줄 고정)",
+        "rect_px": [
+          66,
+          90,
+          402,
+          122
+        ],
+        "kind": "text_sub"
+      },
+      {
+        "name": "메인 텍스트 영역 (2줄 고정)",
+        "rect_px": [
+          66,
+          160,
+          603,
+          290
+        ],
+        "kind": "text_main"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (최대)",
+        "rect_px": [
+          620,
+          0,
+          1000,
+          380
+        ],
+        "kind": "image_max"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (권장)",
+        "rect_px": [
+          686,
+          66,
+          934,
+          314
+        ],
+        "kind": "image"
+      }
+    ],
+    "vlines_px": [
+      {
+        "x": 390,
+        "label": "390px 텍스트 Min"
+      },
+      {
+        "x": 620,
+        "label": "620px 텍스트 Max"
+      }
+    ],
+    "rules": [
+      "오브젝트 이미지는 배경이 없는 누끼 형태를 권장",
+      "배경이 있는 이미지는 마스킹 형태로 활용 가능 (마스킹 형태 자유)",
+      "카피와 연관된 고해상도 이미지로 구성하며, 실사 이미지 외 일러스트 형태도 가능",
+      "앱 내 UI를 해치는 과도한 그래픽 소스 사용 지양",
+      "이미지가 텍스트 영역과 겹치지 않도록 주의",
+      "텍스트 컬러는 자유롭게 사용하되 가독성 고려하여 텍스트-배경 컬러 대비를 명확하게 유지",
+      "컴퓨터 자판 외 특수기호 및 이모티콘 사용 불가 (예: ^^ / ★ / ♥ / ※)",
+      "배경은 형광, 그라데이션 컬러를 제외하고 단색으로만 구성",
+      "UI 영역과 유사한 흰색, 흰색에 가까운 컬러(연한 그레이) 사용 불가",
+      "오브젝트 이미지는 '최대' 영역 내에 있으면 통과 — 권장 영역 이탈은 반려 사유가 아님"
+    ],
+    "track": "일반 인앱광고",
+    "guideline_version": "Ver. 2026.01",
+    "image_zone_policy": "오브젝트가 권장 영역(진한 빨강)을 벗어나 최대 영역(옅은 빨강)에 걸쳐도 통과. 최대 영역까지 벗어난 경우에만 반려"
+  },
+  "pick_detail": {
+    "label": "식권대장 PICK - 상세페이지",
+    "placement": "식권대장 앱 > 홈탭 > PICK 배너 클릭 > 상세페이지",
+    "canvas": [
+      1000,
+      null
+    ],
+    "canvas_max": [
+      1000,
+      6000
+    ],
+    "formats": [
+      "PNG",
+      "JPG",
+      "JPEG"
+    ],
+    "max_kb": 3072,
+    "recommended_kb": 2048,
+    "has_psd_template": true,
+    "psd_canvas": [
+      1000,
+      1825
+    ],
+    "psd_canvas_note": "PSD는 본문 없는 최소 레이아웃(상단 1500px + 하단 325px). 중간 본문은 최대 4175px까지 확장 가능하여 총 6000px 이내",
+    "text_x_range": null,
+    "fonts": {
+      "main": {
+        "family": "Pretendard Bold",
+        "lines": 3,
+        "lines_fixed": false,
+        "psd_font": "Pretendard-Bold"
+      },
+      "sub": {
+        "family": "Pretendard Regular",
+        "lines": 2,
+        "lines_fixed": false,
+        "psd_font": "Pretendard-Regular"
+      },
+      "button": {
+        "family": "Pretendard SemiBold",
+        "psd_font": "Pretendard-SemiBold"
+      }
+    },
+    "fonts_note": "상세페이지 폰트는 가이드 PDF에 없고 PSD 템플릿에서만 확인된다. 메인이 S-core Dream이 아닌 Pretendard Bold인 점에 주의. 규격 내 자유 디자인이 허용되므로 서체 불일치만으로 반려하지 말 것",
+    "logo_required": false,
+    "landing_button_required": true,
+    "bg_solid_only": false,
+    "bg_no_white": false,
+    "side_margin_px": 80,
+    "zones_anchored": [
+      {
+        "name": "상단 배경 영역 (1500px 고정)",
+        "anchor": "top",
+        "rect_px": [
+          0,
+          0,
+          1000,
+          1500
+        ],
+        "kind": "margin"
+      },
+      {
+        "name": "메인 텍스트 영역 (최대)",
+        "anchor": "top",
+        "rect_px": [
+          80,
+          858,
+          920,
+          1174
+        ],
+        "kind": "text_main"
+      },
+      {
+        "name": "행간 여백 90px",
+        "anchor": "top",
+        "rect_px": [
+          0,
+          1174,
+          1000,
+          1264
+        ],
+        "kind": "margin"
+      },
+      {
+        "name": "서브 텍스트 영역 (최소)",
+        "anchor": "top",
+        "rect_px": [
+          80,
+          1264,
+          920,
+          1365
+        ],
+        "kind": "text_sub"
+      },
+      {
+        "name": "하단 여백 135px",
+        "anchor": "top",
+        "rect_px": [
+          0,
+          1365,
+          1000,
+          1500
+        ],
+        "kind": "margin"
+      },
+      {
+        "name": "버튼 상단 여백 70px",
+        "anchor": "bottom",
+        "rect_px": [
+          0,
+          -325,
+          1000,
+          -255
+        ],
+        "kind": "margin"
+      },
+      {
+        "name": "랜딩 버튼 영역 (고정 135px, 필수)",
+        "anchor": "bottom",
+        "rect_px": [
+          80,
+          -255,
+          920,
+          -120
+        ],
+        "kind": "button"
+      },
+      {
+        "name": "버튼 텍스트 영역",
+        "anchor": "bottom",
+        "rect_px": [
+          356,
+          -208,
+          644,
+          -168
+        ],
+        "kind": "text_sub"
+      },
+      {
+        "name": "하단 여백 120px",
+        "anchor": "bottom",
+        "rect_px": [
+          0,
+          -120,
+          1000,
+          0
+        ],
+        "kind": "margin"
+      }
+    ],
+    "rules": [
+      "배너와의 연관성을 고려하여 규격 내에서 자유롭게 디자인 가능",
+      "상세 가이드 필요 시 PSD 템플릿 참고하여 제작",
+      "랜딩 버튼 필수 — 하단 고정 135px 영역, 좌우 80px 여백",
+      "가로 1000px 고정, 세로 6000px 이하",
+      "좌우 여백 80px 고정",
+      "상단 1500px / 하단 325px 은 고정 구조, 중간 본문만 최대 4175px 확장",
+      "용량 3mb 이하 (2mb 권장)",
+      "배경에 이미지를 깔 경우 PSD의 Gradient 레이어(0,53 ~ 1000,1500) 활용 권장",
+      "이미지·그래픽 배치 자유 — 고정 구조만 지키면 위치·크기는 반려 사유가 아님"
+    ],
+    "track": "일반 인앱광고",
+    "guideline_version": "Ver. 2026.01",
+    "fit_mode": "anchor_top_bottom",
+    "image_zone_policy": "상세페이지는 이미지·그래픽 배치에 제약이 없다. 고정 구조(좌우 여백 80px / 상단 1500px 블록 / 하단 325px 버튼 블록)만 지키면 자유이며, 이미지 위치나 크기를 반려 사유로 삼지 말 것"
+  },
+  "shortcut": {
+    "label": "숏컷 배너",
+    "placement": "식권대장 앱 > 식권대장탭 / 비즈니스탭 / 식품관 페이지",
+    "canvas": [
+      1440,
+      284
+    ],
+    "formats": [
+      "PNG",
+      "JPG",
+      "JPEG"
+    ],
+    "max_kb": 500,
+    "has_psd_template": true,
+    "psd_canvas": [
+      1440,
+      284
+    ],
+    "text_x_range": [
+      850,
+      1340
+    ],
+    "text_x_range_note": "텍스트 블록 우측 끝 x좌표의 허용 범위. PSD 가이드 텍스트 실제 우측 끝은 메인 1028px / 서브 957px",
+    "fonts": {
+      "main": {
+        "family": "Pretendard Bold",
+        "size_pt": 56,
+        "lines": 1,
+        "lines_fixed": true,
+        "psd_font": "Pretendard-Bold"
+      },
+      "sub": {
+        "family": "Pretendard Regular",
+        "size_pt": 48,
+        "lines": 1,
+        "lines_fixed": true,
+        "psd_font": "Pretendard-Regular"
+      }
+    },
+    "logo_required": false,
+    "bg_solid_only": true,
+    "bg_no_white": true,
+    "zones": [
+      {
+        "name": "오브젝트 이미지 영역 (최대)",
+        "rect_px": [
+          101,
+          0,
+          507,
+          284
+        ],
+        "kind": "image_max"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (최소)",
+        "rect_px": [
+          162,
+          0,
+          446,
+          284
+        ],
+        "kind": "image"
+      },
+      {
+        "name": "메인 텍스트 영역 (1줄 고정)",
+        "rect_px": [
+          510,
+          82,
+          1028,
+          133
+        ],
+        "kind": "text_main"
+      },
+      {
+        "name": "서브 텍스트 영역 (1줄 고정)",
+        "rect_px": [
+          508,
+          158,
+          957,
+          200
+        ],
+        "kind": "text_sub"
+      }
+    ],
+    "vlines_px": [
+      {
+        "x": 850,
+        "label": "850px 텍스트 Min"
+      },
+      {
+        "x": 1340,
+        "label": "1340px 텍스트 Max"
+      }
+    ],
+    "layout_note": "다른 배너와 달리 이미지가 좌측(101~507px), 텍스트가 우측(508px~)에 배치된다. 좌측 0~101px는 여백",
+    "rules": [
+      "오브젝트 이미지는 배경이 없는 누끼 형태를 권장",
+      "배경이 있는 이미지는 마스킹 형태로 활용 가능 (마스킹 형태 자유)",
+      "카피와 연관된 고해상도 이미지로 구성하며, 실사 이미지 외 일러스트 형태도 가능",
+      "앱 내 UI를 해치는 과도한 그래픽 소스 사용 지양",
+      "이미지가 텍스트 영역과 겹치지 않도록 주의",
+      "텍스트 컬러는 자유롭게 사용하되 가독성 고려하여 텍스트-배경 컬러 대비를 명확하게 유지",
+      "컴퓨터 자판 외 특수기호 및 이모티콘 사용 불가 (예: ^^ / ★ / ♥ / ※)",
+      "배경은 형광, 그라데이션 컬러를 제외하고 단색으로만 구성",
+      "UI 영역과 유사한 흰색, 흰색에 가까운 컬러(연한 그레이) 사용 불가",
+      "오브젝트 이미지는 '최대' 영역 내에 있으면 통과 — 권장 영역 이탈은 반려 사유가 아님"
+    ],
+    "track": "일반 인앱광고",
+    "guideline_version": "Ver. 2026.01",
+    "image_zone_policy": "오브젝트가 권장 영역(진한 빨강)을 벗어나 최대 영역(옅은 빨강)에 걸쳐도 통과. 최대 영역까지 벗어난 경우에만 반려"
+  },
+  "main_banner": {
+    "label": "메인 배너 (식품관)",
+    "placement": "식권대장 앱 > 식품관 페이지",
+    "canvas": [
+      1000,
+      380
+    ],
+    "formats": [
+      "PNG",
+      "JPG",
+      "JPEG"
+    ],
+    "max_kb": 500,
+    "has_psd_template": true,
+    "psd_canvas": [
+      1000,
+      380
+    ],
+    "text_x_range": [
+      390,
+      620
+    ],
+    "text_x_range_note": "텍스트 블록 우측 끝 x좌표의 허용 범위. PSD 가이드 텍스트 실제 우측 끝은 메인 603px / 서브 402px",
+    "fonts": {
+      "main": {
+        "family": "S-core Dream 6Bold",
+        "size_pt": 52,
+        "lines": 2,
+        "lines_fixed": true,
+        "psd_font": "S-CoreDream-6Bold"
+      },
+      "sub": {
+        "family": "Pretendard Regular",
+        "size_pt": 36,
+        "lines": 1,
+        "lines_fixed": true,
+        "psd_font": "Pretendard-Regular"
+      }
+    },
+    "logo_required": false,
+    "bg_solid_only": true,
+    "bg_no_white": true,
+    "zones": [
+      {
+        "name": "서브 텍스트 영역 (1줄 고정)",
+        "rect_px": [
+          66,
+          90,
+          402,
+          122
+        ],
+        "kind": "text_sub"
+      },
+      {
+        "name": "메인 텍스트 영역 (2줄 고정)",
+        "rect_px": [
+          66,
+          160,
+          603,
+          290
+        ],
+        "kind": "text_main"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (최대)",
+        "rect_px": [
+          620,
+          0,
+          1000,
+          380
+        ],
+        "kind": "image_max"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (권장)",
+        "rect_px": [
+          686,
+          66,
+          934,
+          314
+        ],
+        "kind": "image"
+      }
+    ],
+    "vlines_px": [
+      {
+        "x": 390,
+        "label": "390px 텍스트 Min"
+      },
+      {
+        "x": 620,
+        "label": "620px 텍스트 Max"
+      }
+    ],
+    "identical_to": "pick_banner",
+    "identical_note": "PICK 배너와 캔버스·존 좌표·폰트·텍스트 범위가 완전히 동일하다. PSD 템플릿 레이어 구조까지 같아 이미지만으로는 절대 구분 불가",
+    "rules": [
+      "오브젝트 이미지는 배경이 없는 누끼 형태를 권장",
+      "배경이 있는 이미지는 마스킹 형태로 활용 가능 (마스킹 형태 자유)",
+      "카피와 연관된 고해상도 이미지로 구성하며, 실사 이미지 외 일러스트 형태도 가능",
+      "앱 내 UI를 해치는 과도한 그래픽 소스 사용 지양",
+      "이미지가 텍스트 영역과 겹치지 않도록 주의",
+      "텍스트 컬러는 자유롭게 사용하되 가독성 고려하여 텍스트-배경 컬러 대비를 명확하게 유지",
+      "컴퓨터 자판 외 특수기호 및 이모티콘 사용 불가 (예: ^^ / ★ / ♥ / ※)",
+      "배경은 형광, 그라데이션 컬러를 제외하고 단색으로만 구성",
+      "UI 영역과 유사한 흰색, 흰색에 가까운 컬러(연한 그레이) 사용 불가",
+      "오브젝트 이미지는 '최대' 영역 내에 있으면 통과 — 권장 영역 이탈은 반려 사유가 아님"
+    ],
+    "track": "일반 인앱광고",
+    "guideline_version": "Ver. 2026.01",
+    "image_zone_policy": "오브젝트가 권장 영역(진한 빨강)을 벗어나 최대 영역(옅은 빨강)에 걸쳐도 통과. 최대 영역까지 벗어난 경우에만 반려"
+  },
+  "event_banner": {
+    "label": "이벤트 배너 (식품관)",
+    "placement": "식권대장 앱 > 식품관 페이지",
+    "canvas": [
+      800,
+      867
+    ],
+    "formats": [
+      "PNG",
+      "JPG",
+      "JPEG"
+    ],
+    "max_kb": 500,
+    "has_psd_template": true,
+    "psd_canvas": [
+      800,
+      867
+    ],
+    "text_x_range": [
+      230,
+      734
+    ],
+    "text_x_range_note": "텍스트 블록 우측 끝 x좌표의 허용 범위. PSD 가이드 텍스트 실제 우측 끝은 메인 634px / 서브 440px / 로고 493px",
+    "fonts": {
+      "main": {
+        "family": "S-core Dream 6Bold",
+        "size_pt": 52,
+        "lines": 2,
+        "lines_fixed": true,
+        "psd_font": "S-CoreDream-6Bold"
+      },
+      "sub": {
+        "family": "Pretendard Regular",
+        "size_pt": 36,
+        "lines": 1,
+        "lines_fixed": true,
+        "psd_font": "Pretendard-Regular"
+      },
+      "logo_text": {
+        "psd_font": "Pretendard-Bold / Pretendard-Light"
+      }
+    },
+    "logo_required": true,
+    "logo_note": "(필수) 상단 브랜드 로고 삽입 → 텍스트 표기로 대체 가능. 가이드는 '상단'까지만 규정하고 좌우 위치는 정하지 않는다. PSD는 좌측(66,66~493,101)에 배치했을 뿐이므로 로고가 상단에 있으면 좌우 위치로는 반려하지 않는다",
+    "bg_solid_only": true,
+    "bg_no_white": true,
+    "zones": [
+      {
+        "name": "브랜드 로고 (필수, 텍스트 표기 대체 가능)",
+        "rect_px": [
+          66,
+          66,
+          493,
+          101
+        ],
+        "kind": "logo",
+        "zone_note": "PSD 배치 위치. 가이드 규정은 '상단'까지이며 좌우는 자유"
+      },
+      {
+        "name": "메인 텍스트 영역 (2줄 고정)",
+        "rect_px": [
+          66,
+          157,
+          634,
+          285
+        ],
+        "kind": "text_main"
+      },
+      {
+        "name": "서브 텍스트 영역 (1줄 고정)",
+        "rect_px": [
+          66,
+          340,
+          440,
+          376
+        ],
+        "kind": "text_sub"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (최대)",
+        "rect_px": [
+          0,
+          376,
+          800,
+          867
+        ],
+        "kind": "image_max"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (권장)",
+        "rect_px": [
+          66,
+          426,
+          734,
+          801
+        ],
+        "kind": "image"
+      }
+    ],
+    "vlines_px": [
+      {
+        "x": 230,
+        "label": "230px 텍스트 Min"
+      },
+      {
+        "x": 734,
+        "label": "734px 텍스트 Max"
+      }
+    ],
+    "rules": [
+      "(필수) 상단 브랜드 로고 삽입 — 텍스트 표기로 대체 가능",
+      "오브젝트 이미지는 배경이 없는 누끼 형태를 권장",
+      "배경이 있는 이미지는 마스킹 형태로 활용 가능 (마스킹 형태 자유)",
+      "카피와 연관된 고해상도 이미지로 구성하며, 실사 이미지 외 일러스트 형태도 가능",
+      "앱 내 UI를 해치는 과도한 그래픽 소스 사용 지양",
+      "이미지가 텍스트 영역과 겹치지 않도록 주의",
+      "컴퓨터 자판 외 특수기호 및 이모티콘 사용 불가 (예: ^^ / ★ / ♥ / ※)",
+      "배경은 형광, 그라데이션 컬러를 제외하고 단색으로만 구성",
+      "UI 영역과 유사한 흰색, 흰색에 가까운 컬러(연한 그레이) 사용 불가",
+      "오브젝트 이미지는 '최대' 영역 내에 있으면 통과 — 권장 영역 이탈은 반려 사유가 아님"
+    ],
+    "track": "일반 인앱광고",
+    "guideline_version": "Ver. 2026.01",
+    "image_zone_policy": "오브젝트가 권장 영역(진한 빨강)을 벗어나 최대 영역(옅은 빨강)에 걸쳐도 통과. 최대 영역까지 벗어난 경우에만 반려"
+  },
+  "bow_splash": {
+    "label": "[이주의 브랜드] 스플래시 이미지",
+    "track": "이주의 브랜드",
+    "guideline_version": "Ver. 2026.02",
+    "placement": "식권대장 앱 실행 시 3.5초 노출",
+    "canvas": null,
+    "ratio_rule": "1:1 ~ 2:3 (가로:세로). height/width 비율이 1.0 이상 1.5 이하",
+    "ratio_range": [
+      1.0,
+      1.5
+    ],
+    "min_size": [
+      1000,
+      1000
+    ],
+    "min_size_note": "일반 스플래시(500×500px)와 달리 1:1 규격 최소 사이즈가 1000×1000px로 상향",
+    "formats": [
+      "PNG",
+      "JPG",
+      "JPEG"
+    ],
+    "max_kb": 500,
+    "has_psd_template": true,
+    "psd_note": "PSD 템플릿은 1:1(1000×1000px) 기준으로 배포된다. 2:3 등 세로가 긴 비율로 제출된 소재는 가로 기준으로 배율을 맞춰 상단 정착시킨다 — BI는 픽셀 크기가 고정이라 늘리면 안 되기 때문",
+    "text_x_range": null,
+    "fonts": {
+      "main": {
+        "family": "S-core Dream 6Bold",
+        "lines": 2,
+        "psd_font": "S-CoreDream-6Bold"
+      },
+      "sub": {
+        "family": "Pretendard Regular",
+        "lines": 1,
+        "psd_font": "Pretendard-Regular"
+      }
+    },
+    "bi_required": true,
+    "bi_position": "우측 상단",
+    "bi_note": "우측 상단 이주의 브랜드BI 필수 적용. PSD상 사이즈·위치 고정이며 크기 변경 불가, 상하 위치만 조정 가능. 배경색에 따라 화이트 버전 사용 가능. PSD 실측 위치 691,59~917,85 (226×26px)",
+    "logo_required": false,
+    "bg_solid_only": false,
+    "bg_no_white": true,
+    "rules": [
+      "전체 높이의 절반에 대한 프레임 영역이 제공된다",
+      "우측 상단 이주의 브랜드BI 필수 적용 (PSD 템플릿 참고, 배경색에 따라 화이트 버전 사용 가능)",
+      "제품 실물 이미지 사용 권장",
+      "UI 영역과 유사한 흰색, 흰색에 가까운 컬러(연한 그레이) 사용 불가",
+      "1:1 규격 기준 최소 사이즈 1000×1000px",
+      "오브젝트 이미지는 '최대' 영역 내에 있으면 통과 — 권장 영역 이탈은 반려 사유가 아님"
+    ],
+    "diff_from_general": [
+      "최소 사이즈 500×500px → 1000×1000px 상향",
+      "이주의 브랜드BI 우측 상단 필수 적용 신설 (691,59~917,85 / 226×26px 고정)",
+      "제품 실물 이미지 사용 권장 신설",
+      "흰색·연한 그레이 배경 금지 신설 (일반 스플래시에는 없는 규정)",
+      "PSD 템플릿 제공 (일반 스플래시는 미제공)"
+    ],
+    "psd_canvas": [
+      1000,
+      1000
+    ],
+    "fit_mode": "width_top",
+    "bi_rect_px": [
+      691,
+      59,
+      917,
+      85
+    ],
+    "bi_size_px": [
+      226,
+      26
+    ],
+    "zones": [
+      {
+        "name": "이주의 브랜드BI (필수, 사이즈·위치 고정)",
+        "rect_px": [
+          691,
+          59,
+          917,
+          85
+        ],
+        "kind": "logo"
+      },
+      {
+        "name": "메인 텍스트 영역 (2줄)",
+        "rect_px": [
+          82,
+          171,
+          916,
+          339
+        ],
+        "kind": "text_main"
+      },
+      {
+        "name": "서브 텍스트 영역 (1줄)",
+        "rect_px": [
+          313,
+          389,
+          687,
+          425
+        ],
+        "kind": "text_sub",
+        "align": "center"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (최대)",
+        "rect_px": [
+          0,
+          472,
+          1000,
+          1000
+        ],
+        "kind": "image_max"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (권장)",
+        "rect_px": [
+          82,
+          550,
+          917,
+          934
+        ],
+        "kind": "image"
+      }
+    ],
+    "hlines_ratio": [
+      {
+        "y": 0.5,
+        "label": "전체 높이의 1/2 — 이미지 프레임 영역 경계"
+      }
+    ],
+    "layout_note": "팝업 배너와 레이아웃이 거의 같지만 좌측 상단 브랜드 로고 영역이 없다. 스플래시는 광고주 브랜드 로고 규정이 없고 BI만 필수",
+    "logo_note": "광고주 브랜드 로고 규정 없음. 필수인 것은 이주의 브랜드BI(우측 상단)뿐이다",
+    "image_zone_policy": "오브젝트가 권장 영역(진한 빨강)을 벗어나 최대 영역(옅은 빨강)에 걸쳐도 통과. 최대 영역까지 벗어난 경우에만 반려"
+  },
+  "bow_popup": {
+    "label": "[이주의 브랜드] 팝업 배너",
+    "track": "이주의 브랜드",
+    "guideline_version": "Ver. 2026.02",
+    "placement": "식권대장 앱 > 홈탭",
+    "canvas": [
+      1000,
+      1000
+    ],
+    "formats": [
+      "PNG",
+      "JPG",
+      "JPEG"
+    ],
+    "max_kb": 500,
+    "has_psd_template": true,
+    "psd_canvas": [
+      1000,
+      1000
+    ],
+    "psd_note": "이주의 브랜드 전용 PSD 실측 반영 완료",
+    "text_x_range": null,
+    "fonts": {
+      "main": {
+        "family": "S-core Dream 6Bold",
+        "lines_max": 2,
+        "lines_fixed": false,
+        "chars_per_line": "15자 내외",
+        "psd_font": "S-CoreDream-6Bold"
+      },
+      "sub": {
+        "family": "Pretendard Regular",
+        "lines": 1,
+        "lines_fixed": true,
+        "chars": "20자 내외 (공백 제외)",
+        "psd_font": "Pretendard-Regular"
+      }
+    },
+    "bi_required": true,
+    "bi_position": "우측 상단",
+    "bi_note": "이주의 브랜드BI(= 이주의브랜드 로고)는 **우측 상단** 필수. PSD 실측 691,59~917,85 (226×26px). PSD 레이어명에 '사이즈, 위치 고정'이 명시되어 있어 크기 변경·좌우 이동은 반려 사유다. 상하 위치만 조정 가능하고 배경색에 따라 화이트 버전 사용 가능",
+    "logo_required": true,
+    "logo_note": "광고주 브랜드 로고는 삽입 자체가 필수(가이드 '이주의 브랜드BI 및 브랜드 로고 필수 사용'). 다만 좌우 위치는 규정되어 있지 않고 'PSD 템플릿 참고' 수준이다. PSD는 좌측 상단(81,58~419,87)에 두었으나 위치만으로 반려하지 말 것. 반려 대상은 '로고 자체가 없는 경우'다. 위치가 고정인 것은 이주의 브랜드BI 쪽이며, 둘을 혼동하지 말 것",
+    "copy_required": "혜택 및 참여 방법 필수 기재 (메인·서브 총 2개 영역 구성)",
+    "cta_note": "CTA 문구 사용 시 '자세히 보기' / '혜택 확인하기' 등 정보 탐색형 문구 권장",
+    "bg_solid_only": false,
+    "bg_no_white": true,
+    "zones": [
+      {
+        "name": "광고주 브랜드 로고 (필수 / 텍스트 표기 가능, 위치 기준 아님)",
+        "rect_px": [
+          81,
+          58,
+          419,
+          87
+        ],
+        "kind": "logo",
+        "zone_note": "PSD 배치 위치일 뿐 좌우 위치 규정은 없다"
+      },
+      {
+        "name": "이주의 브랜드BI (우측 상단 필수 / 사이즈·위치 고정)",
+        "rect_px": [
+          691,
+          59,
+          917,
+          85
+        ],
+        "kind": "logo",
+        "zone_note": "PSD 레이어명에 '사이즈, 위치 고정' 명시. 크기 변경·좌우 이동 시 반려"
+      },
+      {
+        "name": "메인 텍스트 영역 (최대 2줄, 줄당 15자 내외)",
+        "rect_px": [
+          82,
+          171,
+          916,
+          339
+        ],
+        "kind": "text_main"
+      },
+      {
+        "name": "서브 텍스트 영역 (1줄 고정, 20자 내외)",
+        "rect_px": [
+          313,
+          389,
+          687,
+          425
+        ],
+        "kind": "text_sub",
+        "align": "center"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (최대)",
+        "rect_px": [
+          0,
+          472,
+          1000,
+          1000
+        ],
+        "kind": "image_max"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (권장)",
+        "rect_px": [
+          82,
+          550,
+          917,
+          934
+        ],
+        "kind": "image"
+      }
+    ],
+    "rules": [
+      "상세 가이드 필요 시 PSD 템플릿 참고하여 제작",
+      "제품 실물 이미지 사용 권장",
+      "이주의 브랜드BI 및 브랜드 로고 필수 사용 (배경색에 따라 화이트 버전 사용 가능)",
+      "문구: 혜택 및 참여 방법 필수 기재 (총 2개 영역 구성)",
+      "(메인) 최대 2줄, 줄 당 15자 내외",
+      "(서브) 1줄 고정, 20자 내외 (공백 제외)",
+      "컴퓨터 자판 외 특수기호 및 이모티콘 사용 불가 (예: ^^ / ★ / ♥)",
+      "CTA 문구 사용 시 '자세히 보기 / 혜택 확인하기' 등 정보 탐색형 문구 권장",
+      "배경은 오브젝트와 어울리는 컬러로 자유롭게 구성",
+      "UI 영역과 유사한 흰색, 흰색에 가까운 컬러(연한 그레이) 사용 불가",
+      "오브젝트 이미지는 '최대' 영역 내에 있으면 통과 — 권장 영역 이탈은 반려 사유가 아님"
+    ],
+    "diff_from_general": [
+      "이주의 브랜드BI(우측 상단, 사이즈·위치 고정) 신설 — 691,59~917,85 / 226×26px",
+      "광고주 브랜드 로고 삽입이 필수가 됨 (일반 팝업은 로고 규정 자체가 없음)",
+      "혜택 및 참여 방법 문구 필수 기재 신설",
+      "메인 최대 2줄·줄당 15자 내외 / 서브 1줄 고정·20자 내외 글자수 제한 신설",
+      "메인이 '2줄 고정'이 아닌 '최대 2줄'이라 1줄도 허용",
+      "제품 실물 이미지 사용 권장 신설",
+      "CTA 문구 정보 탐색형 권장 신설"
+    ],
+    "bi_rect_px": [
+      691,
+      59,
+      917,
+      85
+    ],
+    "bi_size_px": [
+      226,
+      26
+    ],
+    "logo_rect_px": [
+      81,
+      58,
+      419,
+      87
+    ],
+    "image_zone_policy": "오브젝트가 권장 영역(진한 빨강)을 벗어나 최대 영역(옅은 빨강)에 걸쳐도 통과. 최대 영역까지 벗어난 경우에만 반려"
+  },
+  "bow_pick_banner": {
+    "label": "[이주의 브랜드] 식권대장 PICK - 배너",
+    "placement": "식권대장 앱 > 홈탭",
+    "canvas": [
+      1000,
+      380
+    ],
+    "formats": [
+      "PNG",
+      "JPG",
+      "JPEG"
+    ],
+    "max_kb": 500,
+    "has_psd_template": true,
+    "psd_canvas": [
+      1000,
+      380
+    ],
+    "text_x_range": [
+      390,
+      620
+    ],
+    "text_x_range_note": "텍스트 블록 우측 끝 x좌표의 허용 범위. PSD 가이드 텍스트 실제 우측 끝은 메인 603px / 서브 402px",
+    "fonts": {
+      "main": {
+        "family": "S-core Dream 6Bold",
+        "size_pt": 52,
+        "lines": 2,
+        "lines_fixed": true,
+        "psd_font": "S-CoreDream-6Bold"
+      },
+      "sub": {
+        "family": "Pretendard Regular",
+        "size_pt": 36,
+        "lines": 1,
+        "lines_fixed": true,
+        "psd_font": "Pretendard-Regular"
+      }
+    },
+    "logo_required": false,
+    "bg_solid_only": true,
+    "bg_no_white": true,
+    "zones": [
+      {
+        "name": "서브 텍스트 영역 (1줄 고정)",
+        "rect_px": [
+          66,
+          90,
+          402,
+          122
+        ],
+        "kind": "text_sub"
+      },
+      {
+        "name": "메인 텍스트 영역 (2줄 고정)",
+        "rect_px": [
+          66,
+          160,
+          603,
+          290
+        ],
+        "kind": "text_main"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (최대)",
+        "rect_px": [
+          620,
+          0,
+          1000,
+          380
+        ],
+        "kind": "image_max"
+      },
+      {
+        "name": "오브젝트 이미지 영역 (권장)",
+        "rect_px": [
+          686,
+          66,
+          934,
+          314
+        ],
+        "kind": "image"
+      }
+    ],
+    "vlines_px": [
+      {
+        "x": 390,
+        "label": "390px 텍스트 Min"
+      },
+      {
+        "x": 620,
+        "label": "620px 텍스트 Max"
+      }
+    ],
+    "rules": [
+      "오브젝트 이미지는 배경이 없는 누끼 형태를 권장",
+      "배경이 있는 이미지는 마스킹 형태로 활용 가능 (마스킹 형태 자유)",
+      "카피와 연관된 고해상도 이미지로 구성하며, 실사 이미지 외 일러스트 형태도 가능",
+      "앱 내 UI를 해치는 과도한 그래픽 소스 사용 지양",
+      "이미지가 텍스트 영역과 겹치지 않도록 주의",
+      "텍스트 컬러는 자유롭게 사용하되 가독성 고려하여 텍스트-배경 컬러 대비를 명확하게 유지",
+      "컴퓨터 자판 외 특수기호 및 이모티콘 사용 불가 (예: ^^ / ★ / ♥ / ※)",
+      "배경은 형광, 그라데이션 컬러를 제외하고 단색으로만 구성",
+      "UI 영역과 유사한 흰색, 흰색에 가까운 컬러(연한 그레이) 사용 불가",
+      "오브젝트 이미지는 '최대' 영역 내에 있으면 통과 — 권장 영역 이탈은 반려 사유가 아님"
+    ],
+    "track": "이주의 브랜드",
+    "guideline_version": "Ver. 2026.02",
+    "bi_required": false,
+    "bi_note": "이주의 브랜드 4종 중 유일하게 BI를 넣지 않는다. 가이드 Ver.2026.02 본문에도, 배포 PSD 템플릿에도 BI 규정·레이어가 없다. BI 미삽입을 반려 사유로 삼지 말 것",
+    "diff_from_general": [
+      "규격·폰트·텍스트 범위·배경 규정 모두 일반 PICK 배너와 동일. 이주의 브랜드 4종 중 유일하게 BI 필수 규정이 없다"
+    ],
+    "psd_note": "이주의 브랜드 전용 PSD 확인 결과 BI 레이어가 존재하지 않는다. 일반 PICK 배너 PSD와 레이어 구조가 완전히 동일 — BI 미삽입이 정상",
+    "image_zone_policy": "오브젝트가 권장 영역(진한 빨강)을 벗어나 최대 영역(옅은 빨강)에 걸쳐도 통과. 최대 영역까지 벗어난 경우에만 반려"
+  },
+  "bow_pick_detail": {
+    "label": "[이주의 브랜드] 식권대장 PICK - 상세페이지",
+    "placement": "식권대장 앱 > 홈탭 > PICK 배너 클릭 > 상세페이지",
+    "canvas": [
+      1000,
+      null
+    ],
+    "canvas_max": [
+      1000,
+      6000
+    ],
+    "formats": [
+      "PNG",
+      "JPG",
+      "JPEG"
+    ],
+    "max_kb": 3072,
+    "recommended_kb": 2048,
+    "has_psd_template": true,
+    "psd_canvas": [
+      1000,
+      1825
+    ],
+    "psd_canvas_note": "PSD는 본문 없는 최소 레이아웃(상단 1500px + 하단 325px). 중간 본문은 최대 4175px까지 확장 가능하여 총 6000px 이내",
+    "text_x_range": null,
+    "fonts": {
+      "main": {
+        "family": "Pretendard Bold",
+        "lines": 3,
+        "lines_fixed": false,
+        "psd_font": "Pretendard-Bold"
+      },
+      "sub": {
+        "family": "Pretendard Regular",
+        "lines": 2,
+        "lines_fixed": false,
+        "psd_font": "Pretendard-Regular"
+      },
+      "button": {
+        "family": "Pretendard SemiBold",
+        "psd_font": "Pretendard-SemiBold"
+      }
+    },
+    "fonts_note": "상세페이지 폰트는 가이드 PDF에 없고 PSD 템플릿에서만 확인된다. 메인이 S-core Dream이 아닌 Pretendard Bold인 점에 주의. 규격 내 자유 디자인이 허용되므로 서체 불일치만으로 반려하지 말 것",
+    "logo_required": false,
+    "landing_button_required": true,
+    "bg_solid_only": false,
+    "bg_no_white": false,
+    "side_margin_px": 80,
+    "zones_anchored": [
+      {
+        "name": "상단 배경 영역 (1500px 고정)",
+        "anchor": "top",
+        "rect_px": [
+          0,
+          0,
+          1000,
+          1500
+        ],
+        "kind": "margin"
+      },
+      {
+        "name": "이주의 브랜드BI (필수, 사이즈·위치 고정)",
+        "anchor": "top",
+        "rect_px": [
+          694,
+          279,
+          920,
+          304
+        ],
+        "kind": "logo"
+      },
+      {
+        "name": "메인 텍스트 영역 (최대)",
+        "anchor": "top",
+        "rect_px": [
+          80,
+          858,
+          920,
+          1174
+        ],
+        "kind": "text_main"
+      },
+      {
+        "name": "행간 여백 90px",
+        "anchor": "top",
+        "rect_px": [
+          0,
+          1174,
+          1000,
+          1264
+        ],
+        "kind": "margin"
+      },
+      {
+        "name": "서브 텍스트 영역 (최소)",
+        "anchor": "top",
+        "rect_px": [
+          80,
+          1264,
+          920,
+          1365
+        ],
+        "kind": "text_sub"
+      },
+      {
+        "name": "하단 여백 135px",
+        "anchor": "top",
+        "rect_px": [
+          0,
+          1365,
+          1000,
+          1500
+        ],
+        "kind": "margin"
+      },
+      {
+        "name": "버튼 상단 여백 70px",
+        "anchor": "bottom",
+        "rect_px": [
+          0,
+          -325,
+          1000,
+          -255
+        ],
+        "kind": "margin"
+      },
+      {
+        "name": "랜딩 버튼 영역 (고정 135px, 필수)",
+        "anchor": "bottom",
+        "rect_px": [
+          80,
+          -255,
+          920,
+          -120
+        ],
+        "kind": "button"
+      },
+      {
+        "name": "버튼 텍스트 영역",
+        "anchor": "bottom",
+        "rect_px": [
+          356,
+          -208,
+          644,
+          -168
+        ],
+        "kind": "text_sub"
+      },
+      {
+        "name": "하단 여백 120px",
+        "anchor": "bottom",
+        "rect_px": [
+          0,
+          -120,
+          1000,
+          0
+        ],
+        "kind": "margin"
+      }
+    ],
+    "rules": [
+      "배너와의 연관성 고려하여 규격 내에서 자유롭게 디자인 가능",
+      "우측 상단 이주의 브랜드BI 필수 적용 (PSD 템플릿 참고, 배경색에 따라 화이트 버전 사용 가능)",
+      "상세 가이드 필요 시 PSD 템플릿 참고하여 제작",
+      "CTA 랜딩 버튼 필수 — '혜택 확인하기' 등 정보 탐색형 문구 권장",
+      "가로 1000px 고정, 세로 6000px 이하 권장",
+      "좌우 여백 80px 고정",
+      "상단 1500px / 하단 325px 은 고정 구조, 중간 본문만 최대 4175px 확장",
+      "용량 3mb 이하 (2mb 권장)",
+      "이미지·그래픽 배치 자유 — 고정 구조만 지키면 위치·크기는 반려 사유가 아님"
+    ],
+    "track": "이주의 브랜드",
+    "guideline_version": "Ver. 2026.02",
+    "canvas_max_note": "Ver.2026.02는 1000×6000px '이하 권장'으로 표기. 초과 시 즉시 반려보다 담당자 확인 후 판단",
+    "bi_required": true,
+    "bi_position": "우측 상단",
+    "bi_note": "우측 상단 이주의 브랜드BI 필수 적용. PSD상 사이즈·위치 고정이며 크기 변경 불가, 상하 위치만 조정 가능. 배경색에 따라 화이트 버전 사용 가능. PSD 실측 위치 694,279~920,304 (226×25px). 캔버스 최상단이 아니라 상단 1500px 블록 안쪽 y=279 지점이다",
+    "cta_note": "CTA 랜딩 버튼 필수. '혜택 확인하기' 등 정보 탐색형 문구 권장",
+    "diff_from_general": [
+      "우측 상단 이주의 브랜드BI 필수 적용 신설 (694,279~920,304 / 226×25px 고정)",
+      "랜딩 버튼 → 'CTA 랜딩 버튼'으로 명시, 정보 탐색형 문구 권장 추가",
+      "세로 6000px가 '이하'에서 '이하 권장'으로 표현 완화"
+    ],
+    "psd_note": "이주의 브랜드 전용 PSD 실측 반영 완료. 일반 상세페이지 구조에 BI 레이어만 추가된 형태",
+    "bi_rect_px": [
+      694,
+      279,
+      920,
+      304
+    ],
+    "bi_size_px": [
+      226,
+      25
+    ],
+    "fit_mode": "anchor_top_bottom",
+    "logo_note": "광고주 브랜드 로고 규정 없음. 필수인 것은 이주의 브랜드BI(우측 상단)뿐이다",
+    "image_zone_policy": "상세페이지는 이미지·그래픽 배치에 제약이 없다. 고정 구조(좌우 여백 80px / 상단 1500px 블록 / 하단 325px 버튼 블록)만 지키면 자유이며, 이미지 위치나 크기를 반려 사유로 삼지 말 것"
+  }
+}

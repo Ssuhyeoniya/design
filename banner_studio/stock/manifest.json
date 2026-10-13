@@ -1,0 +1,58 @@
+{
+ "items": [
+  {
+   "rel": "데모 오브젝트/결제카드.png",
+   "name": "결제카드.png",
+   "category": "데모 오브젝트",
+   "kb": 12
+  },
+  {
+   "rel": "데모 오브젝트/도시락.png",
+   "name": "도시락.png",
+   "category": "데모 오브젝트",
+   "kb": 14
+  },
+  {
+   "rel": "데모 오브젝트/선물상자.png",
+   "name": "선물상자.png",
+   "category": "데모 오브젝트",
+   "kb": 14
+  },
+  {
+   "rel": "데모 오브젝트/커피컵.png",
+   "name": "커피컵.png",
+   "category": "데모 오브젝트",
+   "kb": 18
+  },
+  {
+   "rel": "데모 오브젝트/쿠폰.png",
+   "name": "쿠폰.png",
+   "category": "데모 오브젝트",
+   "kb": 23
+  },
+  {
+   "rel": "기본/제휴점1.png",
+   "name": "제휴점1.png",
+   "category": "기본",
+   "kb": 289
+  },
+  {
+   "rel": "기본/제휴점2.png",
+   "name": "제휴점2.png",
+   "category": "기본",
+   "kb": 334
+  },
+  {
+   "rel": "기본/제휴점3.png",
+   "name": "제휴점3.png",
+   "category": "기본",
+   "kb": 292
+  },
+  {
+   "rel": "기본/제휴점4.png",
+   "name": "제휴점4.png",
+   "category": "기본",
+   "kb": 268
+  }
+ ]
+}

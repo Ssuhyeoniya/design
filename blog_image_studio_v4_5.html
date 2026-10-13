@@ -360,7 +360,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="topbar">
   <div class="logo">이미지 <span>스튜디오</span></div>
   <nav id="navSec" aria-label="페이지 이동">
-    <button class="nav-item on" id="navStudio">🎨 스튜디오</button>
+    <button class="nav-item on" id="navStudio">🎨 블로그 이미지 제작</button>
+    <button class="nav-item" id="navBanner">🪧 배너 스튜디오</button>
     <button class="nav-item" id="navSources">🖼 이미지 소스</button>
   </nav>
   <div class="divider"></div>
@@ -3039,6 +3040,7 @@ $('#assetClearBtn').onclick=async()=>{
 
 /* ================= 네비: 이미지 소스 라이브러리(별도 페이지) 열기 ================= */
 $('#navSources').onclick=()=>{ window.open('library.html','_blank','noopener'); };
+$('#navBanner').onclick=()=>{ window.open('banner_studio/index.html','_blank','noopener'); };
 $('#assetBack').addEventListener('click',e=>{if(e.target.id==='assetBack')$('#assetBack').classList.remove('show');});
 $('#assetUpBtn').onclick=()=>$('#assetUpInput').click();
 $('#assetUpInput').onchange=async e=>{

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>배너 스튜디오 · 이미지 스튜디오</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css?v=20261013-1">
+<style id="fontface"></style>
+</head>
+<body>
+<div id="app">
+
+  <div id="top">
+    <span class="brand">배너 스튜디오</span>
+    <nav class="topnav" aria-label="페이지 이동">
+      <a href="../blog_image_studio_v4_5.html" target="_blank" rel="noopener">🎨 블로그 이미지 제작</a>
+      <a class="on" href="index.html" aria-current="page">🪧 배너 스튜디오</a>
+      <a href="../library.html" target="_blank" rel="noopener">🖼 이미지 소스</a>
+    </nav>
+    <span class="ver" id="verTag">규격 로딩 중…</span>
+    <span class="sp"></span>
+    <button class="btn" id="btnTheme" title="다크 / 라이트 전환">🌙</button>
+    <input type="text" id="projName" placeholder="프로젝트명" style="width:170px">
+    <button class="btn" id="btnSave">저장</button>
+    <button class="btn" id="btnOpen">열기</button>
+    <button class="btn" id="btnReset">초기화</button>
+    <button class="btn pri" id="btnExport">내보내기</button>
+  </div>
+
+  <div id="main">
+
+    <!-- ============ 좌측 ============ -->
+    <div class="col scroll" id="left">
+      <div class="sect">
+        <h3>배너 타입</h3>
+        <div class="body">
+          <select id="typeSel"></select>
+          <div id="specInfo"></div>
+        </div>
+      </div>
+
+      <div class="sect">
+        <h3>스톡 이미지 보관함 <span class="tag" id="stockCnt"></span></h3>
+        <div class="body">
+          <div id="drop">이미지를 끌어다 놓거나 클릭해서 등록<br><span class="mono" id="stockDir"></span></div>
+          <div class="row">
+            <select id="catSel" class="grow"><option value="">전체 카테고리</option></select>
+            <button class="btn sm" id="btnNewCat" title="새 카테고리로 등록">＋</button>
+          </div>
+          <div id="stockGrid"></div>
+          <p class="hint" id="stockEmpty" style="display:none">
+            아직 등록된 이미지가 없습니다. 위 영역에 끌어다 놓으면 이 브라우저 보관함(IndexedDB)에 저장되고,
+            다음에 열 때도 그대로 남아 있습니다.
+          </p>
+        </div>
+      </div>
+
+      <div class="sect">
+        <h3>레이어</h3>
+        <div class="body">
+          <div class="row">
+            <button class="btn sm grow" id="btnAddText">＋ 텍스트</button>
+            <button class="btn sm grow" id="btnAddRect">＋ 도형</button>
+          </div>
+          <div id="layers"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 중앙 ============ -->
+    <div class="col" id="center">
+      <div id="tools">
+        <button class="btn sm on" id="tgGuide" title="가이드 표시 켜기 / 끄기">가이드</button>
+        <select id="guideMode" style="width:92px" class="btn sm">
+          <option value="guide">가이드선</option>
+          <option value="zones">영역 박스</option>
+          <option value="clean">시안</option>
+        </select>
+        <input type="range" id="guideOp" min="10" max="100" value="55" style="width:70px" title="가이드 투명도">
+        <span class="sp"></span>
+        <button class="btn sm" id="zoomOut">−</button>
+        <span id="zoomLbl">100%</span>
+        <button class="btn sm" id="zoomIn">＋</button>
+        <button class="btn sm" id="zoomFit">맞춤</button>
+      </div>
+      <div id="stage">
+        <div id="wrap">
+          <canvas id="art"></canvas>
+          <canvas id="ovl"></canvas>
+          <div id="hit"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 우측 ============ -->
+    <div class="col" id="right">
+      <div class="tabs">
+        <div class="tb on" data-tab="prop">속성</div>
+        <div class="tb" data-tab="check">검수</div>
+        <div class="tb" data-tab="rule">규정</div>
+      </div>
+      <div class="scroll" style="flex:1">
+
+        <div class="tabpane on" id="tab-prop">
+          <div class="sect">
+            <h3>캔버스</h3>
+            <div class="body">
+              <div class="row">
+                <label>크기</label>
+                <input type="number" id="cw" class="grow"><span class="hint">×</span>
+                <input type="number" id="ch" class="grow">
+              </div>
+              <div class="row">
+                <label>배경</label>
+                <select id="bgMode" class="grow">
+                  <option value="solid">단색</option>
+                  <option value="gradient">그라데이션</option>
+                </select>
+              </div>
+              <div class="row">
+                <label>컬러</label>
+                <input type="color" id="bg1"><input type="text" id="bg1h" class="grow mono">
+                <input type="color" id="bg2" style="display:none">
+              </div>
+              <div class="row" id="gradRow" style="display:none">
+                <label>각도</label>
+                <input type="range" id="bgAngle" min="0" max="360" value="90" class="grow">
+                <span class="hint mono" id="bgAngleV">90°</span>
+              </div>
+              <div class="swatches" id="bgSwatches"></div>
+            </div>
+          </div>
+          <div class="sect">
+            <h3>선택한 레이어</h3>
+            <div class="body" id="props"><p class="hint">캔버스에서 레이어를 선택하세요.</p></div>
+          </div>
+        </div>
+
+        <div class="tabpane" id="tab-check">
+          <div class="body" style="padding-top:12px">
+            <div id="verdict" class="ok">검수 대기<span class="cnt"></span></div>
+            <div id="checks"></div>
+          </div>
+        </div>
+
+        <div class="tabpane" id="tab-rule">
+          <div class="sect">
+            <h3>가이드 규정</h3>
+            <div class="body"><ul id="rules"></ul></div>
+          </div>
+          <div class="sect">
+            <h3>영역 좌표 (PSD 실측)</h3>
+            <div class="body"><div id="zoneList" class="mono"></div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+<div id="toast"></div>
+<input type="file" id="filePick" accept="image/*" multiple hidden>
+<script src="app.js?v=20261013-1"></script>
+</body>
+</html>
