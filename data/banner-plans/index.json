@@ -18,6 +18,24 @@
       "version": 1,
       "path": "data/banner-plans/campaigns/sample-coupon-promo/sample-coupon-main.json",
       "updatedAt": "2026-10-13T14:14:55.550Z"
+    },
+    {
+      "bannerId": "insta-story-tag-pick-banner",
+      "campaignId": "insta-story-tag-event",
+      "bannerName": "인스타 스토리 태그 이벤트 PICK 배너",
+      "templateId": "pick_banner",
+      "version": 2,
+      "path": "data/banner-plans/campaigns/insta-story-tag-event/insta-story-tag-pick-banner.json",
+      "updatedAt": "2026-10-13T15:02:55.049Z"
+    },
+    {
+      "bannerId": "insta-story-tag-pick-detail",
+      "campaignId": "insta-story-tag-event",
+      "bannerName": "인스타 스토리 태그 이벤트 PICK 상세",
+      "templateId": "pick_detail",
+      "version": 2,
+      "path": "data/banner-plans/campaigns/insta-story-tag-event/insta-story-tag-pick-detail.json",
+      "updatedAt": "2026-10-13T15:02:55.196Z"
     }
   ]
 }

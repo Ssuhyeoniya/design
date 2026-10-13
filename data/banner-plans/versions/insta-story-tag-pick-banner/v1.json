@@ -1,0 +1,68 @@
+{
+  "bannerId": "insta-story-tag-pick-banner",
+  "campaignId": "insta-story-tag-event",
+  "bannerName": "인스타 스토리 태그 이벤트 PICK 배너",
+  "templateId": "pick_banner",
+  "optionValues": {
+    "type": "pick_banner"
+  },
+  "purpose": "제휴점 스티커 촬영 인스타 스토리 태그 이벤트 인지, PICK 상세페이지 진입 유도",
+  "target": "식권대장 앱 홈탭 방문자 전체 (참여 조건: 식권대장 제휴점 스티커 촬영자 누구나)",
+  "content": {
+    "subCopy": "인스타 스토리 태그 이벤트",
+    "mainCopy": "스티커 찍어 올리면\n메가커피 쿠폰 1장"
+  },
+  "copyAlternatives": {
+    "A_benefit": {
+      "subCopy": "제휴점 스티커 인증 이벤트",
+      "mainCopy": "메가커피 아이스\n아메리카노 쿠폰"
+    },
+    "B_needs": {
+      "subCopy": "식후 커피 고민될 때",
+      "mainCopy": "제휴점 스티커 찍고\n커피 쿠폰 받아가요"
+    },
+    "C_action": {
+      "subCopy": "인스타 스토리 태그 이벤트",
+      "mainCopy": "스티커 찍어 올리면\n메가커피 쿠폰 1장"
+    },
+    "recommended": "C_action"
+  },
+  "assets": {},
+  "designConcept": "단색 배경(흰색·연그레이·형광·그라데이션 불가, 인스타그램 브랜드 그라데이션 배경 사용 불가) 좌측 텍스트, 우측 오브젝트 영역(최대 620~1000px)에 스마트폰 스토리 화면 + 아이스 아메리카노 컵 + 스티커 조합 누끼 오브젝트. 배경 컬러 확인 필요",
+  "period": {
+    "start": null,
+    "end": null,
+    "note": "확인 필요"
+  },
+  "guide": {
+    "skill": "skdj-ad-review",
+    "file": "references/banner_specs.json#pick_banner",
+    "track": "일반 인앱광고",
+    "version": "Ver. 2026.01"
+  },
+  "landing": "PICK 상세페이지 (insta-story-tag-pick-detail)",
+  "openItems": [
+    "이벤트 기간",
+    "쿠폰 지급 시점·방식",
+    "선착순/수량 한도",
+    "1인 중복 참여 여부",
+    "식권대장 인스타 계정 ID",
+    "쿠폰 유효기간",
+    "비공개 계정 참여 가능 여부",
+    "배경 컬러",
+    "메가커피 로고·제품 이미지 사용 승인"
+  ],
+  "version": 1,
+  "updatedAt": "2026-10-13T14:54:03.911Z",
+  "history": [
+    {
+      "version": 1,
+      "at": "2026-10-13T14:54:03.911Z",
+      "by": "agent-04",
+      "summary": "인스타 스토리 태그 이벤트 PICK 배너 기획안 신규 (추천 C안)",
+      "changed": [
+        "(신규)"
+      ]
+    }
+  ]
+}
