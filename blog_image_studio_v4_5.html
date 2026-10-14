@@ -99,6 +99,27 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   #slidebar{width:178px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;}
   #slidebar .head{padding:12px 14px 8px;font-size:11.5px;font-weight:700;color:var(--text-sub);display:flex;justify-content:space-between;}
   #slideList{flex:1;overflow-y:auto;padding:4px 12px 12px;display:flex;flex-direction:column;gap:10px;}
+  /* 스톡 이미지 보관함 (배너 스튜디오와 공통) */
+  #stockbar{width:13.5rem;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;flex-shrink:0;}
+  #stockbar .head{padding:.75rem .875rem .5rem;font-size:.72rem;font-weight:700;color:var(--text-sub);display:flex;justify-content:space-between;align-items:center;gap:6px;}
+  #stockbar .head button{border:none;background:none;cursor:pointer;color:var(--text-faint);font-size:13px;padding:0 2px;}
+  #stockbar .sb-body{flex:1;min-height:0;overflow-y:auto;padding:0 .75rem .75rem;display:flex;flex-direction:column;gap:6px;}
+  #stockbar.fold{width:2rem;}
+  #stockbar.fold .sb-body,#stockbar.fold .head .t{display:none;}
+  #stockbar.fold .head{flex-direction:column;padding:.75rem 0;}
+  #stockDrop{border:1.5px dashed var(--border-strong);border-radius:8px;padding:8px 6px;text-align:center;font-size:.69rem;color:var(--text-sub);cursor:pointer;line-height:1.5;}
+  #stockDrop:hover,#stockDrop.over{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);}
+  #stockCat{width:100%;}
+  #stockGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .stk{position:relative;aspect-ratio:1/1;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;cursor:pointer;
+    background:repeating-conic-gradient(#f1f2f5 0 25%,#fff 0 50%) 0 0/12px 12px;}
+  .stk:hover{border-color:var(--accent);}
+  .stk img{width:100%;height:100%;object-fit:contain;display:block;}
+  .stk .del{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;border:1px solid var(--border-strong);background:#fff;color:var(--text-sub);font-size:11px;line-height:15px;text-align:center;opacity:0;}
+  .stk:hover .del{opacity:1;}
+  .stk .del:hover{background:var(--danger);border-color:var(--danger);color:#fff;}
+  #stockEmpty{font-size:.69rem;color:var(--text-faint);line-height:1.6;display:none;}
+  #stockSrc{font-size:.62rem;color:var(--text-faint);}
   .crop-ov{position:absolute;z-index:40;pointer-events:none;}
   .crop-dim{position:absolute;background:rgba(0,0,0,.45);pointer-events:none;}
   .crop-frame{position:absolute;border:1px solid rgba(255,255,255,.9);box-shadow:0 0 0 1px rgba(0,0,0,.35);pointer-events:none;}
@@ -333,6 +354,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     #main{flex-direction:column;}
     #slidebar{width:100%;flex-direction:row;align-items:center;border-right:none;border-bottom:1px solid var(--border);height:8.25rem;flex-shrink:0;}
     #slidebar .head{display:none;}
+    #stockbar{display:none;}
     #slideList{flex-direction:row;overflow-x:auto;overflow-y:hidden;padding:.6rem;gap:.6rem;flex:1;align-items:center;}
     .slide-thumb{flex:0 0 9.5rem;}
     #addSlideBtn{margin:0 .6rem;flex-shrink:0;}
@@ -401,12 +423,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <button class="btn" id="addSlideBtn">＋ 페이지 추가</button>
   </div>
 
+  <div id="stockbar">
+    <div class="head"><span class="t">스톡 이미지 보관함 <span id="stockCnt"></span></span><button id="stockFold" title="접기/펼치기">◀</button></div>
+    <div class="sb-body">
+      <div id="stockDrop">이미지를 끌어다 놓거나 클릭해서 등록<br><span id="stockSrc"></span></div>
+      <input type="file" id="stockUpInput" accept="image/*" multiple style="display:none">
+      <select id="stockCat"><option value="">전체 카테고리</option></select>
+      <div id="stockGrid"></div>
+      <p id="stockEmpty">아직 등록된 이미지가 없어. 위 영역에 끌어다 놓으면 배너 스튜디오와 같은 보관함에 저장돼.</p>
+    </div>
+  </div>
+
   <div id="stage">
     <div id="stageInfo">
       <span>타입 <b id="infoType">-</b></span>
       <span>규격 <b id="infoSize">-</b></span>
       <span>배경 <b id="infoBg">-</b></span>
-      <span style="color:var(--text-faint)">더블클릭 수정 · 드래그 이동 · 방향키 1px(Shift 10px) · Del 삭제</span>
+      <span style="color:var(--text-faint)">텍스트·도형 더블클릭 = 글자 수정 · 드래그 이동 · 방향키 1px(Shift 10px) · Del 삭제</span>
     </div>
     <div id="canvasScroll">
       <div id="canvasOuter">
@@ -1340,7 +1373,7 @@ function renderProps(){
   <div class="sec">
     <h3>레이어</h3>
     <div class="layer-list">
-      ${LS(s).map(x=>`
+      ${LS(s).slice().reverse().map(x=>`
         <div class="layer-item${x.id===selLayer?' on':''}" data-lid="${x.id}">
           <span class="ico">${lico(x)}</span><span class="lname">${esc(lname(x))}</span>
           <button class="ldel" data-ldel="${x.id}">✕</button>
@@ -1357,7 +1390,7 @@ function renderProps(){
       <button class="btn small" id="lzDn"  title="한 칸 뒤로 (Ctrl+[)">▼ 뒤로</button>
       <button class="btn small" id="lzBot" title="맨 뒤로 (Ctrl+Shift+[)">⤓ 맨 뒤</button>
     </div>
-    <div class="hint" style="margin-top:6px">목록 <b>아래쪽일수록 화면 앞</b>에 그려져. 이미지·도형·텍스트 모두 되고, Shift+클릭으로 여러 개 골라도 상대 순서를 지킨 채 같이 움직여.</div>
+    <div class="hint" style="margin-top:6px">목록 <b>위쪽일수록 화면 앞</b>에 그려져 (PPT·피그마와 같음). 이미지·도형·텍스트 모두 되고, Shift+클릭으로 여러 개 골라도 상대 순서를 지킨 채 같이 움직여.</div>
   </div>
   <div class="sec">
     <h3>정렬 ${selCount()>=2?'(가장 큰 요소 기준)':'(캔버스 기준)'}</h3>
@@ -2116,14 +2149,47 @@ window.addEventListener('mouseup',()=>{
     renderSlideList();renderProps();
   }
 });
-canvas.addEventListener('dblclick',e=>{
-  const im=e.target.closest('.layer');
-  if(im&&!im.classList.contains('t')){
-    const lay=LS(slides[cur]).find(x=>x.id==im.dataset.id);
-    if(lay&&lay.type==='i'){e.preventDefault();enterCropMode(lay);return;}
+/* 더블클릭 = 그 자리에서 편집
+   mousedown 때 renderAll 로 DOM 이 새로 그려져 e.target 이 분리된 노드일 수 있으므로
+   좌표로 현재 레이어를 다시 찾는다. 이미지 → 자르기, 텍스트 → 글자 수정,
+   도형(박스) → 도형 위 텍스트 수정 (없으면 도형 중앙에 새 텍스트를 만들어 바로 편집). */
+function layerElAt(e){
+  const hit=document.elementsFromPoint(e.clientX,e.clientY)
+    .find(n=>n.classList&&n.classList.contains('layer')&&canvas.contains(n));
+  return hit||(e.target.closest&&e.target.closest('.layer'))||null;
+}
+function textOnShape(s,box){
+  const arr=LS(s);
+  const cand=arr.filter(x=>{
+    if(x.type!=='t'||arr.indexOf(x)<arr.indexOf(box))return false;
+    const b=visBox(x);
+    return b.cx>=box.x&&b.cx<=box.x+box.w&&b.cy>=box.y&&b.cy<=box.y+box.h;
+  });
+  return cand[cand.length-1]||null;   // 가장 앞에 그려진 텍스트
+}
+function layerDblEdit(e){
+  const s0=slides[cur];
+  const im=layerElAt(e);
+  if(!im)return;
+  let lay=LS(s0).find(x=>x.id==im.dataset.id);
+  if(!lay)return;
+  if(lay.type==='i'){e.preventDefault();enterCropMode(lay);return;}
+  if(lay.type==='r'&&!lay.guide&&lay.shape!=='arrow'){
+    let t=textOnShape(s0,lay);
+    if(!t){
+      const PA=curP(s0);
+      t=tLayer({text:'텍스트',x:lay.x,y:lay.y,w:lay.w,size:Math.max(12,Math.round(Math.min(lay.h*0.4,40*PA.W/966))),
+        align:'center',color:(lay.fill&&/^#(f|e|d)/i.test(lay.fill))?'#1f2328':'#ffffff'});
+      centerTextIn(t,{x:lay.x,y:lay.y,w:lay.w,h:lay.h});
+      const arr=LS(s0); arr.splice(arr.indexOf(lay)+1,0,t);
+    }
+    selLayer=t.id;selSet=[t.id];renderAll();
+    lay=t;
   }
-  const el=e.target.closest('.layer.t');if(!el)return;
-  const l=LS(slides[cur]).find(x=>x.id==el.dataset.id);
+  if(lay.type!=='t')return;
+  e.preventDefault();
+  const el=canvas.querySelector(`.layer.t[data-id="${lay.id}"]`);if(!el)return;
+  const l=lay;
   if(l.rich)el.innerHTML=sanitizeRich(l.rich);
   else el.textContent=l.text; // 마커 포함 원문으로 편집
   el.contentEditable='true';el.classList.add('editing');el.focus();
@@ -2143,7 +2209,20 @@ canvas.addEventListener('dblclick',e=>{
     },0);
   },{once:false});
   el.addEventListener('keydown',ev=>{if(ev.key==='Escape')el.blur();});
-});
+}
+// 첫 mousedown 에서 레이어 DOM 을 다시 그리기 때문에 브라우저 기본 click/dblclick 이 발생하지 않는다.
+// → 같은 자리 두 번째 mousedown(450ms 이내)을 더블클릭으로 직접 판정한다.
+let _lastDown={t:0,x:0,y:0};
+canvas.addEventListener('mousedown',e=>{
+  if(e.button!==0||e.shiftKey||(e.target&&e.target.isContentEditable))return;
+  const now=Date.now();
+  const near=Math.abs(e.clientX-_lastDown.x)<6&&Math.abs(e.clientY-_lastDown.y)<6;
+  if(now-_lastDown.t<450&&near){
+    _lastDown={t:0,x:0,y:0};
+    const ev={clientX:e.clientX,clientY:e.clientY,target:e.target,preventDefault(){}};
+    setTimeout(()=>{drag=null;layerDblEdit(ev);},0);   // 기본 mousedown 처리(선택·렌더) 뒤에 실행
+  }else _lastDown={t:now,x:e.clientX,y:e.clientY};
+},true);
 // 부분 서식 바: 드래그 선택 후 굵게/크기/색상 개별 적용
 function showRichBar(on){$('#richBar').style.display=on?'flex':'none';}
 (function(){
@@ -3037,6 +3116,145 @@ $('#assetClearBtn').onclick=async()=>{
   try{await assetClear();await renderAssets();}
   catch(err){alert('전체 삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
 };
+
+/* ================= 스톡 이미지 보관함 (배너 스튜디오와 공통) =================
+   배너 스튜디오(banner_studio/app.js)와 같은 소스를 같은 방식으로 읽는다.
+     ① 캠페인 에셋 라이브러리  assets/campaign-library/metadata/assets.json (읽기 전용)
+     ② 기본 스톡              banner_studio/stock/manifest.json (읽기 전용)
+     ③ 내 이미지              IndexedDB 'banner_studio' · store 'stock' — 같은 출처라 두 화면이 함께 쓴다
+   ⭐ 보관함(thumb_studio_assets)은 블로그 전용으로 그대로 두고, 여기서는 카테고리 '⭐ 블로그 보관함'으로 함께 보여준다. */
+function bsDB(){
+  return new Promise((res,rej)=>{
+    if(!window.indexedDB)return rej(new Error('이 브라우저에서는 IndexedDB 를 쓸 수 없어'));
+    const q=indexedDB.open('banner_studio',1);
+    q.onupgradeneeded=()=>{
+      const db=q.result;
+      if(!db.objectStoreNames.contains('stock'))db.createObjectStore('stock',{keyPath:'id',autoIncrement:true});
+      if(!db.objectStoreNames.contains('projects'))db.createObjectStore('projects',{keyPath:'name'});
+    };
+    q.onsuccess=()=>res(q.result);
+    q.onerror=()=>rej(q.error);
+    q.onblocked=()=>rej(new Error('다른 탭에서 배너 스튜디오 DB 를 사용 중이야. 다른 탭을 닫고 새로고침해줘.'));
+  });
+}
+async function bsDo(mode,fn){
+  const db=await bsDB();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('stock',mode);
+    const r=fn(tx.objectStore('stock'));
+    tx.oncomplete=()=>res(r&&'result' in r?r.result:undefined);
+    tx.onerror=()=>rej(tx.error);
+    tx.onabort=()=>rej(tx.error||new Error('저장 중단 (용량 부족일 수 있어)'));
+  });
+}
+const encPath=p=>p.split('/').map(encodeURIComponent).join('/');
+let STOCK=[], stockStatic=null;
+async function loadStockStatic(){
+  if(stockStatic)return stockStatic;
+  const getJ=u=>fetch(u,{cache:'no-cache'}).then(r=>r.ok?r.json():null).catch(()=>null);
+  const [lib,man]=await Promise.all([getJ('assets/campaign-library/metadata/assets.json'),getJ('banner_studio/stock/manifest.json')]);
+  const libItems=((lib&&lib.assets)||[]).filter(a=>a.reusable!==false).map(a=>({
+    name:a.fileName,category:'라이브러리 · '+a.category,url:encPath(a.path),kb:Math.round((a.bytes||0)/1024),
+    builtin:true,assetId:a.assetId,description:a.description}));
+  const inLib=new Set(libItems.map(i=>i.url));
+  const base=((man&&man.items)||[]).map(i=>({name:i.name,category:i.category,kb:i.kb,builtin:true,
+    url:'banner_studio/stock/'+encPath(i.rel)})).filter(i=>!inLib.has(i.url));
+  stockStatic={lib:libItems,base};
+  return stockStatic;
+}
+async function loadStock(){
+  const st=await loadStockStatic();
+  let mine=[],stars=[];
+  try{mine=(await bsDo('readonly',os=>os.getAll())).map(i=>({id:i.id,name:i.name,category:i.category||'기본',url:i.src,kb:i.kb,ts:i.ts||0})).sort((a,b)=>b.ts-a.ts);}catch(e){}
+  try{stars=(await assetList()).map(a=>({name:a.name,category:'⭐ 블로그 보관함',url:a.src,builtin:true,star:true}));}catch(e){}
+  STOCK=[...st.lib,...mine,...st.base,...stars];
+  $('#stockCnt').textContent=STOCK.length?'· '+STOCK.length+'장':'';
+  $('#stockSrc').textContent=[['라이브러리',st.lib.length],['기본',st.base.length],['내 이미지',mine.length]].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(' · ')||'배너 스튜디오와 같은 보관함';
+  const sel=$('#stockCat'),curC=sel.value;
+  const cats=[...new Set(STOCK.map(i=>i.category))].sort();
+  sel.innerHTML='<option value="">전체 카테고리</option>'+cats.map(c=>`<option${c===curC?' selected':''}>${esc(c)}</option>`).join('');
+  paintStock();
+}
+function paintStock(){
+  const cat=$('#stockCat').value;
+  const items=STOCK.filter(i=>!cat||i.category===cat);
+  const g=$('#stockGrid');g.innerHTML='';
+  $('#stockEmpty').style.display=STOCK.length?'none':'block';
+  items.forEach(it=>{
+    const d=document.createElement('div');d.className='stk';
+    d.title=`${it.category} / ${it.name}${it.kb?' · '+it.kb+'KB':''}${it.assetId?' · '+it.assetId+(it.description?'\n'+it.description:''):''}\n클릭하면 캔버스에 추가 · 캔버스로 끌어다 놓아도 돼`;
+    d.innerHTML=`<img src="${esc(it.url)}" loading="lazy" draggable="true">`+(it.builtin?'':'<span class="del" title="보관함에서 삭제">×</span>');
+    const img=d.querySelector('img');
+    img.onclick=()=>insertStock(it);
+    img.addEventListener('dragstart',ev=>{ev.dataTransfer.setData('text/x-stock',String(STOCK.indexOf(it)));ev.dataTransfer.effectAllowed='copy';});
+    if(!it.builtin)d.querySelector('.del').onclick=async ev=>{
+      ev.stopPropagation();
+      const yes=await askConfirm(`"${it.name}"\n\n공통 보관함에서 영구 삭제할까요?\n배너 스튜디오에서도 함께 사라져.`,'영구 삭제');
+      if(!yes)return;
+      try{await bsDo('readwrite',os=>os.delete(it.id));}catch(err){alert('삭제 실패: '+err.message);}
+      loadStock();
+    };
+    g.appendChild(d);
+  });
+}
+// 저장·내보내기가 배포 경로에 묶이지 않도록 삽입 시 dataURL 로 바꿔 넣는다 (실패하면 경로 그대로)
+async function stockSrc(url){
+  if(/^data:/.test(url))return url;
+  try{const b=await (await fetch(url)).blob();return await fileToDataURL(b);}catch(e){return url;}
+}
+async function insertStock(it,at){
+  const s=slides[cur],P=curP(s);
+  const src=await stockSrc(it.url);
+  const dim=await imgDims(src);
+  if(!dim.w){alert('이미지를 불러오지 못했어.');return;}
+  const w=Math.round(Math.min(P.W*0.4,dim.w));
+  const h=w*dim.h/dim.w;
+  const x=at?Math.round(at.x-w/2):Math.round((P.W-w)/2);
+  const y=at?Math.round(at.y-h/2):Math.round(P.H*0.3);
+  const nl=iLayer({src,x,y,w,ar:dim.w/dim.h});
+  if(it.assetId)nl.assetId=it.assetId;
+  LS(s).push(nl);selLayer=nl.id;selSet=[nl.id];
+  renderAll();
+}
+async function uploadStock(files){
+  let n=0;
+  const cat=$('#stockCat').value;
+  for(const f of files){
+    if(!/^image\//.test(f.type))continue;
+    if(f.size>30*1024*1024){alert(f.name+' — 30MB 를 넘어 건너뛸게.');continue;}
+    try{
+      const src=await fileToDataURL(f);
+      await bsDo('readwrite',os=>os.put({category:(cat&&!/^(라이브러리|⭐)/.test(cat))?cat:'기본',name:f.name,src,kb:Math.round(f.size/1024),ts:Date.now()}));
+      n++;
+    }catch(err){alert(f.name+' 등록 실패 — '+err.message);}
+  }
+  if(n)loadStock();
+}
+$('#stockCat').onchange=paintStock;
+$('#stockDrop').onclick=()=>$('#stockUpInput').click();
+$('#stockUpInput').onchange=e=>{uploadStock([...e.target.files]);e.target.value='';};
+['dragover','dragenter'].forEach(t=>$('#stockDrop').addEventListener(t,e=>{e.preventDefault();$('#stockDrop').classList.add('over');}));
+['dragleave','drop'].forEach(t=>$('#stockDrop').addEventListener(t,()=>$('#stockDrop').classList.remove('over')));
+$('#stockDrop').addEventListener('drop',e=>{e.preventDefault();uploadStock([...e.dataTransfer.files]);});
+// 보관함 썸네일을 캔버스로 끌어다 놓으면 놓은 위치에 배치
+canvas.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('text/x-stock'))e.preventDefault();});
+canvas.addEventListener('drop',e=>{
+  const k=e.dataTransfer.getData('text/x-stock');if(k==='')return;
+  e.preventDefault();e.stopPropagation();
+  const it=STOCK[+k];if(!it)return;
+  const z=canvas._z||1,rc=canvas.getBoundingClientRect();
+  insertStock(it,{x:(e.clientX-rc.left)/z-curOffX(slides[cur]),y:(e.clientY-rc.top)/z});
+});
+$('#stockFold').onclick=()=>{
+  const f=$('#stockbar').classList.toggle('fold');
+  $('#stockFold').textContent=f?'▶':'◀';
+  try{localStorage.setItem('blogStockFold',f?'1':'');}catch(e){}
+  fitZoom();
+};
+try{if(localStorage.getItem('blogStockFold')){$('#stockbar').classList.add('fold');$('#stockFold').textContent='▶';}}catch(e){}
+// 다른 탭(배너 스튜디오)에서 등록한 이미지도 돌아오면 반영
+window.addEventListener('focus',()=>{loadStock();});
+loadStock();
 
 /* ================= 네비: 이미지 소스 라이브러리(별도 페이지) 열기 ================= */
 $('#navSources').onclick=()=>{ window.open('library.html','_blank','noopener'); };

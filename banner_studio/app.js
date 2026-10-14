@@ -1015,7 +1015,7 @@ async function preloadImgs() {
 
 // ══════════════════════════════════ 스톡 보관함 ══════════════════════════════════
 // ══════════════════════════════════ 저장소 (IndexedDB) ══════════════════════════════════
-// 서버 대신 브라우저 IndexedDB 에 저장한다. 블로그 이미지 제작 보관함(thumb_studio_assets)과는 별도 DB.
+// 서버 대신 브라우저 IndexedDB 에 저장한다. 블로그 이미지 제작의 좌측 '스톡 이미지 보관함'도 이 'stock' 스토어를 함께 쓴다.
 //   stock    : { id, category, name, src(dataURL), kb, ts }
 //   projects : { name, data, ts }
 function bsDB() {
