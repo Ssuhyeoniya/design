@@ -1427,9 +1427,15 @@ async function boot() {
   $('#btnTheme').onclick = () =>
     applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
   installFonts();
-  SPECS = await fetch('data/banner_specs.json').then(r => r.json())
+  // 규격은 자주 바뀐다 — 브라우저·CDN 캐시를 거치지 않고 매번 새로 받는다
+  SPECS = await fetch('data/banner_specs.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json())
     .catch(() => ({ error: 'data/banner_specs.json 을 불러오지 못했습니다' }));
   if (SPECS.error) { document.body.innerHTML = '<p style="padding:40px">' + esc(SPECS.error) + '</p>'; return; }
+  // 규격 파일이 예전 것이어도 자유 캔버스는 항상 쓸 수 있게 한다
+  if (!SPECS.free) SPECS.free = {
+    label: '자유 캔버스', track: '자유 제작', placement: '규격 없음 — 용도 자유', free: true,
+    canvas: null, formats: ['PNG', 'JPG'], max_kb: null, has_psd_template: false, zones: [], rules: [],
+  };
 
   const sel2 = $('#typeSel');
   let lastTrack = null;
