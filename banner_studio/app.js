@@ -1164,6 +1164,7 @@ async function addStockImage(it) {
   imgCache.set(it.url, img);
   const z = zonesOf(SPECS[S.type], S.w, S.h).find(x => x.kind === 'image');
   const box = z ? { x: z.r[0], y: z.r[1], w: z.r[2] - z.r[0], h: z.r[3] - z.r[1] }
+    : isFree(SPECS[S.type]) ? { x: S.w * .15, y: S.h * .15, w: S.w * .7, h: S.h * .7 }
     : { x: S.w * .15, y: S.h * .5, w: S.w * .7, h: S.h * .4 };
   const ar = img.width / img.height;
   let w = box.w, h = w / ar; if (h > box.h) { h = box.h; w = h * ar; }
@@ -1195,6 +1196,77 @@ async function uploadFiles(files, cat) {
   }
   if (n) { toast(`${n}장을 보관함에 저장했습니다`); loadStock(); }
 }
+
+// ══════════════════════════════════ 외부 붙여넣기 ══════════════════════════════════
+// 파일 탐색기·Finder 에서 복사한 이미지 파일, 캡처, 웹에서 '이미지 복사' 한 것을 Ctrl+V 로 바로 캔버스에 넣는다
+const IMG_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i;
+function clipImageFiles(dt) {
+  const out = [], seen = new Set();
+  const take = f => {
+    if (!f || !(/^image\//.test(f.type) || IMG_EXT.test(f.name || ''))) return;
+    const k = f.name + '|' + f.size + '|' + f.type;
+    if (!seen.has(k)) { seen.add(k); out.push(f); }
+  };
+  for (const f of (dt.files || [])) take(f);                       // 파일 탐색기에서 복사한 파일 (여러 장)
+  for (const it of (dt.items || [])) if (it.kind === 'file') take(it.getAsFile());  // 캡처·웹 이미지
+  return out;
+}
+// HTML·텍스트로만 넘어온 이미지 주소 (웹 파일함의 '복사' 등)
+function clipImageUrls(dt) {
+  const html = dt.getData('text/html') || '', plain = (dt.getData('text/plain') || '').trim();
+  const urls = [...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
+  if (!urls.length && /^(https?:\/\/\S+\.(png|jpe?g|gif|webp|svg|avif)(\?\S*)?|data:image\/[^\s]+)$/i.test(plain)) urls.push(plain);
+  return [...new Set(urls)].filter(u => /^(https?:|data:image\/)/i.test(u));
+}
+async function urlToFile(u, i) {
+  const r = await fetch(u); if (!r.ok) throw new Error('HTTP ' + r.status);
+  const b = await r.blob(); if (!/^image\//.test(b.type)) throw new Error('이미지가 아닙니다');
+  return new File([b], (u.split(/[?#]/)[0].split('/').pop() || `붙여넣은 이미지 ${i + 1}`).slice(0, 80), { type: b.type });
+}
+async function pasteImages(files) {
+  let n = 0;
+  for (const [i, f] of files.entries()) {
+    if (f.size > 30 * 1024 * 1024) { toast(`${f.name} — 30MB 를 넘어 건너뜁니다`, true); continue; }
+    const name = (f.name && f.name !== 'image.png') ? f.name.replace(/\.[^.]+$/, '') : `붙여넣은 이미지 ${i + 1}`;
+    await addStockImage({ url: await fileToDataURL(f), name });
+    const l = S.layers.find(x => x.id === sel);
+    if (l && i) { l.x += 30 * i; l.y += 30 * i; }                    // 여러 장이면 겹치지 않게 살짝 비켜 놓는다
+    n++;
+  }
+  if (n) { push(); render(); paintProps(); toast(`이미지 ${n}장을 붙여넣었습니다`); }
+  return n;
+}
+document.addEventListener('paste', async e => {
+  const tg = e.target;
+  // 글자 입력칸에서는 원래대로 글자가 붙여넣어지게 둔다 (드롭다운·버튼에 포커스가 있어도 캔버스로 붙는다)
+  const typing = tg && tg.matches && (tg.isContentEditable || tg.matches('textarea,input:not([type=range]):not([type=color]):not([type=checkbox]):not([type=file]):not([type=button])'));
+  if (!S || editing || typing) return;
+  const dt = e.clipboardData; if (!dt) return;
+  const files = clipImageFiles(dt);
+  if (files.length) { e.preventDefault(); return pasteImages(files); }
+  const urls = clipImageUrls(dt);
+  if (urls.length) {
+    e.preventDefault();
+    const got = [];
+    for (const [i, u] of urls.entries()) { try { got.push(await urlToFile(u, i)); } catch { } }
+    if (got.length) return pasteImages(got);
+    return toast('이미지 주소는 복사됐지만 외부 사이트가 접근을 막아 가져오지 못했습니다 — 이미지를 저장한 뒤 파일을 복사해 붙여넣어 주세요', true);
+  }
+  // 글자만 있으면 텍스트 레이어로 넣는다
+  const txt = (dt.getData('text/plain') || '').trim();
+  if (txt) {
+    e.preventDefault();
+    const size = Math.max(12, Math.round(Math.min(S.w, S.h) / 16));
+    const l = {
+      id: uid(), kind: 'text', role: 'free', name: txt.split('\n')[0].slice(0, 20) || '텍스트',
+      x: Math.round(S.w * .1), y: Math.round(S.h * .1), w: Math.round(S.w * .8),
+      text: txt, size, lh: 1.3, ls: -0.02, color: '#ffffff', align: 'left', font: 'Pretendard Bold',
+    };
+    S.layers.push(l); sel = l.id;
+    push(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
+    toast('텍스트를 붙여넣었습니다');
+  }
+});
 
 // ══════════════════════════════════ 저장 / 열기 / 내보내기 ══════════════════════════════════
 async function saveProject() {
