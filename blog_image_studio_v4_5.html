@@ -504,6 +504,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="busy"><div class="spin"></div><p id="busyMsg">처리 중…</p></div>
 <div id="exportZone"></div>
 
+<script src="shared/ppt-remote.js?v=20261015-1"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -3635,6 +3636,35 @@ renderAll();
       renderAll(); recordHistory();
     }catch(e){ alert('작업 파일을 열지 못했습니다.\n'+(e&&e.message||e)); }
   };
+})();
+
+/* ===== PPT 리모콘 (shared/ppt-remote.js) — PPT Helper 의 정렬·간격·붙여정렬·그리드 복사·도형 클립보드 ===== */
+(function(){
+  if(!window.PPTRemote)return;
+  const dl=document.querySelector('#pasteBtn')||document.querySelector('#dlAll');
+  PPTRemote.mount({
+    app:'blog', label:'블로그 이미지 제작',
+    docName:()=>($('#docTitle')?$('#docTitle').value:'')+(slides.length?` ${cur+1}/${slides.length}p`:''),
+    selected(){
+      const s=slides[cur]; if(!s)return [];
+      const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer);
+      return LS(s).filter(x=>ids.has(x.id));
+    },
+    box:l=>visBox(l),
+    move(l,dx,dy){ l.x=Math.round((l.x||0)+dx); l.y=Math.round((l.y||0)+dy); },
+    insert(layers,select){
+      const s=slides[cur]; if(!s)return;
+      const gidMap={}, ids=[];
+      layers.forEach(nl=>{
+        nl.id=nid(); delete nl.fitBox;
+        if(nl.gid){ if(!gidMap[nl.gid])gidMap[nl.gid]=nid(); nl.gid=gidMap[nl.gid]; }
+        LS(s).push(nl); ids.push(nl.id);
+      });
+      if(select){ selSet=ids; selLayer=ids[ids.length-1]; }
+    },
+    commit(){ renderAll(); recordHistory(); },
+    toolbar:dl?dl.parentNode:null, before:dl, btnClass:'btn',
+  });
 })();
 </script>
 </body>

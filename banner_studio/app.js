@@ -77,6 +77,24 @@ let SPECS = null;
 let S = null;              // 현재 작업 상태
 let zoom = 1, autoFit = true;
 let sel = null;            // 선택된 레이어 id
+// 다중 선택 (Shift+클릭) — sel 이 '주 선택', multi 는 함께 고른 나머지.
+// sel 이 다른 경로로 바뀌면(레이어 추가·타입 전환 등) multi 는 자동으로 풀린다.
+const multi = new Set();
+let multiFor = null;
+function selIds() {
+  if (multiFor !== sel) { multi.clear(); multiFor = sel; }
+  const ids = sel ? [sel, ...multi] : [];
+  return ids.filter((id, i) => ids.indexOf(id) === i && S && S.layers.some(l => l.id === id));
+}
+const selLayers = () => { const ids = selIds(); return S.layers.filter(l => ids.includes(l.id)); };
+function toggleSel(id) {                     // Shift+클릭
+  const ids = selIds();
+  if (ids.includes(id)) {
+    if (id === sel) { const rest = [...multi]; sel = rest.shift() || null; multi.clear(); rest.forEach(x => multi.add(x)); }
+    else multi.delete(id);
+  } else { if (sel) multi.add(sel); multi.delete(id); sel = id; }
+  multiFor = sel;
+}
 const imgCache = new Map(); // src -> HTMLImageElement
 const guideCache = new Map();
 let history = [], hIdx = -1;
@@ -411,6 +429,13 @@ function renderOverlay() {
     octx.restore();
   }
 
+  // 함께 선택된 레이어 (Shift+클릭) — 점선 상자
+  for (const m of selLayers()) {
+    if (m.id === sel) continue;
+    const b = bboxOf(m), u = Math.max(1, S.w / 400);
+    octx.save(); octx.strokeStyle = '#3d7eff'; octx.lineWidth = u * 0.9; octx.setLineDash([u * 4, u * 3]);
+    octx.strokeRect(b.x, b.y, b.w, b.h); octx.restore();
+  }
   // 선택 핸들
   const l = S.layers.find(x => x.id === sel);
   if (l) {
@@ -709,11 +734,11 @@ function paintSpecInfo() {
 function paintLayers() {
   const box = $('#layers'); box.innerHTML = '';
   [...S.layers].reverse().forEach(l => {
-    const d = el('div', 'layer' + (l.id === sel ? ' sel' : '') + (l.lockSize ? ' locked' : ''));
+    const d = el('div', 'layer' + (l.id === sel ? ' sel' : selIds().includes(l.id) ? ' sel multi' : '') + (l.lockSize ? ' locked' : ''));
     const ic = l.kind === 'text' ? 'T' : l.kind === 'rect' ? '▭' : '▣';
     d.innerHTML = `<span class="ic">${ic}</span><span class="nm">${esc(l.name || l.kind)}</span>` +
       `<span class="lk">${l.hidden ? '숨김' : ''}${l.lockSize ? ' 고정' : ''}</span>`;
-    d.onclick = () => { sel = l.id; paintLayers(); paintProps(); renderOverlay(); };
+    d.onclick = e => { if (e.shiftKey) toggleSel(l.id); else sel = l.id; paintLayers(); paintProps(); renderOverlay(); };
     box.appendChild(d);
   });
 }
@@ -864,9 +889,14 @@ onHit('pointerdown', e => {
   } else {
     const l = pickAt(p);
     const wasSel = !!l && sel === l.id;                 // 이미 선택돼 있었나
-    sel = l ? l.id : null;
+    if (l && e.shiftKey) toggleSel(l.id);               // Shift+클릭 = 다중 선택 추가/해제
+    else if (!(l && selIds().length > 1 && selIds().includes(l.id))) sel = l ? l.id : null;  // 묶음 안을 누르면 묶음 유지
     paintLayers(); paintProps();
-    if (l) drag = { mode: 'move', l, s: { ...l }, p0: p, reselect: wasSel };
+    const group = selLayers();
+    if (l && group.includes(l)) drag = {
+      mode: 'move', l, s: { ...l }, p0: p, reselect: wasSel && group.length === 1 && !e.shiftKey,
+      g: group.map(x => ({ l: x, x: x.x, y: x.y })),
+    };
   }
   renderOverlay();
   try { hit.setPointerCapture(e.pointerId); } catch { /* 포인터가 이미 사라진 경우 무시 */ }
@@ -876,8 +906,10 @@ onHit('pointermove', e => {
   if (!drag) return;
   const p = toCanvas(e), dx = p.x - drag.p0.x, dy = p.y - drag.p0.y, l = drag.l, s = drag.s;
   if (drag.mode === 'move') {
-    if (!l.lockX) l.x = Math.round(s.x + dx);
-    l.y = Math.round(s.y + dy);
+    for (const g of drag.g) {
+      if (!g.l.lockX) g.l.x = Math.round(g.x + dx);
+      g.l.y = Math.round(g.y + dy);
+    }
   } else {
     const k = drag.hk;
     if (l.kind === 'text') {
@@ -1022,15 +1054,22 @@ document.addEventListener('keydown', e => {
   if (!l) return;
   // F2 / Enter 로도 편집을 연다
   if ((e.key === 'F2' || e.key === 'Enter') && !l.lockSize) { e.preventDefault(); startEdit(l); return; }
-  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); layerAct('del', l); }
+  const group = selLayers();
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    if (group.length > 1) { S.layers = S.layers.filter(x => !group.includes(x)); sel = null; push(); render(); paintLayers(); paintProps(); paintChecks(); measureKB(); }
+    else layerAct('del', l);
+  }
   else if (e.key === 'Escape') { sel = null; paintLayers(); paintProps(); renderOverlay(); }
   else if (e.key.startsWith('Arrow')) {
     e.preventDefault();
     const d = e.shiftKey ? 10 : 1;
-    if (e.key === 'ArrowLeft' && !l.lockX) l.x -= d;
-    if (e.key === 'ArrowRight' && !l.lockX) l.x += d;
-    if (e.key === 'ArrowUp') l.y -= d;
-    if (e.key === 'ArrowDown') l.y += d;
+    for (const g of group) {
+      if (e.key === 'ArrowLeft' && !g.lockX) g.x -= d;
+      if (e.key === 'ArrowRight' && !g.lockX) g.x += d;
+      if (e.key === 'ArrowUp') g.y -= d;
+      if (e.key === 'ArrowDown') g.y += d;
+    }
     render(); paintProps(); paintChecks();
   }
 });
@@ -1630,6 +1669,22 @@ async function boot() {
   await loadStock();
   await switchType('popup');
   await loadPlanList();
+
+  // PPT 리모콘 — 정렬·간격·붙여정렬·그리드 복사·도형 클립보드 (../shared/ppt-remote.js)
+  if (window.PPTRemote) PPTRemote.mount({
+    app: 'banner', label: '배너 스튜디오',
+    docName: () => $('#projName').value || (SPECS[S.type] && SPECS[S.type].label) || '',
+    selected: selLayers,
+    box: bboxOf,
+    move(l, dx, dy) { if (!l.lockX) l.x += dx; l.y += dy; },
+    insert(layers, select) {
+      const ids = layers.map(l => { l.id = uid(); delete l.homeY; return l.id; });
+      S.layers.push(...layers);
+      if (select) { sel = ids[ids.length - 1]; multi.clear(); multiFor = sel; ids.slice(0, -1).forEach(id => multi.add(id)); }
+    },
+    commit() { preloadImgs().then(() => { render(); paintChecks(); measureKB(); }); push(); render(); paintLayers(); paintProps(); paintChecks(); measureKB(); },
+    toolbar: $('#top'), before: $('#btnTheme'),
+  });
 
   // ?plan=<bannerId>&view=clean — 기획안을 바로 열어 미리보기 (헤드리스 캡처·공유 링크용)
   const qs = new URLSearchParams(location.search);
