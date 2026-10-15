@@ -82,7 +82,10 @@ const guideCache = new Map();
 let history = [], hIdx = -1;
 
 const TYPE_ORDER = ['splash', 'popup', 'pick_banner', 'pick_detail', 'shortcut', 'main_banner', 'event_banner',
-  'bow_splash', 'bow_popup', 'bow_pick_banner', 'bow_pick_detail'];
+  'bow_splash', 'bow_popup', 'bow_pick_banner', 'bow_pick_detail', 'free'];
+// 자유 캔버스 — 규정·검수 없이 크기를 마음대로 정하는 타입 (banner_specs.json 의 free: true)
+const isFree = sp => !!(sp && sp.free);
+const FREE_MIN = 16, FREE_MAX = 8000;
 
 function blankState(type) {
   const sp = SPECS[type];
@@ -96,6 +99,7 @@ function blankState(type) {
 function defaultCanvas(type, sp) {
   if (sp.canvas && sp.canvas[0] && sp.canvas[1]) return [sp.canvas[0], sp.canvas[1]];
   if (sp.psd_canvas) return [sp.psd_canvas[0], sp.psd_canvas[1]];
+  if (isFree(sp)) return [1080, 1080];                // 자유 캔버스 — 정사각 기본, 이후 자유 조정
   return [1000, 1000]; // 스플래시 — 1:1 기본
 }
 
@@ -120,6 +124,16 @@ function zonesOf(sp, w, h) {
 async function seedLayers() {
   const sp = SPECS[S.type], zs = zonesOf(sp, S.w, S.h);
   const L = [];
+  if (isFree(sp)) {
+    const size = Math.max(12, Math.round(Math.min(S.w, S.h) / 12)), pad = Math.round(S.w * 0.08);
+    S.layers = [{
+      id: uid(), kind: 'text', role: 'free', name: '텍스트',
+      x: pad, y: Math.round(S.h / 2 - size * 0.65), w: S.w - pad * 2,
+      text: '텍스트를 입력하세요', size, lh: 1.3, ls: -0.02,
+      color: '#ffffff', align: 'center', font: 'Pretendard Bold',
+    }];
+    return;
+  }
   const mainZ = zs.find(z => z.kind === 'text_main');
   const subZs = zs.filter(z => z.kind === 'text_sub');
   const btnZ = zs.find(z => z.kind === 'button');
@@ -451,6 +465,7 @@ let lastKB = null;
 
 function runChecks() {
   const sp = SPECS[S.type], C = [];
+  if (isFree(sp)) return C;                        // 자유 캔버스 — 검수 없음
   const add = (lv, t, m) => C.push({ lv, t, m });
   const zs = zonesOf(sp, S.w, S.h);
   const texts = S.layers.filter(l => l.kind === 'text');
@@ -609,6 +624,12 @@ function runChecks() {
 }
 
 function paintChecks() {
+  if (isFree(SPECS[S.type])) {
+    $('#verdict').className = 'ok';
+    $('#verdict').innerHTML = '검수 없음<span class="cnt">자유 캔버스는 규격 검수를 하지 않습니다</span>';
+    $('#checks').innerHTML = '';
+    return;
+  }
   const C = runChecks();
   const bad = C.filter(c => c.lv === 'bad').length, warn = C.filter(c => c.lv === 'warn').length;
   const v = $('#verdict');
@@ -637,8 +658,30 @@ function measureKB() {
 }
 
 // ══════════════════════════════════ 패널 ══════════════════════════════════
+// 자유 캔버스면 검수·규정 탭과 가이드 도구를 감추고, 사이즈 프리셋을 보여준다
+function syncFreeUI(sp) {
+  const free = isFree(sp);
+  for (const k of ['check', 'rule']) {
+    const tb = document.querySelector(`.tb[data-tab=${k}]`);
+    tb.style.display = free ? 'none' : '';
+    if (free && tb.classList.contains('on')) document.querySelector('.tb[data-tab=prop]').click();
+  }
+  $('#freeSizeRow').style.display = free ? '' : 'none';
+  $('#freeSizeHint').style.display = free ? '' : 'none';
+  for (const id of ['#tgGuide', '#guideMode', '#guideOp']) $(id).style.display = free ? 'none' : '';
+}
+
 function paintSpecInfo() {
   const sp = SPECS[S.type];
+  syncFreeUI(sp);
+  if (isFree(sp)) {
+    $('#specInfo').innerHTML = [['노출 위치', sp.placement], ['캔버스', `${S.w}×${S.h}px (자유)`],
+      ['포맷', (sp.formats || []).join(' / ')], ['규정 · 검수', '없음']]
+      .map(([k, v]) => `<div class="kv"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('');
+    $('#verTag').textContent = '자유 캔버스 · 규정 없음';
+    $('#rules').innerHTML = ''; $('#zoneList').innerHTML = '';
+    return;
+  }
   const rows = [
     ['트랙', sp.track || '-'],
     ['가이드', sp.guideline_version || '-'],
@@ -704,7 +747,7 @@ function paintProps() {
     h += `<div class="row"><label>옵션</label><label class="hint"><input type="checkbox" data-k="flip" ${l.flip ? 'checked' : ''}> 좌우반전</label>`;
     if (l.role === 'bi') h += `<label class="hint"><input type="checkbox" data-k="white" ${l.white ? 'checked' : ''}> 화이트</label>`;
     h += `</div>`;
-    if (l.role !== 'bi') h += `<div class="row"><button class="btn sm grow" data-act="fitZone">권장 영역에 맞추기</button><button class="btn sm grow" data-act="fitRatio">원본 비율</button></div>`;
+    if (l.role !== 'bi') h += `<div class="row"><button class="btn sm grow" data-act="fitZone">${isFree(SPECS[S.type]) ? '캔버스에 맞추기' : '권장 영역에 맞추기'}</button><button class="btn sm grow" data-act="fitRatio">원본 비율</button></div>`;
     if (l.assetId) h += `<p class="hint">라이브러리 에셋 <b class="mono">${esc(l.assetId)}</b>${l.slot ? ' · 슬롯 ' + esc(l.slot) : ''}${l.crop ? ' · 크롭 적용' : ''}</p>`;
     else if (l.role !== 'bi') h += `<p class="hint">브라우저 보관함 이미지 — 라이브러리에 등록되지 않아 기획안에는 저장되지 않습니다.</p>`;
     if (l.role === 'bi') h += `<p class="hint">BI 는 사이즈·좌우 위치 고정입니다. 상하(Y)만 조정할 수 있습니다.</p>`;
@@ -764,7 +807,8 @@ function layerAct(a, l) {
 
 // 이미지 레이어를 규격의 권장 이미지 영역 안에 원본 비율로 맞춘다
 function fitToZone(l) {
-  const z = zonesOf(SPECS[S.type], S.w, S.h).find(x => x.kind === 'image');
+  const z = isFree(SPECS[S.type]) ? { r: [0, 0, S.w, S.h] }
+    : zonesOf(SPECS[S.type], S.w, S.h).find(x => x.kind === 'image');
   if (!z) return;
   const zw = z.r[2] - z.r[0], zh = z.r[3] - z.r[1];
   const im = imgCache.get(l.src), ar = im ? im.width / im.height : l.w / l.h;
@@ -1193,7 +1237,7 @@ async function doExport() {
   const mime = fmt === 'png' ? 'image/png' : 'image/jpeg';
   let q = 0.92, blob = await new Promise(r => art.toBlob(r, mime, q));
   // JPG 는 상한에 맞을 때까지 품질을 낮춘다
-  while (fmt === 'jpg' && blob.size / 1024 > sp.max_kb && q > 0.4) {
+  while (fmt === 'jpg' && sp.max_kb && blob.size / 1024 > sp.max_kb && q > 0.4) {
     q -= 0.08; blob = await new Promise(r => art.toBlob(r, mime, q));
   }
   const kb = Math.round(blob.size / 1024);
@@ -1203,7 +1247,7 @@ async function doExport() {
   const base = `${date} ${sp.label.replace(/[\\/:*?"<>|]/g, '')}${S.name ? ' - ' + S.name : ''}`;
   const fname = `${base}.${fmt}`;
 
-  if (kb > sp.max_kb) {
+  if (sp.max_kb && kb > sp.max_kb) {
     if (!confirm(`용량이 상한을 넘습니다.\n\n현재 ${kb.toLocaleString()}KB / 상한 ${sp.max_kb.toLocaleString()}KB\n\n그래도 내보낼까요?`)) return;
   }
   // 정적 버전 — 브라우저 다운로드로 내보낸다
@@ -1359,7 +1403,8 @@ function syncCanvasInputs() {
   $('#bg2').style.display = g ? '' : 'none';
   $('#gradRow').style.display = g ? '' : 'none';
   const sp = SPECS[S.type];
-  const fixed = !!(sp.canvas && sp.canvas[0] && sp.canvas[1]);
+  const fixed = !isFree(sp) && !!(sp.canvas && sp.canvas[0] && sp.canvas[1]);
+  for (const id of ['#cw', '#ch']) { $(id).min = isFree(sp) ? FREE_MIN : 100; $(id).max = FREE_MAX; }
   $('#cw').disabled = fixed || (sp.canvas && sp.canvas[0] === 1000 && !sp.canvas[1]);
   $('#ch').disabled = fixed;
   $('#bgMode').disabled = !!sp.bg_solid_only;
@@ -1367,7 +1412,9 @@ function syncCanvasInputs() {
 
 async function switchType(t) {
   closeEdit();               // 레이어가 교체되므로 편집칸을 닫는다
+  const keep = S && S.type === t && isFree(SPECS[t]) ? S : null;
   S = blankState(t);
+  if (keep) Object.assign(S, { w: keep.w, h: keep.h, bg: { ...keep.bg } });
   sel = null;
   await seedLayers();
   await preloadImgs();
@@ -1389,7 +1436,7 @@ async function boot() {
   for (const k of TYPE_ORDER) {
     const sp = SPECS[k]; if (!sp) continue;
     if (sp.track !== lastTrack) {
-      const og = el('optgroup'); og.label = sp.track; og.id = 'og-' + (sp.track === '이주의 브랜드' ? 'bow' : 'gen');
+      const og = el('optgroup'); og.label = sp.track; og.id = 'og-' + (isFree(sp) ? 'free' : sp.track === '이주의 브랜드' ? 'bow' : 'gen');
       sel2.appendChild(og); lastTrack = sp.track;
     }
     const o = el('option'); o.value = k; o.textContent = sp.label.replace(/^\[이주의 브랜드\]\s*/, '');
@@ -1411,11 +1458,20 @@ async function boot() {
 
   // 캔버스/배경 입력
   const onCanvas = () => {
-    S.w = clamp(+$('#cw').value || S.w, 100, 8000);
-    S.h = clamp(+$('#ch').value || S.h, 100, 8000);
+    const lo = isFree(SPECS[S.type]) ? FREE_MIN : 100;
+    S.w = Math.round(clamp(+$('#cw').value || S.w, lo, 8000));
+    S.h = Math.round(clamp(+$('#ch').value || S.h, lo, 8000));
+    $('#cw').value = S.w; $('#ch').value = S.h; $('#sizePreset').value = '';
     push(); render(); paintSpecInfo(); paintChecks(); measureKB();
   };
   $('#cw').onchange = onCanvas; $('#ch').onchange = onCanvas;
+  // 자유 캔버스 — 사이즈 프리셋 · 가로세로 바꾸기
+  $('#sizePreset').onchange = () => {
+    const v = $('#sizePreset').value; if (!v) return;
+    const [w, h] = v.split('x').map(Number);
+    $('#cw').value = w; $('#ch').value = h; onCanvas(); $('#sizePreset').value = v;
+  };
+  $('#btnSwapWH').onclick = () => { $('#cw').value = S.h; $('#ch').value = S.w; onCanvas(); };
   $('#bgMode').onchange = () => { S.bg.mode = $('#bgMode').value; syncCanvasInputs(); push(); render(); paintChecks(); };
   $('#bg1').oninput = () => { S.bg.c1 = $('#bg1').value; $('#bg1h').value = S.bg.c1; render(); paintChecks(); measureKB(); };
   $('#bg1h').onchange = () => { if (/^#[0-9a-f]{6}$/i.test($('#bg1h').value)) { S.bg.c1 = $('#bg1h').value; syncCanvasInputs(); render(); paintChecks(); } };

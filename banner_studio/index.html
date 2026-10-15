@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>배너 스튜디오 · 이미지 스튜디오</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=20261013-2">
+<link rel="stylesheet" href="style.css?v=20261015-1">
 <style id="fontface"></style>
 </head>
 <body>
@@ -123,6 +123,23 @@
                 <input type="number" id="cw" class="grow"><span class="hint">×</span>
                 <input type="number" id="ch" class="grow">
               </div>
+              <div class="row" id="freeSizeRow" style="display:none">
+                <label>프리셋</label>
+                <select id="sizePreset" class="grow">
+                  <option value="">— 사이즈 프리셋 —</option>
+                  <option value="1080x1080">정사각 1080×1080</option>
+                  <option value="1080x1350">세로 4:5 1080×1350</option>
+                  <option value="1080x1920">스토리 9:16 1080×1920</option>
+                  <option value="1920x1080">가로 16:9 1920×1080</option>
+                  <option value="1200x628">링크 썸네일 1200×628</option>
+                  <option value="1200x1200">카톡 정사각 1200×1200</option>
+                  <option value="728x90">리더보드 728×90</option>
+                  <option value="300x250">미디엄 렉탱글 300×250</option>
+                  <option value="1600x900">PPT 16:9 1600×900</option>
+                </select>
+                <button class="btn sm" id="btnSwapWH" title="가로·세로 바꾸기">⇄</button>
+              </div>
+              <p class="hint" id="freeSizeHint" style="display:none">자유 캔버스 — 규정·검수 없이 16~8000px 사이에서 원하는 크기로 지정합니다.</p>
               <div class="row">
                 <label>배경</label>
                 <select id="bgMode" class="grow">
@@ -174,7 +191,7 @@
 </div>
 <div id="toast"></div>
 <input type="file" id="filePick" accept="image/*" multiple hidden>
-<script src="plans.js?v=20261013-2"></script>
-<script src="app.js?v=20261013-2"></script>
+<script src="plans.js?v=20261015-1"></script>
+<script src="app.js?v=20261015-1"></script>
 </body>
 </html>
