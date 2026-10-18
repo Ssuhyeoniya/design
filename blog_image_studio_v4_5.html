@@ -3259,7 +3259,7 @@ loadStock();
 
 /* ================= 네비: 이미지 소스 라이브러리(별도 페이지) 열기 ================= */
 $('#navSources').onclick=()=>{ window.open('library.html','_blank','noopener'); };
-$('#navBanner').onclick=()=>{ window.open('banner_studio/index.html','_blank','noopener'); };
+$('#navBanner').onclick=()=>{ location.href='banner_studio/index.html'; };
 $('#assetBack').addEventListener('click',e=>{if(e.target.id==='assetBack')$('#assetBack').classList.remove('show');});
 $('#assetUpBtn').onclick=()=>$('#assetUpInput').click();
 $('#assetUpInput').onchange=async e=>{
