@@ -90,9 +90,12 @@
     const used = new Set();
     for (const b of nodes) {
       if (b.t !== 'box' || b.label || b.noNest) continue;
-      const t = nodes.find(x => x.t === 'text' && !used.has(x) && x.text && x.text.trim() &&
-        x.cx >= b.x && x.cx <= b.x + b.w && x.cy >= b.y && x.cy <= b.y + b.h && x.gw <= b.w + 2);
+      const inside = x => { const cx = x.cx != null ? x.cx : x.x + x.w / 2, cy = x.cy != null ? x.cy : x.y + x.h / 2;
+        return cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h; };
+      const t = nodes.find(x => x.t === 'text' && !used.has(x) && x.text && x.text.trim() && inside(x) && x.gw <= b.w + 2);
       if (!t) continue;
+      // 카드처럼 안에 다른 요소(이미지·다른 글자·작은 도형)도 있으면 버튼이 아니라 배경이다 — 묶지 않는다
+      if (nodes.some(x => x !== b && x !== t && inside(x) && !(x.w >= b.w && x.h >= b.h))) continue;
       used.add(t);
       const m = measure(t);
       b.label = { text: t.text, size: t.size, weight: t.weight, family: t.family, color: t.color, lh: t.lh, ls: t.ls, rich: t.rich || null, shadows: t.shadows, native: t.native };
@@ -103,7 +106,7 @@
   // 왼쪽 위를 (0,0) 으로 옮기고 크기를 잰다
   function normalize(nodes) {
     const x0 = Math.min(...nodes.map(n => n.x)), y0 = Math.min(...nodes.map(n => n.y));
-    nodes.forEach(n => { n.x = Math.round(n.x - x0); n.y = Math.round(n.y - y0); delete n.cx; delete n.cy; delete n.gw; });
+    nodes.forEach(n => { n.x = Math.round(n.x - x0); n.y = Math.round(n.y - y0); delete n.cx; delete n.cy; delete n.gw; if (n.clip) { n.clip.x -= x0; n.clip.y -= y0; } });
     const w = Math.max(...nodes.map(n => n.x + n.w)), h = Math.max(...nodes.map(n => n.y + n.h));
     return { nodes, w: Math.round(w), h: Math.round(h) };
   }
@@ -559,12 +562,30 @@
     const warn = m => warns.add(m);
     const ox = root.absoluteBoundingBox.x, oy = root.absoluteBoundingBox.y;
     const nodes = [];
+    // 프레임의 '내용 자르기(Clip content)' — 넘친 부분은 피그마처럼 잘라야 한다
+    let clip = null;
+    const inter = (a, c) => { const x = Math.max(a.x, c.x), y = Math.max(a.y, c.y), x2 = Math.min(a.x + a.w, c.x + c.w), y2 = Math.min(a.y + a.h, c.y + c.h);
+      return x2 > x && y2 > y ? { x, y, w: x2 - x, h: y2 - y } : null; };
+    function push(node) {
+      if (clip) {
+        const r = { x: node.x, y: node.y, w: node.w, h: node.h }, i = inter(r, clip);
+        if (!i) return;                                                // 완전히 잘려 안 보이는 것
+        const inside = i.w >= r.w - .5 && i.h >= r.h - .5;
+        if (!inside) {
+          const imgFill = node.fx && (node.fx.fills || []).some(p => p.type === 'IMAGE');
+          if (node.t === 'image' || (node.t === 'box' && imgFill && !node.label)) node.clip = { ...clip };   // 그림은 나중에 픽셀로 자른다 (applyClips)
+          else if (node.t === 'box' && !node.label) Object.assign(node, i);                                // 단색·그라데이션 도형은 크기만 줄인다
+          else warn(`'${node.name}' 일부가 프레임 밖으로 넘쳐 보일 수 있습니다`);
+        }
+      }
+      nodes.push(node);
+    }
     const bb = n => { const b = n.absoluteBoundingBox || { x: 0, y: 0, width: 0, height: 0 }; return { x: b.x - ox, y: b.y - oy, w: b.width, h: b.height }; };
     const raster = (n, op) => {
       const src = rasters[n.id];
       if (!src) { warn(`'${n.name}' 을(를) 그림으로 받지 못해 빠졌습니다`); return; }
       const r = n.absoluteRenderBounds || n.absoluteBoundingBox;
-      nodes.push({ t: 'image', x: r.x - ox, y: r.y - oy, w: r.width, h: r.height, src, opacity: 1, radius: 0, name: n.name, fromFigma: n.id });
+      push({ t: 'image', x: r.x - ox, y: r.y - oy, w: r.width, h: r.height, src, opacity: 1, radius: 0, name: n.name, fromFigma: n.id });
     };
     const textNode = (n, op) => {
       const st = n.style || {}, b = bb(n);
@@ -582,6 +603,12 @@
       if (sh.length) t.shadows = sh;
       if (fill && fill.type !== 'SOLID') warn(`'${n.name}' 글자의 그라데이션·이미지 채우기는 단색으로 바꿨습니다`);
       const m = measure(t);
+      // 피그마에서 한 줄(또는 자동 폭)이던 글자는 브라우저 글꼴이 조금만 넓어도 줄바꿈된다 — 폭에 여유를 주고 정렬 기준점은 지킨다
+      const L1 = st.lineHeightPx || size * 1.3, oneLine = b.h < L1 * (text.split('\n').length + 0.5);
+      if (n.textAutoResize === 'WIDTH_AND_HEIGHT' || oneLine) {
+        const need = Math.ceil(m.w * 1.06 + size * 0.3);
+        if (need > t.w) { const d = need - t.w; if (t.align === 'center') t.x -= d / 2; else if (t.align === 'right') t.x -= d; t.w = need; }
+      }
       t.h = Math.round(m.h);
       if (st.textAlignVertical === 'CENTER') t.y += (b.h - m.h) / 2; else if (st.textAlignVertical === 'BOTTOM') t.y += b.h - m.h;
       const off = t.align === 'center' ? (t.w - m.w) / 2 : t.align === 'right' ? t.w - m.w : 0;
@@ -599,11 +626,11 @@
       const partialArc = n.type === 'ELLIPSE' && n.arcData && (Math.abs(n.arcData.endingAngle - n.arcData.startingAngle) < 6.28 || n.arcData.innerRadius > 0);
       const blend = n.blendMode && !/^(PASS_THROUGH|NORMAL)$/.test(n.blendMode);
       if (VECTORISH.has(n.type) || !CONTAINER.has(n.type) && n.type !== 'TEXT' || partialArc || oddPaint || mask || blend || (rotated(n) && n !== root)) {
-        if (n.type === 'TEXT') { if (rotated(n)) warn(`'${n.name}' 글자의 회전은 빼고 가져왔습니다`); nodes.push(textNode(n, op)); return; }
+        if (n.type === 'TEXT') { if (rotated(n)) warn(`'${n.name}' 글자의 회전은 빼고 가져왔습니다`); push(textNode(n, op)); return; }
         if (!hasText(n)) return raster(n, op);
         warn(`'${n.name}' 은(는) 그대로 그릴 수 없는 요소(회전·마스크·혼합 모드)가 있어 근사치로 가져왔습니다`);
       }
-      if (n.type === 'TEXT') { nodes.push(textNode(n, op)); return; }
+      if (n.type === 'TEXT') { push(textNode(n, op)); return; }
       const b = bb(n);
       const fills = (n.fills || []).map(p => figPaint(p, imageFills)).filter(Boolean);
       if (imgFill && fills.every(p => p.type !== 'IMAGE')) {
@@ -634,21 +661,49 @@
           if (pl !== pr || (hugY && pt !== pb)) warn(`'${n.name}' 의 좌우·상하 패딩이 달라 평균값으로 맞췄습니다`);
           if (t.align !== 'center' && (!hugX || n.primaryAxisAlignItems !== 'CENTER' && n.counterAxisAlignItems !== 'CENTER'))
             if (!hugX) warn(`'${n.name}' 의 글자 정렬을 가운데로 맞췄습니다`);
-          nodes.push(box); return;
+          push(box); return;
         }
         if (n.layoutMode && n.layoutMode !== 'NONE' && texts.length && kids.length > 1)
           warn(`'${n.name}' 은(는) 글자 외 요소가 함께 있어, 글자를 고쳐도 도형 크기가 자동으로 바뀌지 않습니다`);
-        nodes.push(box);
+        push(box);
       }
-      if (n.clipsContent && kids.some(c => { const cb = bb(c); return cb.x < b.x - 1 || cb.y < b.y - 1 || cb.x + cb.w > b.x + b.w + 1 || cb.y + cb.h > b.y + b.h + 1; }))
-        warn(`'${n.name}' 밖으로 넘친 부분은 잘리지 않고 보입니다`);
+      const prev = clip;
+      if (n.clipsContent) {
+        const c = clip ? inter(b, clip) : b;
+        clip = c ? { ...c, r: clip && clip.r != null && !n.cornerRadius ? clip.r : (n.rectangleCornerRadii || [n.cornerRadius || 0, n.cornerRadius || 0, n.cornerRadius || 0, n.cornerRadius || 0]) } : { x: 0, y: 0, w: 0, h: 0 };
+      }
       kids.forEach(c => walk(c, op));
+      clip = prev;
     }
     walk(root, 1);
     if (!nodes.length) throw new Error('가져올 수 있는 요소가 없습니다');
     // 루트 기준 좌표 → 정규화 (효과는 도형 밖으로 번져도 좌표에는 넣지 않는다)
     const res = normalize(nodes);
     return { ...res, origin: 'figma', warnings: [...warns] };
+  }
+  // 잘라내기(clip)가 남은 그림·이미지 채우기 도형을 실제 픽셀로 잘라 PNG 로 바꾼다 (모서리 둥근 프레임도 반영)
+  async function applyClips(conv) {
+    let n = 0;
+    for (const node of conv.nodes) {
+      if (!node.clip) continue;
+      const c = node.clip, i = (() => { const x = Math.max(node.x, c.x), y = Math.max(node.y, c.y), x2 = Math.min(node.x + node.w, c.x + c.w), y2 = Math.min(node.y + node.h, c.y + c.h); return { x, y, w: x2 - x, h: y2 - y }; })();
+      const S = 2, cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(i.w * S)); cv.height = Math.max(1, Math.round(i.h * S));
+      const g = cv.getContext('2d'); g.scale(S, S); g.translate(-i.x, -i.y);
+      g.beginPath(); shapePath(g, { fx: { radii: c.r || [0, 0, 0, 0] } }, c.x, c.y, c.w, c.h, 0); g.clip();
+      if (node.t === 'image') {
+        const im = await loadImg(node.src); if (!im) { delete node.clip; continue; }
+        g.drawImage(im, node.x, node.y, node.w, node.h);
+      } else {
+        await Promise.all((node.fx.fills || []).filter(p => p.type === 'IMAGE').map(p => loadImg(p.src).then(im => { if (im) imgs.set(p.src, im); })));
+        paintBox(g, node, { k: S });
+      }
+      let src; try { src = cv.toDataURL('image/png'); } catch (e) { delete node.clip; continue; }   // 다른 출처 주소(만료 대비 미변환)면 자르지 않는다
+      Object.assign(node, { t: 'image', x: i.x, y: i.y, w: i.w, h: i.h, src, opacity: 1, radius: 0 });
+      delete node.clip; delete node.fx; delete node.fill; n++;
+    }
+    if (n) Object.assign(conv, normalize(conv.nodes));
+    return conv;
   }
   // 피그마에서 따로 받아야 할 것 — PNG 로 렌더할 노드 id, 이미지 채우기 ref
   function figmaNeeds(root) {
@@ -703,6 +758,6 @@
   }
 
   window.UIKit = { list, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
-    exportJSON, importJSON, parseFont, fontName, fromFigma, figmaNeeds, parseFigmaLink,
+    exportJSON, importJSON, parseFont, fontName, fromFigma, figmaNeeds, parseFigmaLink, applyClips,
     paintBox, paintURL, outset, hasFx, textShadowCSS, img, set onImage(fn) { onImage = fn; } };
 })();

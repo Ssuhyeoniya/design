@@ -103,6 +103,14 @@
           <option value="clean">시안</option>
         </select>
         <input type="range" id="guideOp" min="10" max="100" value="55" style="width:70px" title="가이드 투명도">
+        <span id="uiEditBar" style="display:none">
+          <b>🧩 컴포넌트 편집 중</b>
+          <input type="text" id="uiEdName" placeholder="이름" style="width:150px">
+          <select id="uiEdGroup" class="btn sm" style="width:130px"></select>
+          <button class="btn sm pri" id="uiEdSave" title="이 컴포넌트를 고친 내용으로 덮어쓰기">저장</button>
+          <button class="btn sm" id="uiEdSaveAs" title="원본은 두고 새 컴포넌트로 저장">새 컴포넌트로 저장</button>
+          <button class="btn sm" id="uiEdExit" title="편집을 끝내고 이미지 소스로 돌아가기">이미지 소스로</button>
+        </span>
         <span class="sp"></span>
         <button class="btn sm" id="zoomOut">−</button>
         <span id="zoomLbl">100%</span>
@@ -205,8 +213,8 @@
 <div id="toast"></div>
 <input type="file" id="filePick" accept="image/*" multiple hidden>
 <script src="../shared/ppt-remote.js?v=20261015-1"></script>
-<script src="../shared/ui-kit.js?v=20261018-2"></script>
+<script src="../shared/ui-kit.js?v=20261018-3"></script>
 <script src="plans.js?v=20261015-5"></script>
-<script src="app.js?v=20261018-2"></script>
+<script src="app.js?v=20261018-3"></script>
 </body>
 </html>

@@ -1020,12 +1020,15 @@ onHit('pointerdown', e => {
   } else {
     const l = pickAt(p);
     const wasSel = !!l && sel === l.id;                 // 이미 선택돼 있었나
+    const ids0 = selIds();
+    const inGroup = !!l && !!l.gid && !e.shiftKey && ids0.length > 1 && ids0.includes(l.id) &&
+      S.layers.filter(x => x.gid === l.gid).every(x => ids0.includes(x.id));
     if (l && e.shiftKey) toggleSel(l.id);               // Shift+클릭 = 다중 선택 추가/해제
-    else if (!(l && selIds().length > 1 && selIds().includes(l.id))) { sel = l ? l.id : null; if (l && l.gid) selectGroup(l); }  // 묶음 안을 누르면 묶음 유지
+    else if (!(l && selIds().length > 1 && selIds().includes(l.id))) { sel = l ? l.id : null; if (l && l.gid && !(wasSel && ids0.length === 1)) selectGroup(l); }  // 묶음 안에서 고른 낱개를 다시 누르면 낱개 유지  // 묶음 안을 누르면 묶음 유지
     paintLayers(); paintProps();
     const group = selLayers();
     if (l && group.includes(l)) drag = {
-      mode: 'move', l, s: { ...l }, p0: p, reselect: wasSel && group.length === 1 && !e.shiftKey,
+      mode: 'move', l, s: { ...l }, p0: p, reselect: wasSel && group.length === 1 && !e.shiftKey, child: inGroup,
       g: group.map(x => ({ l: x, x: x.x, y: x.y })),
     };
   }
@@ -1195,6 +1198,7 @@ onHit('pointerup', e => {
   endDrag();
   if (!d || d.mode !== 'move') return;
   const moved = Math.abs(d.l.x - d.s.x) > 1 || Math.abs(d.l.y - d.s.y) > 1;
+  if (!moved && d.child) { sel = d.l.id; multi.clear(); multiFor = sel; paintLayers(); paintProps(); renderOverlay(); return; }
   if (!moved && d.reselect && !d.l.lockSize) startEdit(d.l);
 });
 
@@ -1519,8 +1523,9 @@ async function loadUi() {
   for (const c of items.filter(c => gs.value === '*' || (c.group || '') === gs.value)) {
     const d = el('div', 'stock');
     d.title = `${c.group ? '[' + c.group + '] ' : ''}${c.name} · ${c.w}×${c.h}px${c.origin === 'blog' ? ' · 블로그 이미지 제작에서 저장' : c.origin === 'figma' ? ' · 피그마에서 가져옴' : ''}\n클릭하면 캔버스에 복사해 넣습니다`;
-    d.innerHTML = `<img src="${esc(c.thumb)}" loading="lazy"><span class="nm">${esc(c.name)}</span><span class="del" title="UI 컴포넌트 삭제">×</span>`;
+    d.innerHTML = `<img src="${esc(c.thumb)}" loading="lazy"><span class="nm">${esc(c.name)}</span><span class="ed" title="이 컴포넌트 편집">✎</span><span class="del" title="UI 컴포넌트 삭제">×</span>`;
     d.onclick = () => insertUi(c);
+    d.querySelector('.ed').onclick = ev => { ev.stopPropagation(); openUiEditor(c.id); };
     d.querySelector('.del').onclick = async ev => {
       ev.stopPropagation();
       if (!confirm(`UI 컴포넌트 “${c.name}” 을(를) 삭제할까요?\n이미 캔버스에 넣은 사본은 그대로 남습니다.`)) return;
@@ -1560,6 +1565,65 @@ async function insertUi(c) {
   toast(`“${c.name}” 을(를) 복사해 넣었습니다${skipped ? ` — 배너에서 쓸 수 없는 요소 ${skipped}개 제외` : ''}`);
 }
 
+// ── 컴포넌트 편집기 ── 저장된 UI 를 자유 캔버스에 펼쳐 낱개로 고치고, 같은 컴포넌트에 덮어쓰거나 새로 저장한다
+// (이미지 소스의 ✏️ 편집 → ?editUi=<id> 로 들어온다)
+let uiEdit = null;                           // { comp, snap }
+async function openUiEditor(id) {
+  if (!window.UIKit) return;
+  const c = await UIKit.get(+id).catch(() => null);
+  if (!c) return toast('컴포넌트를 찾지 못했습니다 — 이미지 소스에서 삭제됐을 수 있습니다', true);
+  if (uiDirty() && !confirm('지금 편집 중인 컴포넌트의 저장하지 않은 수정이 사라집니다. 계속할까요?')) return;
+  closeEdit();
+  const m = Math.max(40, ...c.nodes.map(n => n.t === 'box' ? UIKit.outset(n) + 8 : 0));
+  S = blankState('free');
+  Object.assign(S, { w: Math.max(FREE_MIN, Math.round(c.w + m * 2)), h: Math.max(FREE_MIN, Math.round(c.h + m * 2)),
+    bg: { mode: 'solid', c1: '#e9ecf1', c2: '#5a6478', angle: 90 }, name: c.name });
+  S.layers = UIKit.toBanner(c, { x: m, y: m }, 1, uid).layers;   // 편집할 땐 그룹으로 묶지 않는다 — 하나씩 바로 고친다
+  sel = null; curPlan = null; $('#planSel').value = ''; paintPlanMeta();
+  $('#typeSel').value = 'free'; $('#projName').value = c.name;
+  await preloadImgs();
+  syncCanvasInputs(); paintSpecInfo(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
+  history = []; hIdx = -1; push();
+  uiEdit = { comp: c, snap: history[0] };
+  await paintUiEditBar();
+  toast(`“${c.name}” 편집 — 글자·색·이미지·효과를 고친 뒤 위의 저장을 누르세요 (캔버스 배경은 저장되지 않습니다)`);
+}
+const uiDirty = () => !!(uiEdit && history[hIdx] !== uiEdit.snap);
+async function paintUiEditBar() {
+  const bar = $('#uiEditBar');
+  bar.style.display = uiEdit ? '' : 'none';
+  if (!uiEdit) return;
+  $('#uiEdName').value = uiEdit.comp.name;
+  const gs = (await UIKit.groups().catch(() => [])).map(g => g.name).filter(Boolean);
+  const cur = uiEdit.comp.group || '';
+  if (cur && !gs.includes(cur)) gs.push(cur);
+  $('#uiEdGroup').innerHTML = gs.map(g => `<option value="${esc(g)}"${g === cur ? ' selected' : ''}>📁 ${esc(g)}</option>`).join('') +
+    `<option value=""${!cur ? ' selected' : ''}>그룹 없음</option><option value="__new">＋ 새 그룹…</option>`;
+}
+async function saveUiEdit(asNew) {
+  if (!uiEdit) return;
+  commitEdit();
+  const layers = S.layers.filter(l => !l.hidden);
+  if (!layers.length) return toast('저장할 레이어가 없습니다', true);
+  const name = ($('#uiEdName').value || '').trim() || uiEdit.comp.name;
+  let group = $('#uiEdGroup').value;
+  if (group === '__new') { group = (prompt('새 그룹 이름') || '').trim(); if (!group) return; }
+  try {
+    const conv = UIKit.fromBanner(layers, textMetrics);
+    if (asNew) uiEdit.comp = await UIKit.save(name, conv, group);
+    else {
+      const c = uiEdit.comp;
+      Object.assign(c, { name, group, w: conv.w, h: conv.h, nodes: conv.nodes, edited: Date.now() });
+      c.thumb = await UIKit.thumb(c);
+      await UIKit.put(c);
+    }
+    uiEdit.snap = history[hIdx];
+    toast(asNew ? `새 컴포넌트로 저장했습니다 — ${name}` : `저장했습니다 — ${name} (이미 시안에 넣은 사본은 그대로입니다)`);
+  } catch (e) { return toast('저장 실패 — ' + e.message, true); }
+  paintUiEditBar(); loadUi();
+}
+function endUiEdit() { uiEdit = null; $('#uiEditBar').style.display = 'none'; }
+
 // ══════════════════════════════════ 저장 / 열기 / 내보내기 ══════════════════════════════════
 async function saveProject() {
   commitEdit();
@@ -1584,6 +1648,7 @@ async function openProject() {
     await dbDel('projects', d.name); return toast('삭제했습니다 — ' + d.name);
   }
   const it = items[+pick - 1]; if (!it) return;
+  endUiEdit();
   S = it.data; sel = null;
   curPlan = null; $('#planSel').value = ''; paintPlanMeta();   // 프로젝트 저장본은 기획안과 별개다
   $('#typeSel').value = S.type; $('#projName').value = S.name || it.name;
@@ -1673,7 +1738,7 @@ async function openPlan(bannerId) {
   if (!plan) return toast('기획안을 불러오지 못했습니다 — ' + (row.path || bannerId), true);
   if (!SPECS[plan.templateId]) return toast(`알 수 없는 배너 타입 ${plan.templateId} — banner_specs.json 에 없는 템플릿입니다`, true);
 
-  closeEdit();
+  closeEdit(); endUiEdit();
   S = blankState(plan.templateId);
   await seedLayers();
   const { state, missing } = BannerPlans.applyPlan(S, plan, library, ROOT);
@@ -1776,6 +1841,7 @@ function syncCanvasInputs() {
 
 async function switchType(t) {
   closeEdit();               // 레이어가 교체되므로 편집칸을 닫는다
+  if (uiEdit) { if (uiDirty() && !confirm('컴포넌트 편집 중입니다. 저장하지 않은 수정을 버리고 바꿀까요?')) { $('#typeSel').value = S.type; return; } endUiEdit(); }
   const keep = S && S.type === t && isFree(SPECS[t]) ? S : null;
   S = blankState(t);
   if (keep) Object.assign(S, { w: keep.w, h: keep.h, bg: { ...keep.bg } });
@@ -1921,6 +1987,13 @@ async function boot() {
   // UI 컴포넌트
   $('#btnUiSave').onclick = saveUi;
   $('#uiGroup').onchange = loadUi;
+  $('#uiEdSave').onclick = () => saveUiEdit(false);
+  $('#uiEdSaveAs').onclick = () => saveUiEdit(true);
+  $('#uiEdExit').onclick = () => {
+    if (uiDirty() && !confirm('저장하지 않은 수정이 있습니다. 버리고 나갈까요?')) return;
+    uiEdit = null; location.href = '../library.html';
+  };
+  addEventListener('beforeunload', e => { if (uiDirty()) { e.preventDefault(); e.returnValue = ''; } });
   if (window.UIKit) UIKit.onImage = () => { if (S) { render(); } };   // 이미지 채우기가 늦게 로드되면 다시 그린다
   // 이미지 소스 페이지·다른 탭에서 바뀐 UI·이미지를 돌아올 때 다시 읽는다
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadUi(); loadStock(); } });
@@ -1950,6 +2023,7 @@ async function boot() {
   // ?plan=<bannerId>&view=clean — 기획안을 바로 열어 미리보기 (헤드리스 캡처·공유 링크용)
   const qs = new URLSearchParams(location.search);
   if (qs.get('view') === 'clean') { $('#guideMode').value = 'clean'; syncGuideControls(); }
+  if (qs.get('editUi')) await openUiEditor(qs.get('editUi'));
   if (qs.get('plan')) {
     if ($('#planSel')._rows.has(qs.get('plan'))) { $('#planSel').value = qs.get('plan'); await openPlan(qs.get('plan')); }
     else toast('기획안을 찾지 못했습니다 — ' + qs.get('plan'), true);

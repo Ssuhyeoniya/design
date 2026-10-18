@@ -166,7 +166,7 @@
     <div class="row"><button class="cancel">취소</button><button class="ok">삭제</button></div>
   </div></div>
 
-<script src="shared/ui-kit.js?v=20261018-2"></script>
+<script src="shared/ui-kit.js?v=20261018-3"></script>
 <script>
 const $=s=>document.querySelector(s);
 
@@ -417,6 +417,7 @@ async function renderUi(){
         <select class="sc-grp" title="그룹 옮기기">${gopts(c)}</select>
       </div>
       <div class="sc-acts">
+        <button class="sc-edit" style="background:var(--accent);border-color:var(--accent);color:#fff">✏️ 편집</button>
         <button class="sc-png">PNG 다운로드</button>
         <button class="sc-json">내보내기</button>
         <button class="sc-del">삭제</button>
@@ -439,6 +440,11 @@ async function renderUi(){
       if(v===c.name)return;
       try{await UIKit.rename(c.id,v);c.name=v;toast('이름을 바꿨어 — '+v);}catch(e){nm.textContent=c.name;toast('이름 변경 실패',true);}
     });
+    // 편집 — 배너 스튜디오의 컴포넌트 편집기(자유 캔버스)로 열어 낱개로 고치고 같은 컴포넌트에 저장
+    const edit=()=>{location.href='banner_studio/index.html?editUi='+c.id;};
+    card.querySelector('.sc-edit').onclick=edit;
+    card.querySelector('.sc-th').ondblclick=edit;
+    card.querySelector('.sc-th').title='더블클릭해서 편집';
     card.querySelector('.sc-png').onclick=async()=>{
       const blob=await (await fetch(await UIKit.thumb(c,Math.max(c.w,c.h)))).blob();
       saveBlob(blob,c.name.replace(/[\\/:*?"<>|]/g,'_')+'.png');
@@ -595,7 +601,7 @@ async function figImport(){
       }
       for(const t of targets){
         try{
-          const conv=UIKit.fromFigma(t,{rasters,imageFills});
+          const conv=await UIKit.applyClips(UIKit.fromFigma(t,{rasters,imageFills}));
           conv.source={fileKey:key,nodeId:t.id,file:res.name};
           const c=await UIKit.save(t.name||'피그마',conv,group);
           saved++;

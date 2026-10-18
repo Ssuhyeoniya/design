@@ -129,7 +129,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .uic img{width:100%;height:calc(100% - 16px);object-fit:contain;display:block;}
   .uic .nm{position:absolute;left:0;right:0;bottom:0;height:16px;padding:0 5px;font-size:.62rem;line-height:16px;color:var(--text-sub);background:#fff;border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .uic .del{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;border:1px solid var(--border-strong);background:#fff;color:var(--text-sub);font-size:11px;line-height:15px;text-align:center;opacity:0;}
-  .uic:hover .del{opacity:1;}
+  .uic:hover .del,.uic:hover .ed{opacity:1;}
+  .uic .ed{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;border:1px solid var(--border-strong);background:#fff;color:var(--text-sub);font-size:11px;line-height:15px;text-align:center;opacity:0;}
+  .uic .ed:hover{background:var(--accent);border-color:var(--accent);color:#fff;}
   .uic .del:hover{background:var(--danger);border-color:var(--danger);color:#fff;}
   #uiEmpty{font-size:.69rem;color:var(--text-faint);line-height:1.6;margin:0;}
   #nameBack{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:310;display:none;align-items:center;justify-content:center;}
@@ -532,7 +534,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="exportZone"></div>
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
-<script src="shared/ui-kit.js?v=20261018-2"></script>
+<script src="shared/ui-kit.js?v=20261018-3"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -2141,6 +2143,8 @@ canvas.addEventListener('mousedown',e=>{
   const s=slides[cur];
   selLayer=+el.dataset.id;
   const lay=LS(s).find(x=>x.id===selLayer);
+  // 이미 잡힌 그룹을 (끌지 않고) 한 번 더 누르면 그 요소만 고른다 (피그마와 같다) — mouseup 에서 판정
+  _grpChild=(!e.shiftKey&&lay.gid&&selSet.length>1&&selSet.includes(lay.id)&&LS(s).filter(x=>x.gid===lay.gid).every(x=>selSet.includes(x.id)))?{id:lay.id,x:e.clientX,y:e.clientY}:null;
   if(e.shiftKey){
     selSet=selSet.includes(selLayer)?selSet.filter(i=>i!==selLayer):[...selSet,selLayer];
   }else if(!selSet.includes(selLayer)){
@@ -2296,7 +2300,14 @@ window.addEventListener('mousemove',e=>{
     canvas.appendChild(d2);
   }
 });
-window.addEventListener('mouseup',()=>{
+let _grpChild=null;
+window.addEventListener('mouseup',e=>{
+  if(_grpChild){
+    const g=_grpChild;_grpChild=null;
+    if(drag&&Math.abs(e.clientX-g.x)<4&&Math.abs(e.clientY-g.y)<4){
+      drag=null;selSet=[g.id];selLayer=g.id;renderAll();return;
+    }
+  }
   if(drag||resz||rotDrag||radDrag||crDrag||edgeDrag){
     canvas.querySelectorAll('.snapline').forEach(el=>el.remove());
     drag=null;resz=null;rotDrag=null;radDrag=null;crDrag=null;edgeDrag=null;
@@ -3467,8 +3478,13 @@ async function loadUi(){
   items.filter(c=>gs.value==='*'||(c.group||'')===gs.value).forEach(c=>{
     const d=document.createElement('div');d.className='uic';
     d.title=`${c.group?'['+c.group+'] ':''}${c.name} · ${c.w}×${c.h}px${c.origin==='banner'?' · 배너 스튜디오에서 저장':c.origin==='figma'?' · 피그마에서 가져옴':''}\n클릭하면 캔버스에 복사해 넣어`;
-    d.innerHTML=`<img src="${esc(c.thumb)}" loading="lazy" alt=""><span class="nm">${esc(c.name)}</span><span class="del" title="UI 컴포넌트 삭제">×</span>`;
+    d.innerHTML=`<img src="${esc(c.thumb)}" loading="lazy" alt=""><span class="nm">${esc(c.name)}</span><span class="ed" title="이 컴포넌트 편집 (배너 스튜디오 편집기)">✎</span><span class="del" title="UI 컴포넌트 삭제">×</span>`;
     d.onclick=()=>insertUi(c);
+    d.querySelector('.ed').onclick=async ev=>{
+      ev.stopPropagation();
+      const yes=await askConfirm(`"${c.name}" 을(를) 컴포넌트 편집기(배너 스튜디오)에서 열어.\n지금 작업을 💾 작업 저장 하지 않았다면 먼저 저장해줘.`,'편집기로 이동');
+      if(yes)location.href='banner_studio/index.html?editUi='+c.id;
+    };
     d.querySelector('.del').onclick=async ev=>{
       ev.stopPropagation();
       const yes=await askConfirm(`UI 컴포넌트 "${c.name}" 을(를) 삭제할까?\n이미 캔버스에 넣은 사본은 그대로 남아.`,'삭제');
