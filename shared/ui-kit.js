@@ -136,6 +136,28 @@
     return n;
   }
 
+  // ── 피그마 그림(bake) ───────────────────────────────────────────────────
+  // 피그마 플러그인이 요소마다 피그마가 직접 그린 PNG 를 함께 준다. 레이어에 { src, dx, dy, w, h, alpha, sig } 로 붙여 두고,
+  // 레이어 값이 가져온 그대로(sig 가 같음)인 동안은 그 그림을 그대로 그린다 = 피그마와 100% 같다.
+  // 글자·색·크기를 고치면 sig 가 달라져 그때부터 편집 가능한 레이어로 다시 그린다 (되돌리면 다시 그림으로).
+  const SIG_KEYS = ['w', 'h', 'fill', 'radius', 'fx', 'stroke', 'strokeW', 'text', 'rich', 'size', 'weight', 'font', 'color', 'align', 'lh', 'ls', 'opacity', 'auto', 'tail', 'shape', 'rot', 'shadows'];
+  const LABEL_KEYS = ['text', 'rich', 'size', 'weight', 'font', 'color', 'lh', 'ls', 'shadows'];
+  // 오토 레이아웃 도형(배너 rect.auto · 블로그 'A:' 표시)은 폭·높이가 글자에서 정해지므로 비교에서 뺀다
+  function bakeSig(l, extra, keys) {
+    const o = {}, auto = !keys && (l.auto || String(extra || '').startsWith('A:'));
+    for (const k of keys || SIG_KEYS) if (l[k] !== undefined && l[k] !== null && !(auto && (k === 'w' || k === 'h'))) o[k] = l[k];
+    return JSON.stringify(o) + '|' + (extra || '');
+  }
+  const bakeOk = (l, extra, keys) => !!(l && l.bake && l.bake.sig === bakeSig(l, extra, keys));
+  const labelSig = t => t ? bakeSig(t, '', LABEL_KEYS) : '';
+  // 레이어에 그림을 붙인다 (n.bake 는 컴포넌트 좌표, 레이어 기준 상대 좌표로 바꿔 둔다)
+  function attachBake(layer, nb, extra) {
+    if (!nb) { delete layer.bake; return; }
+    layer.bake = { src: nb.src, dx: nb.x - layer.x, dy: nb.y - layer.y, w: nb.w, h: nb.h, alpha: nb.alpha == null ? 1 : nb.alpha, lw: layer.w, lh: layer.h };
+    layer.bake.sig = bakeSig(layer, extra);
+  }
+  const bakeOf = (l, extra) => l.bake && bakeOk(l, extra) ? { src: l.bake.src, x: l.x + l.bake.dx, y: l.y + l.bake.dy, w: l.bake.w, h: l.bake.h, alpha: l.bake.alpha } : undefined;
+
   // ── 공통 정리 ────────────────────────────────────────────────────────────
   const clone = o => JSON.parse(JSON.stringify(o));
   // 도형 안에 들어 있는 텍스트를 도형의 '라벨'로 묶고 지금 여백을 패딩으로 잡는다 (= 오토 레이아웃 켜기)
@@ -159,7 +181,7 @@
   // 왼쪽 위를 (0,0) 으로 옮기고 크기를 잰다
   function normalize(nodes) {
     const x0 = Math.min(...nodes.map(n => n.x)), y0 = Math.min(...nodes.map(n => n.y));
-    nodes.forEach(n => { n.x = Math.round(n.x - x0); n.y = Math.round(n.y - y0); delete n.cx; delete n.cy; delete n.gw; if (n.clip) { n.clip.x -= x0; n.clip.y -= y0; } });
+    nodes.forEach(n => { n.x = Math.round(n.x - x0); n.y = Math.round(n.y - y0); delete n.cx; delete n.cy; delete n.gw; if (n.clip) { n.clip.x -= x0; n.clip.y -= y0; } if (n.bake) { n.bake.x -= x0; n.bake.y -= y0; } });
     const w = Math.max(...nodes.map(n => n.x + n.w)), h = Math.max(...nodes.map(n => n.y + n.h));
     return { nodes, w: Math.round(w), h: Math.round(h) };
   }
@@ -174,6 +196,7 @@
       if (n.label) sc(n.label);
       if (n.pad) { n.pad.x = Math.round(n.pad.x * k); if (n.pad.y != null) n.pad.y = Math.round(n.pad.y * k); }
       scaleFx(n.fx, k); scaleSh(n.shadows, k); if (n.label) scaleSh(n.label.shadows, k);
+      if (n.bake) for (const p of ['x', 'y', 'w', 'h']) n.bake[p] *= k;
     }
     return nodes;
   }
@@ -198,8 +221,9 @@
       const native = { app: 'blog', layer: clone(l) };
       if (l.type === 'r' && l.shape !== 'arrow') {
         const n = { t: 'box', x: l.x, y: l.y, w: l.w, h: l.h, fill: l.fill, radius: l.radius || 0,
-          stroke: l.stroke || null, strokeW: l.strokeW || 0, rot: l.rot || 0, native, noNest: !!l.guide, fx: l.fx ? clone(l.fx) : undefined };
+          stroke: l.stroke || null, strokeW: l.strokeW || 0, rot: l.rot || 0, native, noNest: !!l.guide || !!l.bake, fx: l.fx ? clone(l.fx) : undefined };
         const t = label.get(l.id);
+        n.bake = bakeOf(l, t ? 'A:' + labelSig(t) : '');
         if (t) {
           n.label = { text: t.text, size: t.size, weight: t.weight, family: fam(t), color: t.color, lh: t.lh, ls: t.ls, rich: t.rich || null, shadows: t.shadows, native: { app: 'blog', layer: clone(t) } };
           n.pad = { x: t.fitPad != null ? t.fitPad : Math.round(t.size * 0.45), y: t.fitPadY != null ? t.fitPadY : null };
@@ -211,7 +235,7 @@
         const m = measure(st);
         const off = l.align === 'center' ? (l.w - m.w) / 2 : l.align === 'right' ? l.w - m.w : 0;
         nodes.push({ t: 'text', x: l.x, y: l.y, w: l.w, h: Math.round(m.h), ...st, color: l.color, align: l.align || 'left',
-          rich: l.rich || null, shadows: l.shadows, native, cx: l.x + off + m.w / 2, cy: l.y + m.h / 2, gw: m.w });
+          rich: l.rich || null, shadows: l.shadows, native, bake: bakeOf(l, ''), cx: l.x + off + m.w / 2, cy: l.y + m.h / 2, gw: m.w });
       } else if (l.type === 'i') {
         nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: Math.round(l.w / (l.ar || 1)), src: l.src, opacity: 1, radius: 0, native });
       } else {
@@ -246,7 +270,10 @@
           if (n.pad) { t.fitBox = r.id; t.fitPad = n.pad.x; t.fitPadY = n.pad.y; t.fitAll = true; delete t.fitDy; }
           else { delete t.fitBox; t.y = Math.round(y + (n.h - measure(t).h) / 2); }
           out.push(t);
-        }
+          delete t.bake;
+          attachBake(r, n.bake, (n.pad ? 'A:' : '') + labelSig(t));      // 버튼 그림에는 글자도 들어 있다 — 도형·글자 둘 다 그대로일 때만 그림으로
+          if (r.bake) r.bake.label = t.id;
+        } else attachBake(r, n.bake, '');
       } else if (n.t === 'text') {
         const t = mk.tLayer(base(n, { text: n.text, size: n.size, weight: n.weight || 400, color: n.color, align: n.align, lh: n.lh || 1.3, ls: n.ls || 0,
           font: font(n.family), x, y, w: n.w }));
@@ -254,6 +281,7 @@
         if (n.shadows && n.shadows.length) t.shadows = n.shadows; else delete t.shadows;
         if (n.opacity != null && n.opacity < 1) t.opacity = n.opacity;
         delete t.fitBox; delete t.gid; t.id = mk.nid();
+        attachBake(t, n.bake, '');
         out.push(t);
       } else if (n.t === 'image') {
         const i = mk.iLayer(base(n, { src: n.src, x, y, w: n.w, ar: n.w / Math.max(1, n.h) }));
@@ -302,7 +330,7 @@
     for (const l of layers) {
       const native = { app: 'banner', layer: clone(l) };
       if (l.kind === 'rect') {
-        const n = { t: 'box', x: l.x, y: l.y, w: l.w, h: l.h, fill: l.fill, radius: l.radius || 0, opacity: l.opacity == null ? 1 : l.opacity, native, fx: l.fx ? clone(l.fx) : undefined };
+        const n = { t: 'box', x: l.x, y: l.y, w: l.w, h: l.h, fill: l.fill, radius: l.radius || 0, opacity: l.opacity == null ? 1 : l.opacity, native, fx: l.fx ? clone(l.fx) : undefined, bake: bakeOf(l), noNest: !!l.bake };
         if (l.text && l.text.trim()) {
           const f = parseFont(l.font);
           n.label = { text: l.text, size: l.size, weight: f.weight, family: f.family, color: l.color, lh: l.lh, ls: l.ls, shadows: l.shadows };
@@ -312,7 +340,7 @@
       } else if (l.kind === 'text') {
         const f = parseFont(l.font), m = tm(l);
         nodes.push({ t: 'text', x: l.x, y: l.y, w: l.w, h: Math.round(Math.max(m.h, l.size)), text: l.text, size: l.size,
-          weight: f.weight, family: f.family, color: l.color, align: l.align, lh: l.lh, ls: l.ls, shadows: l.shadows, opacity: l.opacity, native,
+          weight: f.weight, family: f.family, color: l.color, align: l.align, lh: l.lh, ls: l.ls, shadows: l.shadows, opacity: l.opacity, native, bake: bakeOf(l),
           cx: m.left + m.maxW / 2, cy: l.y + m.h / 2, gw: m.maxW });
       } else if (l.kind === 'image') {
         nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: l.h, src: l.src, opacity: l.opacity == null ? 1 : l.opacity, radius: l.radius || 0, native });
@@ -339,11 +367,13 @@
         if (L && n.pad) r.auto = { padX: n.pad.x, padY: n.pad.y }; else delete r.auto;
         if (n.fx) r.fx = n.fx; else delete r.fx;
         if (L && L.shadows && L.shadows.length) r.shadows = L.shadows; else delete r.shadows;
+        attachBake(r, n.bake);
         out.push(r);
       } else if (n.t === 'text') {
         out.push(base(n, { kind: 'text', role: 'free', name: (n.text || '텍스트').split('\n')[0].slice(0, 20), x, y, w: n.w,
           text: String(n.text || '').replace(/\[\[|\]\]/g, ''), size: n.size, lh: n.lh || 1.3, ls: n.ls || 0, color: n.color, align: n.align || 'left',
           font: fontName(n.family, n.weight), shadows: n.shadows && n.shadows.length ? n.shadows : undefined, opacity: n.opacity == null ? 1 : n.opacity }));
+        attachBake(out[out.length - 1], n.bake);
       } else if (n.t === 'image') {
         out.push(base(n, { kind: 'image', role: 'object', name: '이미지', x, y, w: n.w, h: n.h, src: n.src, opacity: n.opacity == null ? 1 : n.opacity, radius: n.radius || 0 }));
       } else skipped.push(n);
@@ -557,7 +587,9 @@
     c.translate(pad, pad); c.scale(k, k);
     for (const n of comp.nodes) {
       c.save(); c.globalAlpha = n.opacity == null ? 1 : n.opacity;
-      if (n.t === 'box') {
+      const bim = n.bake && await loadImg(n.bake.src);
+      if (bim) { c.globalAlpha = n.bake.alpha == null ? 1 : n.bake.alpha; c.drawImage(bim, n.bake.x, n.bake.y, n.bake.w, n.bake.h); }
+      else if (n.t === 'box') {
         paintBox(c, n, { k });
         if (n.label) { const mm = measure(n.label); drawLines(c, n.label, n.x, n.y + (n.h - mm.h) / 2, n.w, 'center'); }
       } else if (n.t === 'text') drawLines(c, n, n.x, n.y, n.w, n.align);
@@ -640,6 +672,8 @@
     const warn = m => warns.add(m);
     const ox = root.absoluteBoundingBox.x, oy = root.absoluteBoundingBox.y;
     const nodes = [];
+    const bakes = opts.bakes || {};
+    const bakeFor = (n, alpha) => { const b = bakes[n.id]; return b && b.src ? { src: b.src, x: b.x - ox, y: b.y - oy, w: b.w, h: b.h, alpha } : null; };
     // 프레임의 '내용 자르기(Clip content)' — 넘친 부분은 피그마처럼 잘라야 한다
     let clip = null;
     const inter = (a, c) => { const x = Math.max(a.x, c.x), y = Math.max(a.y, c.y), x2 = Math.min(a.x + a.w, c.x + c.w), y2 = Math.min(a.y + a.h, c.y + c.h);
@@ -649,7 +683,11 @@
         const r = { x: node.x, y: node.y, w: node.w, h: node.h }, i = inter(r, clip);
         if (!i) return;                                                // 완전히 잘려 안 보이는 것
         const inside = i.w >= r.w - .5 && i.h >= r.h - .5;
-        if (!inside) {
+        if (!inside && node.bake) {                                      // 피그마 그림을 경계에서 잘라 쓴다 (100% 같게)
+          const b = node.bake;
+          for (const k of Object.keys(node)) if (!['name', 'fromFigma'].includes(k)) delete node[k];
+          Object.assign(node, { t: 'image', x: b.x, y: b.y, w: b.w, h: b.h, src: b.src, opacity: b.alpha == null ? 1 : b.alpha, radius: 0, clip: { ...clip } });
+        } else if (!inside) {
           // 모서리 없는 단색 사각형만 크기를 줄이고, 나머지(그림·글자·배지·둥근 도형·효과)는 경계에서 픽셀로 잘라 그림으로 바꾼다 (applyClips)
           const fx = node.fx || {}, plain = node.t === 'box' && !node.label && !node.radius && !fx.radii && !fx.effects && !fx.stroke && fx.shape !== 'ellipse' &&
             (fx.fills || []).every(p => p.type === 'SOLID');
@@ -692,12 +730,20 @@
       if (st.textAlignVertical === 'CENTER') t.y += (b.h - m.h) / 2; else if (st.textAlignVertical === 'BOTTOM') t.y += b.h - m.h;
       const off = t.align === 'center' ? (t.w - m.w) / 2 : t.align === 'right' ? t.w - m.w : 0;
       Object.assign(t, { cx: t.x + off + m.w / 2, cy: t.y + m.h / 2, gw: m.w });
+      const tb = bakeFor(n, op / (n.opacity == null ? 1 : n.opacity)); if (tb) t.bake = tb;
       return t;
     };
     function walk(n, op) {
       if (!visible(n)) return;
-      op = (op == null ? 1 : op) * (n.opacity == null ? 1 : n.opacity);
+      const parentOp = op == null ? 1 : op;
+      op = parentOp * (n.opacity == null ? 1 : n.opacity);
       const kids = (n.children || []).filter(visible);
+      // 피그마가 그린 그림이 있으면 — 글자 없는 요소는 그 그림 한 장으로 (아이콘·사진·벡터·마스크 모두 100% 같다)
+      const bk = bakeFor(n, parentOp);
+      if (bk && n !== root && n.type !== 'TEXT' && !hasText(n)) {
+        push({ t: 'image', x: bk.x, y: bk.y, w: bk.w, h: bk.h, src: bk.src, opacity: parentOp, radius: 0, name: n.name, fromFigma: n.id });
+        return;
+      }
       // 그릴 수 없는 것 → 피그마가 렌더한 그림. 글자가 들어 있으면 글자를 살리려고 그림으로 굽지 않는다
       const imgFill = (n.fills || []).some(p => visible(p) && p.type === 'IMAGE');
       const oddPaint = [...(n.fills || []), ...(n.strokes || [])].some(p => visible(p) && !/^(SOLID|IMAGE|GRADIENT_(LINEAR|RADIAL|ANGULAR|DIAMOND))$/.test(p.type));
@@ -707,7 +753,7 @@
       if (VECTORISH.has(n.type) || !CONTAINER.has(n.type) && n.type !== 'TEXT' || partialArc || oddPaint || mask || blend || (rotated(n) && n !== root)) {
         if (n.type === 'TEXT') { if (rotated(n)) warn(`'${n.name}' 글자의 회전은 빼고 가져왔습니다`); push(textNode(n, op)); return; }
         if (!hasText(n)) return raster(n, op);
-        warn(`'${n.name}' 은(는) 그대로 그릴 수 없는 요소(회전·마스크·혼합 모드)가 있어 근사치로 가져왔습니다`);
+        if (!Object.keys(bakes).length) warn(`'${n.name}' 은(는) 그대로 그릴 수 없는 요소(회전·마스크·혼합 모드)가 있어 근사치로 가져왔습니다 — 피그마 플러그인으로 가져오면 그대로 나옵니다`);
       }
       if (n.type === 'TEXT') { push(textNode(n, op)); return; }
       const b = bb(n);
@@ -727,6 +773,7 @@
         const solid = fills.find(p => p.type === 'SOLID');
         const box = { t: 'box', x: b.x, y: b.y, w: b.w, h: b.h, fill: solid ? solid.color : 'transparent', radius: n.cornerRadius || 0,
           opacity: op, fx, name: n.name, noNest: true };
+        if (bk) box.bake = bk;                     // 자기 배경(또는 버튼은 글자까지) — 피그마 그림
         // 오토 레이아웃 — 텍스트 하나만 담은 프레임은 글자 + 패딩으로 크기가 정해지는 박스가 된다
         const texts = kids.filter(c => c.type === 'TEXT');
         if (n.layoutMode && n.layoutMode !== 'NONE' && texts.length === 1 && kids.length === 1 && !rotated(texts[0])) {
@@ -739,11 +786,11 @@
           if (hugX) box.pad = { x: Math.round((pl + pr) / 2), y: hugY ? Math.round((pt + pb) / 2) : null };
           if (pl !== pr || (hugY && pt !== pb)) warn(`'${n.name}' 의 좌우·상하 패딩이 달라 평균값으로 맞췄습니다`);
           if (t.align !== 'center' && (!hugX || n.primaryAxisAlignItems !== 'CENTER' && n.counterAxisAlignItems !== 'CENTER'))
-            if (!hugX) warn(`'${n.name}' 의 글자 정렬을 가운데로 맞췄습니다`);
+            { /* 정렬은 가운데로 맞춘다 — 피그마 그림이 있으면 보이는 모양은 같다 */ }
           push(box); return;
         }
         if (n.layoutMode && n.layoutMode !== 'NONE' && texts.length && kids.length > 1)
-          warn(`'${n.name}' 은(는) 글자 외 요소가 함께 있어, 글자를 고쳐도 도형 크기가 자동으로 바뀌지 않습니다`);
+          { /* 글자 외 요소가 함께 든 오토 레이아웃은 크기 자동 조절을 하지 않는다 (정보성이라 알리지 않는다) */ }
         push(box);
       }
       const prev = clip;
@@ -751,7 +798,13 @@
         const c = clip ? inter(b, clip) : b;
         clip = c ? { ...c, r: clip && clip.r != null && !n.cornerRadius ? clip.r : (n.rectangleCornerRadii || [n.cornerRadius || 0, n.cornerRadius || 0, n.cornerRadius || 0, n.cornerRadius || 0]) } : { x: 0, y: 0, w: 0, h: 0 };
       }
-      kids.forEach(c => walk(c, op));
+      // 마스크 — 마스크 도형 자체는 그리지 않고, 뒤따르는 형제들을 그 영역으로 자른다 (사각·둥근 마스크는 정확, 그 밖의 모양은 영역 근사)
+      const pre = clip;
+      for (const c of kids) {
+        if (c.isMask) { const mb = bb(c); const ci = clip ? inter(mb, clip) : mb; clip = ci ? { ...ci, r: c.rectangleCornerRadii || [c.cornerRadius || 0, c.cornerRadius || 0, c.cornerRadius || 0, c.cornerRadius || 0] } : { x: 0, y: 0, w: 0, h: 0 }; continue; }
+        walk(c, op);
+      }
+      clip = pre;
       clip = prev;
     }
     walk(root, 1);
@@ -760,7 +813,9 @@
     // 내용을 자르는 프레임이면 크기 = 피그마 프레임 크기 그대로 (넘친 요소 때문에 여백이 생기지 않게)
     if (root.clipsContent) {
       nodes.forEach(n => { n.x = Math.round(n.x); n.y = Math.round(n.y); delete n.cx; delete n.cy; delete n.gw; });
-      return { nodes, w: Math.round(root.absoluteBoundingBox.width), h: Math.round(root.absoluteBoundingBox.height), fixed: true, origin: 'figma', warnings: [...warns] };
+      const rf = (root.fills || []).filter(p => visible(p) && p.type === 'SOLID')[0];
+      return { nodes, w: Math.round(root.absoluteBoundingBox.width), h: Math.round(root.absoluteBoundingBox.height), fixed: true, frame: true,
+        bg: rf ? frgba(rf.color, rf.opacity) : null, origin: 'figma', warnings: [...warns] };
     }
     const res = normalize(nodes);
     return { ...res, origin: 'figma', warnings: [...warns] };
@@ -832,6 +887,8 @@
     const comp = { name, ts: Date.now(), w: conv.w, h: conv.h, origin: conv.origin, nodes: conv.nodes, group: group || '' };
     if (conv.warnings && conv.warnings.length) comp.warnings = conv.warnings;
     if (conv.source) comp.source = conv.source;
+    if (conv.frame) comp.frame = true;
+    if (conv.bg) comp.bg = conv.bg;
     comp.thumb = await thumb(comp);
     comp.id = await put(comp);
     return comp;
@@ -857,5 +914,6 @@
   window.UIKit = { list, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
     exportJSON, importJSON, parseFont, fontName, fromFigma, figmaNeeds, parseFigmaLink, applyClips,
     paintBox, paintURL, outset, hasFx, textShadowCSS, img, set onImage(fn) { onImage = fn; },
+    bakeOk, bakeSig, labelSig,
     fonts: FONT_LIB.map(x => ({ family: x[0], weights: x[2] })), ensureFont, loadFonts, cssFamily, familyOf, set onFont(fn) { onFont = fn; } };
 })();

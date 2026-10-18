@@ -331,6 +331,11 @@ function srcRect(img, l) {
 function drawLayer(ctx, l) {
   ctx.save();
   ctx.globalAlpha = l.opacity == null ? 1 : l.opacity;
+  // 피그마에서 가져온 그대로면 피그마가 그린 그림을 쓴다 (100% 같게). 고치는 순간부터는 아래에서 직접 그린다
+  if (l.bake && window.UIKit && !(editing && editing.l === l) && UIKit.bakeOk(l)) {
+    const im = UIKit.img(l.bake.src);
+    if (im) { ctx.globalAlpha = l.bake.alpha == null ? 1 : l.bake.alpha; ctx.drawImage(im, l.x + l.bake.dx, l.y + l.bake.dy, l.bake.w, l.bake.h); ctx.restore(); return; }
+  }
   if (l.kind === 'image') {
     const img = imgCache.get(l.src);
     if (img) {
@@ -388,6 +393,7 @@ function drawText(ctx, l, top) {
 function syncAuto() {
   for (const l of S.layers) {
     if (l.kind !== 'rect' || !l.auto) continue;
+    if (l.bake && window.UIKit && UIKit.bakeOk(l)) { if (l.bake.lw) { l.w = l.bake.lw; l.h = l.bake.lh; } continue; }   // 피그마 그림으로 보이는 동안은 피그마 크기 그대로
     setTextFont(actx, l);
     const lines = String(l.text || '').split('\n');
     const tw = Math.max(0, ...lines.map(t => t ? actx.measureText(t).width : 0));
@@ -1591,10 +1597,12 @@ async function openUiEditor(id) {
   if (!c) return toast('컴포넌트를 찾지 못했습니다 — 이미지 소스에서 삭제됐을 수 있습니다', true);
   if (uiDirty() && !confirm('지금 편집 중인 컴포넌트의 저장하지 않은 수정이 사라집니다. 계속할까요?')) return;
   closeEdit();
-  const m = Math.max(40, ...c.nodes.map(n => n.t === 'box' ? UIKit.outset(n) + 8 : 0));
+  // 피그마 프레임은 캔버스 = 프레임 크기 그대로(여백 없음), 배경도 프레임 배경색. 그 밖의 UI 는 그림자가 보이게 약간 띄운다
+  const m = c.frame ? 0 : Math.max(24, ...c.nodes.map(n => n.t === 'box' ? UIKit.outset(n) + 8 : 0));
   S = blankState('free');
+  const bgc = c.bg && /^#[0-9a-f]{6}$/i.test(c.bg) ? c.bg : c.frame ? '#ffffff' : '#e9ecf1';
   Object.assign(S, { w: Math.max(FREE_MIN, Math.round(c.w + m * 2)), h: Math.max(FREE_MIN, Math.round(c.h + m * 2)),
-    bg: { mode: 'solid', c1: '#e9ecf1', c2: '#5a6478', angle: 90 }, name: c.name });
+    bg: { mode: 'solid', c1: bgc, c2: '#5a6478', angle: 90 }, name: c.name });
   S.layers = UIKit.toBanner(c, { x: m, y: m }, 1, uid).layers;   // 편집할 땐 그룹으로 묶지 않는다 — 하나씩 바로 고친다
   sel = null; curPlan = null; $('#planSel').value = ''; paintPlanMeta();
   $('#typeSel').value = 'free'; $('#projName').value = c.name;

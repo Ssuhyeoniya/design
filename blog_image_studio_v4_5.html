@@ -534,7 +534,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="exportZone"></div>
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
-<script src="shared/ui-kit.js?v=20261018-7"></script>
+<script src="shared/ui-kit.js?v=20261018-8"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -685,6 +685,7 @@ function syncFitBoxes(list){
     if(l.type!=='t'||!l.fitBox)return;
     const box=list.find(x=>x.id===l.fitBox);
     if(!box)return;
+    if(box.bake&&window.UIKit&&UIKit.bakeOk(box,'A:'+UIKit.labelSig(l))){if(box.bake.lw){box.w=box.bake.lw;box.h=box.bake.lh;}return;}   // 피그마 그림으로 보이는 동안은 피그마 크기 그대로
     const pad=l.fitPad!=null?l.fitPad:Math.round(l.size*0.45);
     const w=Math.max(Math.round(textGlyphW(l)+pad*2),Math.round(l.size*1.6));
     box.w=w;l.w=w;l.x=box.x;l.align='center';
@@ -1205,7 +1206,26 @@ let cur=0,selLayer=null,zoom=0,viewMode='pc';
 const $=s=>document.querySelector(s);
 const canvas=$('#canvas'),slideList=$('#slideList'),props=$('#props');
 
+// 피그마에서 가져온 그대로인 레이어는 피그마가 그린 그림(bake)을 쓴다 — 100% 같게. 고치는 순간 직접 그린다
+let _bakeList=null;
+function bakeImg(l){
+  const b=l.bake;
+  return `<img src="${b.src}" draggable="false" style="position:absolute;left:${b.dx}px;top:${b.dy}px;width:${b.w}px;height:${b.h}px;max-width:none;pointer-events:none;${b.alpha!=null&&b.alpha<1?`opacity:${b.alpha};`:''}">`;
+}
+function boxBakeOk(r){
+  if(!r||!r.bake||!window.UIKit)return false;
+  const fit=(_bakeList||[]).find(x=>x.type==='t'&&x.fitBox===r.id);
+  const t=fit||(r.bake.label&&(_bakeList||[]).find(x=>x.id===r.bake.label));
+  return UIKit.bakeOk(r,t?(fit?'A:':'')+UIKit.labelSig(t):'');
+}
 function layerHTML(l){
+  if(l.type==='t'&&window.UIKit){
+    const host=l.fitBox?(_bakeList||[]).find(x=>x.id===l.fitBox):(_bakeList||[]).find(x=>x.bake&&x.bake.label===l.id);
+    if(host&&boxBakeOk(host))return {cls:'layer t',style:`left:${l.x}px;top:${l.y}px;width:${l.w}px;font-size:${l.size}px;line-height:${l.lh};opacity:0;`,html:esc(l.text)};
+    if(l.bake&&UIKit.bakeOk(l,''))return {cls:'layer t',style:`left:${l.x}px;top:${l.y}px;width:${l.w}px;font-size:${l.size}px;font-weight:${l.weight};line-height:${l.lh};letter-spacing:${l.ls}em;text-align:${l.align};color:transparent;${l.font?`font-family:${l.font};`:''}`,html:esc(l.text)+bakeImg(l)};
+  }
+  if(l.type==='r'&&l.bake&&boxBakeOk(l))
+    return {cls:'layer',style:`left:${l.x}px;top:${l.y}px;width:${l.w}px;height:${l.h}px;${l.rot?`transform:rotate(${l.rot}deg);transform-origin:${l.rotOrigin||'center center'};`:''}`,html:bakeImg(l)};
   if(l.type==='t'){
     const colored=l.rich?sanitizeRich(l.rich):esc(l.text).replace(/\[\[([\s\S]+?)\]\]/g,`<span style="color:${l.accent||'#00e31e'}">$1</span>`);
     const inner=l.hl?`<span class="hl-inner" style="background:${l.hlColor};padding:.06em .18em;">${colored}</span>`:colored;
@@ -1286,6 +1306,7 @@ function renderCanvas(){
     }
   }
   if(window.UIKit)layers.forEach(l=>{if(l.type==='t'&&l.font)UIKit.ensureFont(l.font,l.weight);});   // 무료 글꼴 모음은 쓰는 순간 받는다
+  _bakeList=layers;
   syncFitBoxes(layers); // 오토핏 필 동기화 (텍스트 변경 시 자동 반영)
   canvas.querySelectorAll('.layer,.area-guide,.snapline').forEach(e=>e.remove());
   if(!moL)(s.guides||[]).forEach(g=>{
@@ -2360,6 +2381,11 @@ function layerDblEdit(e){
   }
   if(lay.type!=='t')return;
   e.preventDefault();
+  { // 피그마 그림으로 보이던 글자·버튼은 편집 가능한 상태로 바꾼다
+    const arr=LS(s0), host=lay.fitBox?arr.find(x=>x.id===lay.fitBox):arr.find(x=>x.bake&&x.bake.label===lay.id);
+    let un=false; if(host&&host.bake){delete host.bake;un=true;} if(lay.bake){delete lay.bake;un=true;}
+    if(un)renderAll();
+  }
   const el=canvas.querySelector(`.layer.t[data-id="${lay.id}"]`);if(!el)return;
   const l=lay;
   if(l.rich)el.innerHTML=sanitizeRich(l.rich);
@@ -3018,6 +3044,7 @@ function buildExportNode(s,mode){
   const useLayers = moL || s.layers;
   const cw = moL ? MO_W : (mode==='mo'?SAFE_W:P.W);
   const ch = moL ? MO_H : P.H;
+  _bakeList=useLayers;
   syncFitBoxes(useLayers); // 출력도 캔버스와 같은 오토핏 결과를 쓰도록 동기화(PC/MO 공통)
   const d=document.createElement('div');
   d.className='exp-canvas';
