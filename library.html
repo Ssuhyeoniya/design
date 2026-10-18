@@ -45,6 +45,26 @@
   .src-card .sc-acts .sc-del{color:var(--danger);border-color:var(--danger);}
   .src-card .sc-acts .sc-del:hover{background:var(--danger);color:#fff;}
   .empty{padding:70px 0;text-align:center;color:var(--text-faint);font-size:13px;line-height:1.9;}
+  .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn.pri:hover{background:#0057d9;}
+
+  /* 이미지 / UI 컴포넌트 탭 */
+  #tabs{display:flex;gap:4px;background:#f1f3f5;border:1px solid var(--border);border-radius:8px;padding:3px;}
+  #tabs button{border:none;background:none;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--text-sub);padding:5px 12px;border-radius:6px;cursor:pointer;}
+  #tabs button.on{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+
+  /* 직접 등록 — 끌어다 놓기 */
+  #upDrop{border:1.5px dashed var(--border-strong);border-radius:12px;background:#fff;padding:18px;text-align:center;font-size:12.5px;color:var(--text-sub);line-height:1.7;cursor:pointer;margin-bottom:18px;}
+  #upDrop:hover,#upDrop.over,body.drag #upDrop{border-color:var(--accent);background:#f0f6ff;color:var(--accent);}
+  #upDrop b{color:var(--text);}
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#1f2328;color:#fff;font-size:12.5px;padding:9px 16px;border-radius:9px;z-index:400;display:none;box-shadow:0 8px 24px rgba(0,0,0,.2);}
+  #toast.bad{background:var(--danger);}
+
+  /* UI 컴포넌트 카드 */
+  .ui-card .sc-th{background:repeating-conic-gradient(#f1f2f5 0 25%,#fff 0 50%) 0 0/18px 18px;}
+  .ui-card .sc-name[contenteditable]{outline:none;border-radius:4px;cursor:text;}
+  .ui-card .sc-name[contenteditable]:focus{background:#f0f6ff;}
+  .ui-tip{font-size:12px;color:var(--text-sub);line-height:1.7;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:18px;}
 
   /* 확인 모달 */
   #confirmBack{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:300;display:none;align-items:center;justify-content:center;}
@@ -64,12 +84,24 @@
       <a href="banner_studio/index.html">🪧 배너 스튜디오</a>
       <a class="on" href="library.html">🖼 이미지 소스</a>
     </nav>
+    <div id="tabs" role="tablist">
+      <button class="on" data-tab="img">이미지</button>
+      <button data-tab="ui">🧩 UI 컴포넌트</button>
+    </div>
     <span class="cnt" id="count"></span>
-    <div class="actions">
+    <div class="actions" id="actImg">
+      <button class="btn small pri" id="upBtn">＋ 이미지 등록</button>
       <button class="btn small" id="refresh">↻ 새로고침</button>
       <button class="btn small danger" id="clearAll">🗑 전체 삭제</button>
     </div>
+    <div class="actions" id="actUi" style="display:none">
+      <button class="btn small" id="uiImport" title="다른 PC·팀원이 내보낸 UI 컴포넌트 파일(.json) 가져오기">⤒ 가져오기</button>
+      <button class="btn small" id="uiExportAll" title="모든 UI 컴포넌트를 .json 파일로 내려받기">⤓ 전체 내보내기</button>
+    </div>
   </div>
+  <input type="file" id="upInput" accept="image/*" multiple hidden>
+  <input type="file" id="uiImportInput" accept=".json,application/json" hidden>
+  <div id="toast"></div>
   <div id="body"><div class="empty">불러오는 중…</div></div>
 
   <div id="confirmBack"><div id="confirmBox">
@@ -77,6 +109,7 @@
     <div class="row"><button class="cancel">취소</button><button class="ok">삭제</button></div>
   </div></div>
 
+<script src="shared/ui-kit.js?v=20261018-1"></script>
 <script>
 const $=s=>document.querySelector(s);
 
@@ -95,6 +128,15 @@ function idb(){
     };
     q.onsuccess=()=>res(q.result);
     q.onerror=()=>rej(q.error);
+  });
+}
+async function assetAdd(name,src){
+  const db=await idb();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('assets','readwrite');
+    tx.objectStore('assets').add({name,src,ts:Date.now()});
+    tx.oncomplete=res;tx.onerror=()=>rej(tx.error);
+    tx.onabort=()=>rej(tx.error||new Error('저장 중단 (용량 부족일 수 있어)'));
   });
 }
 async function assetList(){
@@ -159,7 +201,11 @@ function askConfirm(msg,okLabel){
 }
 
 /* ===== 렌더 ===== */
+let tab='img';
+const DROP='<div id="upDrop">이미지를 여기로 끌어다 놓거나 클릭해서 등록 · <b>Ctrl+V</b> 로 캡처·복사한 이미지 붙여넣기<br>등록한 이미지는 블로그 이미지 제작의 ⭐ 보관함과 배너 스튜디오의 스톡(⭐ 이미지 소스)에서 바로 쓸 수 있어.</div>';
+function bindDrop(){ const d=$('#upDrop'); if(d)d.onclick=()=>$('#upInput').click(); }
 async function render(){
+  if(tab==='ui')return renderUi();
   const body=$('#body'),cntEl=$('#count');
   let list;
   try{list=await assetList();}
@@ -169,10 +215,10 @@ async function render(){
   }
   cntEl.textContent=list.length?`총 ${list.length}개`:'';
   if(!list.length){
-    body.innerHTML='<div class="empty">보관된 이미지가 없어.<br>스튜디오에서 이미지의 <b>☆ 저장</b> 또는 보관함의 <b>＋ 파일 업로드로 보관</b> 을 하면<br>여기에서 이미지 소스를 확인할 수 있어.</div>';
-    return;
+    body.innerHTML=DROP+'<div class="empty">보관된 이미지가 없어.<br>위 영역에 이미지를 끌어다 놓거나 <b>＋ 이미지 등록</b> 을 누르면 바로 등록돼.<br>스튜디오에서 이미지의 <b>☆ 저장</b> 을 해도 여기에 모여.</div>';
+    bindDrop();return;
   }
-  body.innerHTML='<div class="src-grid">'+list.map(a=>{
+  body.innerHTML=DROP+'<div class="src-grid">'+list.map(a=>{
     const meta=srcMeta(a.src);
     return `<div class="src-card" data-aid="${a.id}">
       <div class="sc-th"><img src="${a.src}" loading="lazy" alt=""></div>
@@ -188,6 +234,7 @@ async function render(){
       </div>
     </div>`;
   }).join('')+'</div>';
+  bindDrop();
   body.querySelectorAll('.src-card').forEach(card=>{
     const id=+card.dataset.aid;
     const item=list.find(x=>x.id===id);
@@ -214,6 +261,122 @@ async function render(){
   });
 }
 
+/* ===== 직접 등록 — 파일 선택 · 끌어다 놓기 · 붙여넣기 ===== */
+let toastT;
+function toast(msg,bad){const t=$('#toast');t.textContent=msg;t.className=bad?'bad':'';t.style.display='block';clearTimeout(toastT);toastT=setTimeout(()=>t.style.display='none',2800);}
+const fileToDataURL=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(f);});
+const IMG_EXT=/\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i;
+async function addFiles(files){
+  let n=0;
+  for(const [i,f] of files.entries()){
+    if(!(/^image\//.test(f.type)||IMG_EXT.test(f.name||'')))continue;
+    if(f.size>30*1024*1024){toast(f.name+' — 30MB 를 넘어 건너뛰었어',true);continue;}
+    const name=(f.name&&f.name!=='image.png')?f.name.replace(/\.[^.]+$/,''):'붙여넣은 이미지 '+new Date().toLocaleString('ko-KR')+(i?' ('+(i+1)+')':'');
+    try{await assetAdd(name,await fileToDataURL(f));n++;}
+    catch(e){toast(f.name+' 등록 실패 — '+(e&&e.message||e),true);}
+  }
+  if(n){toast(n+'장을 등록했어');if(tab!=='img')switchTab('img');else render();}
+  else if(files.length)toast('이미지 파일이 아니라서 등록하지 않았어',true);
+}
+$('#upBtn').onclick=()=>$('#upInput').click();
+$('#upInput').onchange=e=>{addFiles([...e.target.files]);e.target.value='';};
+let dragDepth=0;
+const hasFiles=e=>[...(e.dataTransfer&&e.dataTransfer.types||[])].includes('Files');
+document.addEventListener('dragenter',e=>{if(!hasFiles(e))return;e.preventDefault();dragDepth++;document.body.classList.add('drag');});
+document.addEventListener('dragover',e=>{if(hasFiles(e))e.preventDefault();});
+document.addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;document.body.classList.remove('drag');}});
+document.addEventListener('drop',e=>{
+  if(!hasFiles(e))return;
+  e.preventDefault();dragDepth=0;document.body.classList.remove('drag');
+  const files=[...e.dataTransfer.files];
+  if(tab==='ui'&&files.some(f=>/\.json$/i.test(f.name)))return importUi(files.filter(f=>/\.json$/i.test(f.name)));
+  addFiles(files);
+});
+document.addEventListener('paste',e=>{
+  const t=e.target;
+  if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA)$/.test(t.tagName)))return;
+  const dt=e.clipboardData;if(!dt)return;
+  const files=[...(dt.files||[])];
+  for(const it of (dt.items||[]))if(it.kind==='file'){const f=it.getAsFile();if(f&&!files.some(x=>x.name===f.name&&x.size===f.size))files.push(f);}
+  if(files.length){e.preventDefault();addFiles(files);}
+});
+
+/* ===== UI 컴포넌트 탭 (shared/ui-kit.js) ===== */
+function switchTab(t){
+  tab=t;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
+  $('#actImg').style.display=t==='img'?'':'none';
+  $('#actUi').style.display=t==='ui'?'':'none';
+  try{localStorage.setItem('libTab',t);}catch(e){}
+  render();
+}
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+async function renderUi(){
+  const body=$('#body'),cntEl=$('#count');
+  let list;
+  try{list=await UIKit.list();}
+  catch(err){body.innerHTML='<div class="empty">이 환경에서는 UI 컴포넌트 저장소(브라우저 저장소)를 사용할 수 없어.</div>';cntEl.textContent='';return;}
+  cntEl.textContent=list.length?`총 ${list.length}개`:'';
+  const tip='<div class="ui-tip"><b>🧩 UI 컴포넌트</b> — 피그마의 컴포넌트처럼 버튼·배지·말풍선 같은 UI 를 저장해 두고 블로그 이미지 제작·배너 스튜디오에서 꺼내 써.<br>'+
+    '저장: 스튜디오에서 도형·텍스트를 Shift+클릭으로 함께 고른 뒤 <b>🧩 선택을 UI로 저장</b>. 도형 안의 글자는 <b>오토 레이아웃</b>으로 묶여서, 넣은 뒤 글자를 고치면 도형이 패딩에 맞춰 늘고 줄고, 글자를 다 지우면 도형도 사라져.<br>'+
+    '넣을 때는 복사본이라 여기서 이름을 바꾸거나 지워도 이미 만든 시안은 그대로야. 다른 PC·팀원과는 <b>⤓ 내보내기 / ⤒ 가져오기</b>(.json)로 나눠.</div>';
+  if(!list.length){body.innerHTML=tip+'<div class="empty">저장된 UI 컴포넌트가 없어.</div>';return;}
+  body.innerHTML=tip+'<div class="src-grid">'+list.map(c=>{
+    const auto=c.nodes.filter(n=>n.pad).length;
+    return `<div class="src-card ui-card" data-cid="${c.id}">
+      <div class="sc-th"><img src="${c.thumb}" loading="lazy" alt=""></div>
+      <div class="sc-meta">
+        <div class="sc-name" contenteditable="true" spellcheck="false" title="클릭해서 이름 수정">${esc(c.name)}</div>
+        <div class="sc-sub"><span><b>크기</b> ${c.w}×${c.h}px</span><span><b>요소</b> ${c.nodes.length}개</span>${auto?`<span><b>오토 레이아웃</b> ${auto}개</span>`:''}
+          <span><b>만든 곳</b> ${c.origin==='banner'?'배너 스튜디오':'블로그 이미지 제작'}</span><span><b>저장</b> ${fmtTs(c.ts)}</span></div>
+      </div>
+      <div class="sc-acts">
+        <button class="sc-png">PNG 다운로드</button>
+        <button class="sc-json">내보내기</button>
+        <button class="sc-del">삭제</button>
+      </div>
+    </div>`;
+  }).join('')+'</div>';
+  body.querySelectorAll('.ui-card').forEach(card=>{
+    const c=list.find(x=>x.id===+card.dataset.cid);if(!c)return;
+    const nm=card.querySelector('.sc-name');
+    nm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nm.blur();}});
+    nm.addEventListener('blur',async()=>{
+      const v=nm.textContent.trim()||'UI';
+      if(v===c.name)return;
+      try{await UIKit.rename(c.id,v);c.name=v;toast('이름을 바꿨어 — '+v);}catch(e){nm.textContent=c.name;toast('이름 변경 실패',true);}
+    });
+    card.querySelector('.sc-png').onclick=async()=>{
+      const blob=await (await fetch(await UIKit.thumb(c,Math.max(c.w,c.h)))).blob();
+      saveBlob(blob,c.name.replace(/[\\/:*?"<>|]/g,'_')+'.png');
+    };
+    card.querySelector('.sc-json').onclick=()=>saveBlob(new Blob([UIKit.exportJSON([c])],{type:'application/json'}),'UI-'+c.name.replace(/[\\/:*?"<>|]/g,'_')+'.json');
+    card.querySelector('.sc-del').onclick=async()=>{
+      const yes=await askConfirm(`UI 컴포넌트 "${c.name}"\n\n삭제할까요? 이미 시안에 넣은 사본은 그대로 남습니다.`,'삭제');
+      if(!yes)return;
+      try{await UIKit.del(c.id);await renderUi();}catch(e){alert('삭제 실패: '+(e&&e.message||e));}
+    };
+  });
+}
+async function importUi(files){
+  let n=0;
+  for(const f of files){
+    try{n+=await UIKit.importJSON(await f.text());}
+    catch(e){toast(f.name+' — '+(e&&e.message||e),true);}
+  }
+  if(n){toast(`UI 컴포넌트 ${n}개를 가져왔어`);if(tab!=='ui')switchTab('ui');else renderUi();}
+}
+$('#uiImport').onclick=()=>$('#uiImportInput').click();
+$('#uiImportInput').onchange=e=>{importUi([...e.target.files]);e.target.value='';};
+$('#uiExportAll').onclick=async()=>{
+  const list=await UIKit.list().catch(()=>[]);
+  if(!list.length){toast('내보낼 UI 컴포넌트가 없어',true);return;}
+  const d=new Date(),p=n=>String(n).padStart(2,'0');
+  saveBlob(new Blob([UIKit.exportJSON(list)],{type:'application/json'}),`UI컴포넌트-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}.json`);
+};
+// 다른 탭(스튜디오)에서 저장한 것도 돌아오면 반영
+window.addEventListener('focus',()=>render());
+
 $('#refresh').onclick=render;
 $('#clearAll').onclick=async()=>{
   let list;try{list=await assetList();}catch(e){list=[];}
@@ -223,7 +386,8 @@ $('#clearAll').onclick=async()=>{
   try{await assetClear();await render();}
   catch(err){alert('전체 삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
 };
-render();
+try{if(localStorage.getItem('libTab')==='ui'){tab='ui';}}catch(e){}
+switchTab(tab);
 </script>
 </body>
 </html>

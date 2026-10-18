@@ -119,6 +119,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .stk:hover .del{opacity:1;}
   .stk .del:hover{background:var(--danger);border-color:var(--danger);color:#fff;}
   #stockEmpty{font-size:.69rem;color:var(--text-faint);line-height:1.6;display:none;}
+  /* UI 컴포넌트 (스톡 보관함 아래) */
+  #stockbar .ui-head{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:.72rem;font-weight:700;color:var(--text-sub);}
+  #uiGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .uic{position:relative;aspect-ratio:3/2;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;cursor:pointer;
+    background:repeating-conic-gradient(#f1f2f5 0 25%,#fff 0 50%) 0 0/12px 12px;}
+  .uic:hover{border-color:var(--accent);}
+  .uic img{width:100%;height:calc(100% - 16px);object-fit:contain;display:block;}
+  .uic .nm{position:absolute;left:0;right:0;bottom:0;height:16px;padding:0 5px;font-size:.62rem;line-height:16px;color:var(--text-sub);background:#fff;border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .uic .del{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;border:1px solid var(--border-strong);background:#fff;color:var(--text-sub);font-size:11px;line-height:15px;text-align:center;opacity:0;}
+  .uic:hover .del{opacity:1;}
+  .uic .del:hover{background:var(--danger);border-color:var(--danger);color:#fff;}
+  #uiEmpty{font-size:.69rem;color:var(--text-faint);line-height:1.6;margin:0;}
+  #nameBack{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:310;display:none;align-items:center;justify-content:center;}
+  #nameBack.show{display:flex;}
+  #nameBox{background:#fff;border-radius:12px;padding:20px 22px;width:340px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  #nameBox .msg{font-size:13px;font-weight:700;margin-bottom:10px;}
+  #nameBox input{width:100%;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;}
+  #nameBox .row{display:flex;gap:8px;margin-top:14px;justify-content:flex-end;}
   #stockSrc{font-size:.62rem;color:var(--text-faint);}
   .crop-ov{position:absolute;z-index:40;pointer-events:none;}
   .crop-dim{position:absolute;background:rgba(0,0,0,.45);pointer-events:none;}
@@ -431,6 +449,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <select id="stockCat"><option value="">전체 카테고리</option></select>
       <div id="stockGrid"></div>
       <p id="stockEmpty">아직 등록된 이미지가 없어. 위 영역에 끌어다 놓으면 배너 스튜디오와 같은 보관함에 저장돼.</p>
+      <div class="ui-head">🧩 UI 컴포넌트 <span id="uiCnt"></span></div>
+      <div id="uiGrid"></div>
+      <p id="uiEmpty">저장된 UI 가 없어. 도형·텍스트를 Shift+클릭으로 함께 고른 뒤 우측 <b>🧩 선택을 UI로 저장</b> 을 누르면 여기와 배너 스튜디오에 같이 보여.</p>
     </div>
   </div>
 
@@ -501,10 +522,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   </div>
 </div>
 
+<div id="nameBack"><div id="nameBox">
+  <div class="msg"></div><input type="text" maxlength="40">
+  <div class="row"><button class="btn small cancel">취소</button><button class="btn small primary ok">저장</button></div>
+</div></div>
 <div id="busy"><div class="spin"></div><p id="busyMsg">처리 중…</p></div>
 <div id="exportZone"></div>
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
+<script src="shared/ui-kit.js?v=20261018-1"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -655,7 +681,7 @@ function syncFitBoxes(list){
     if(l.fitPadY!=null){ // 세로 오토핏: 줄 수 기준, 최대 2줄 높이에서 고정
       const lh2=l.size*(l.lh||1.3);
       const realLines=String(l.text||'').split('\n').length;
-      const capLines=Math.min(2,Math.max(1,realLines));
+      const capLines=l.fitAll?Math.max(1,realLines):Math.min(2,Math.max(1,realLines));
       box.h=Math.round(capLines*lh2+l.fitPadY*2);
     }
     // 뱃지 필은 항상 완전한 캡슐(반지름=높이/2) — 폭만 늘고 줄어든다
@@ -763,6 +789,41 @@ function snapTextToShape(){
     if(!box)return;
     hit++;
     centerTextIn(t,{x:box.x,y:box.y,w:box.w,h:box.h});
+  });
+  if(!hit){alert('겹치는 도형을 못 찾았어.\nShift+클릭으로 도형과 텍스트를 함께 선택한 뒤 다시 눌러줘.');return;}
+  renderAll(); recordHistory();
+}
+// 오토 레이아웃 짝 — 텍스트를 지우면 그 도형도, 도형을 지우면 그 위 글자도 함께 지운다
+function withFitPartners(arr,ids){
+  const out=new Set(ids.map(Number));
+  arr.forEach(x=>{
+    if(x.type==='t'&&x.fitBox){
+      if(out.has(x.id))out.add(x.fitBox);
+      else if(out.has(x.fitBox))out.add(x.id);
+    }
+  });
+  return [...out];
+}
+/* 오토 레이아웃 — 텍스트와 그 아래 도형을 묶어, 지금 여백을 패딩으로 고정한다.
+   이후 글자를 고치면 도형이 글자 + 패딩에 맞춰 늘고 준다 (피그마 Hug) */
+function makeAutoLayout(){
+  const s=slides[cur]; if(!s)return;
+  const arr=LS(s), ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer);
+  const texts=arr.filter(x=>x.type==='t'&&ids.has(x.id));
+  if(!texts.length){alert('텍스트 레이어를 먼저 선택해줘.\n(Shift+클릭으로 도형과 함께 고르면 그 도형에 묶어)');return;}
+  let hit=0;
+  texts.forEach(t=>{
+    const tb=visBox(t);
+    let box=arr.filter(x=>x.type==='r'&&x.shape!=='arrow'&&ids.has(x.id))[0];
+    if(!box){
+      const cand=arr.filter(x=>x.type==='r'&&x.shape!=='arrow'&&!x.guide&&tb.cx>=x.x&&tb.cx<=x.x+x.w&&tb.cy>=x.y&&tb.cy<=x.y+x.h);
+      box=cand.sort((a,b)=>a.w*a.h-b.w*b.h)[0];
+    }
+    if(!box)return;
+    hit++;
+    t.fitBox=box.id; t.fitAll=true; delete t.fitDy;
+    t.fitPad=Math.max(0,Math.round((box.w-tb.w)/2));
+    t.fitPadY=Math.max(0,Math.round((box.h-tb.h)/2));
   });
   if(!hit){alert('겹치는 도형을 못 찾았어.\nShift+클릭으로 도형과 텍스트를 함께 선택한 뒤 다시 눌러줘.');return;}
   renderAll(); recordHistory();
@@ -1386,6 +1447,9 @@ function renderProps(){
       <button class="btn small" id="addArrowBtn">＋ 화살표</button>
     </div>
     <div class="btn-row" style="margin-top:6px">
+      <button class="btn small" id="uiSaveBtn" title="선택한 레이어를 UI 컴포넌트로 저장 — 배너 스튜디오에서도 꺼내 쓸 수 있어">🧩 선택을 UI로 저장</button>
+    </div>
+    <div class="btn-row" style="margin-top:6px">
       <button class="btn small" id="lzTop" title="맨 앞으로 (Ctrl+Shift+])">⤒ 맨 앞</button>
       <button class="btn small" id="lzUp"  title="한 칸 앞으로 (Ctrl+])">▲ 앞으로</button>
       <button class="btn small" id="lzDn"  title="한 칸 뒤로 (Ctrl+[)">▼ 뒤로</button>
@@ -1407,6 +1471,7 @@ function renderProps(){
     </div>
     <div class="btn-row">
       <button class="btn small primary" id="snapTxtBtn">텍스트를 도형 중앙에</button>
+      <button class="btn small" id="autoFitBtn" title="도형이 글자 길이 + 패딩에 맞춰 늘고 줄어들게 묶기">🧩 오토 레이아웃</button>
     </div>
     <div class="hint" style="margin-top:6px">Shift+클릭으로 도형과 텍스트를 함께 고른 뒤 눌러도 되고, 텍스트만 고르면 겹친 도형을 자동으로 찾아 맞춰.</div>
   </div>`;
@@ -1415,6 +1480,11 @@ function renderProps(){
     html+=`
   <div class="sec"><h3>텍스트 편집</h3>
     <div class="field"><label>내용</label><textarea id="pText">${esc(l.text)}</textarea></div>
+    ${l.fitBox&&LS(s).some(x=>x.id===l.fitBox)?`<div class="row">
+      <div class="field"><label>패딩 좌우 (오토 레이아웃)</label><input type="number" id="pFitPad" min="0" value="${l.fitPad!=null?l.fitPad:Math.round(l.size*0.45)}"></div>
+      <div class="field"><label>패딩 상하</label><input type="number" id="pFitPadY" min="0" placeholder="높이 고정" value="${l.fitPadY!=null?l.fitPadY:''}"></div>
+    </div>
+    <div class="hint" style="margin:-2px 0 6px">글자를 고치면 도형이 늘고 줄어. 글자를 모두 지우면 도형도 함께 삭제돼. <a href="#" id="pFitOff">오토 레이아웃 해제</a></div>`:''}
     <div class="row">
       <div class="field"><label>크기 (px)${_selTexts().length>1?` <span style="color:#00901a">· ${_selTexts().length}개 일괄</span>`:""}</label><input type="number" id="pSize" min="8" value="${l.size}"></div>
       <div class="field"><label>굵기</label>
@@ -1675,7 +1745,8 @@ function bindProps(s,l){
   $('#bgPick').oninput=e=>{s.bg=e.target.value;renderCanvas();renderSlideList();$('#infoBg').textContent=s.bg;};
   props.querySelectorAll('.layer-item').forEach(it=>it.onclick=e=>{
     if(e.target.dataset.ldel){
-      setLS(s,LS(s).filter(x=>x.id!=e.target.dataset.ldel));
+      const gone=withFitPartners(LS(s),[+e.target.dataset.ldel]);
+      setLS(s,LS(s).filter(x=>!gone.includes(x.id)));
       if(selLayer==e.target.dataset.ldel)selLayer=null;
       renderAll();return;
     }
@@ -1692,6 +1763,8 @@ function bindProps(s,l){
   };
   props.querySelectorAll('[data-al]').forEach(b=>b.onclick=()=>alignSelection(b.dataset.al));
   if($('#snapTxtBtn'))$('#snapTxtBtn').onclick=()=>snapTextToShape();
+  if($('#autoFitBtn'))$('#autoFitBtn').onclick=()=>makeAutoLayout();
+  $('#uiSaveBtn').onclick=()=>saveUi();
   $('#addImgBtn2').onclick=()=>$('#imgInput').click();
   $('#addArrowBtn').onclick=()=>{
     const P=curP(s), brand=SERVICES[s.service]||'#00e31e';
@@ -1704,6 +1777,11 @@ function bindProps(s,l){
   const rc=()=>{renderCanvas();renderSlideList();};
   if(l.type==='t'){
     $('#pText').oninput=e=>{l.text=e.target.value;rc();};
+    if($('#pFitPad')){
+      $('#pFitPad').onchange=e=>{l.fitPad=Math.max(0,+e.target.value||0);renderAll();};
+      $('#pFitPadY').onchange=e=>{l.fitPadY=e.target.value===''?null:Math.max(0,+e.target.value);if(l.fitPadY==null)delete l.fitPadY;else l.fitAll=true;renderAll();};
+      $('#pFitOff').onclick=e=>{e.preventDefault();delete l.fitBox;delete l.fitPad;delete l.fitPadY;delete l.fitAll;delete l.fitDy;renderAll();};
+    }
     $('#pSize').oninput=e=>{_applyText('size',Math.max(8,+e.target.value||8),l);rc();};
     $('#pWeight').onchange=e=>{_applyText('weight',+e.target.value,l);rc();};
     $('#pColor').oninput=e=>{_applyText('color',e.target.value,l);rc();};
@@ -2197,6 +2275,15 @@ function layerDblEdit(e){
   document.execCommand('styleWithCSS',false,true);
   document.execCommand('selectAll',false,null);
   showRichBar(true);
+  // 오토 레이아웃(fitBox) — 타이핑하는 동안에도 도형이 글자를 따라 늘고 준다
+  if(l.fitBox)el.addEventListener('input',()=>{
+    l.text=el.innerText.replace(/\n$/,'');
+    const arr=LS(s0), box=arr.find(x=>x.id===l.fitBox); if(!box)return;
+    syncFitBoxes(arr);
+    const bel=canvas.querySelector(`.layer[data-id="${box.id}"]`), off=curOffX(s0);
+    if(bel){bel.style.left=(box.x+off)+'px';bel.style.top=box.y+'px';bel.style.width=box.w+'px';bel.style.height=box.h+'px';bel.style.borderRadius=box.radius+'px';}
+    el.style.left=(l.x+off)+'px';el.style.top=l.y+'px';el.style.width=l.w+'px';
+  });
   el.addEventListener('blur',()=>{
     setTimeout(()=>{
       if(document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#richBar')){el.focus();return;}
@@ -2206,6 +2293,12 @@ function layerDblEdit(e){
       l.text=el.innerText.replace(/\n$/,'');
       l.rich=/<(span|b|strong|font)[\s>]/i.test(html)?sanitizeRich(html):null;
       if(!l.rich)delete l.rich;
+      // 오토 레이아웃 글자를 다 지우면 도형도 같이 지운다 (Ctrl+Z 로 되돌릴 수 있다)
+      if(l.fitBox&&!l.text.trim()){
+        const gone=[l.id,l.fitBox];
+        setLS(s0,LS(s0).filter(x=>!gone.includes(x.id)));
+        selLayer=null;selSet=[];
+      }
       renderAll();
     },0);
   },{once:false});
@@ -2311,7 +2404,8 @@ window.addEventListener('keydown',e=>{
   else if(e.key==='ArrowUp')targets.forEach(t=>t.y-=st);
   else if(e.key==='ArrowDown')targets.forEach(t=>t.y+=st);
   else if(e.key==='Delete'||e.key==='Backspace'){
-    setLS(s,LS(s).filter(x=>!ids.includes(x.id)));selLayer=null;selSet=[];renderAll();return;
+    const gone=withFitPartners(LS(s),ids);
+    setLS(s,LS(s).filter(x=>!gone.includes(x.id)));selLayer=null;selSet=[];renderAll();return;
   }else hd=false;
   if(hd){e.preventDefault();renderCanvas();renderProps();}
 });
@@ -3257,8 +3351,86 @@ try{if(localStorage.getItem('blogStockFold')){$('#stockbar').classList.add('fold
 window.addEventListener('focus',()=>{loadStock();});
 loadStock();
 
+/* ================= UI 컴포넌트 (shared/ui-kit.js — 배너 스튜디오와 공용) =================
+   선택한 레이어를 UI 로 저장하고, 저장된 UI 를 '복사'해서 넣는다 — 넣은 뒤엔 원본과 연결되지 않는다.
+   도형 안의 글자는 오토 레이아웃(fitBox)으로 묶여, 글자를 고치면 도형이 늘고 줄고, 다 지우면 도형도 사라진다. */
+function askName(msg,def){
+  return new Promise(res=>{
+    const back=$('#nameBack'),box=$('#nameBox'),inp=box.querySelector('input');
+    box.querySelector('.msg').textContent=msg; inp.value=def||'';
+    const close=v=>{back.classList.remove('show');inp.onkeydown=null;res(v);};
+    box.querySelector('.ok').onclick=()=>close(inp.value.trim()||null);
+    box.querySelector('.cancel').onclick=()=>close(null);
+    back.onclick=e=>{if(e.target===back)close(null);};
+    inp.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')close(inp.value.trim()||null);if(e.key==='Escape')close(null);};
+    back.classList.add('show');setTimeout(()=>{inp.focus();inp.select();},50);
+  });
+}
+const uiMk={nid,tLayer,iLayer,rLayer};
+async function loadUi(){
+  if(!window.UIKit)return;
+  let items=[];
+  try{items=await UIKit.list();}catch(e){}
+  $('#uiCnt').textContent=items.length?'· '+items.length+'개':'';
+  $('#uiEmpty').style.display=items.length?'none':'';
+  const g=$('#uiGrid');g.innerHTML='';
+  items.forEach(c=>{
+    const d=document.createElement('div');d.className='uic';
+    d.title=`${c.name} · ${c.w}×${c.h}px${c.origin==='banner'?' · 배너 스튜디오에서 저장':''}\n클릭하면 캔버스에 복사해 넣어`;
+    d.innerHTML=`<img src="${esc(c.thumb)}" loading="lazy" alt=""><span class="nm">${esc(c.name)}</span><span class="del" title="UI 컴포넌트 삭제">×</span>`;
+    d.onclick=()=>insertUi(c);
+    d.querySelector('.del').onclick=async ev=>{
+      ev.stopPropagation();
+      const yes=await askConfirm(`UI 컴포넌트 "${c.name}" 을(를) 삭제할까?\n이미 캔버스에 넣은 사본은 그대로 남아.`,'삭제');
+      if(!yes)return;
+      try{await UIKit.del(c.id);}catch(err){alert('삭제 실패: '+err.message);}
+      loadUi();
+    };
+    g.appendChild(d);
+  });
+}
+async function saveUi(){
+  const s=slides[cur]; if(!s||!window.UIKit)return;
+  const arr=LS(s), ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer);
+  const keep=withFitPartners(arr,[...ids]);                 // 오토 레이아웃 짝은 함께 저장
+  const picked=arr.filter(x=>keep.includes(x.id));
+  if(!picked.length){alert('저장할 레이어를 먼저 선택해줘.\n(Shift+클릭으로 여러 개)');return;}
+  const first=picked.find(x=>x.type==='t'&&String(x.text||'').trim());
+  const name=await askName('UI 컴포넌트 이름',first?first.text.replace(/\[\[|\]\]/g,'').split('\n')[0].slice(0,20):'UI');
+  if(!name)return;
+  try{
+    const c=await UIKit.save(name,UIKit.fromBlog(picked));
+    const auto=c.nodes.filter(n=>n.pad).length;
+    showUiNote(`UI 컴포넌트로 저장했어 — ${c.name}${auto?` (오토 레이아웃 ${auto}개)`:''}`);
+  }catch(err){alert('저장 실패: '+err.message);}
+  loadUi();
+}
+function insertUi(c){
+  const s=slides[cur]; if(!s)return;
+  const P=curP(s), k=UIKit.placeScale(c,P.W,P.H);
+  const at={x:Math.round((P.W-c.w*k)/2),y:Math.round((P.H-c.h*k)/2)};
+  const {layers,skipped}=UIKit.toBlog(c,at,k,uiMk);
+  if(!layers.length){alert('이 UI 에는 블로그 이미지 제작에서 쓸 수 있는 요소가 없어.');return;}
+  if(layers.length>1){const g=nid();layers.forEach(l=>{l.gid=g;});}
+  LS(s).push(...layers);
+  selSet=layers.map(l=>l.id); selLayer=layers[layers.length-1].id;
+  renderAll(); recordHistory();
+  showUiNote(`"${c.name}" 을(를) 복사해 넣었어${skipped?` — 쓸 수 없는 요소 ${skipped}개 제외`:''} · 더블클릭해서 글자를 고치면 도형이 따라 늘고 줄어`);
+}
+let _uiNoteT;
+function showUiNote(msg){
+  let n=$('#uiNote');
+  if(!n){n=document.createElement('div');n.id='uiNote';
+    n.style.cssText='position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#1f2328;color:#fff;font-size:12.5px;padding:9px 16px;border-radius:9px;z-index:400;box-shadow:0 8px 24px rgba(0,0,0,.2);max-width:80vw';
+    document.body.appendChild(n);}
+  n.textContent=msg;n.style.display='block';
+  clearTimeout(_uiNoteT);_uiNoteT=setTimeout(()=>{n.style.display='none';},3200);
+}
+window.addEventListener('focus',()=>{loadUi();});
+loadUi();
+
 /* ================= 네비: 이미지 소스 라이브러리(별도 페이지) 열기 ================= */
-$('#navSources').onclick=()=>{ window.open('library.html','_blank','noopener'); };
+$('#navSources').onclick=()=>{ location.href='library.html'; };
 $('#navBanner').onclick=()=>{ location.href='banner_studio/index.html'; };
 $('#assetBack').addEventListener('click',e=>{if(e.target.id==='assetBack')$('#assetBack').classList.remove('show');});
 $('#assetUpBtn').onclick=()=>$('#assetUpInput').click();

@@ -165,6 +165,12 @@ select option { background: var(--panel2); color: var(--fg); }
   opacity: 0; font-size: 12px; border: 1px solid var(--line2);
 }
 .stock:hover .del { opacity: 1; }
+/* UI 컴포넌트 — 가로로 긴 버튼·배지가 많아 2열 */
+#uiGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+#uiGrid .stock { aspect-ratio: 3 / 2; }
+#uiGrid .stock .nm { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 5px; font-size: 10px; color: var(--fg2);
+  background: var(--panel); border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#uiGrid .stock img { height: calc(100% - 17px); }
 .stock .del:hover { color: #fff; background: var(--bad); border-color: var(--bad); }
 #drop {
   border: 1px dashed var(--line2); border-radius: 6px; padding: 12px 8px; text-align: center;

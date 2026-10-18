@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>배너 스튜디오 · 이미지 스튜디오</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=20261015-5">
+<link rel="stylesheet" href="style.css?v=20261018-1">
 <style id="fontface"></style>
 </head>
 <body>
@@ -16,7 +16,7 @@
     <nav class="topnav" aria-label="페이지 이동">
       <a href="../blog_image_studio_v4_5.html">🎨 블로그 이미지 제작</a>
       <a class="on" href="index.html" aria-current="page">🪧 배너 스튜디오</a>
-      <a href="../library.html" target="_blank" rel="noopener">🖼 이미지 소스</a>
+      <a href="../library.html">🖼 이미지 소스</a>
     </nav>
     <span class="ver" id="verTag">규격 로딩 중…</span>
     <span class="sp"></span>
@@ -65,6 +65,17 @@
             아직 등록된 이미지가 없습니다. 위 영역에 끌어다 놓으면 이 브라우저 보관함(IndexedDB)에 저장되고,
             다음에 열 때도 그대로 남아 있습니다.
           </p>
+        </div>
+      </div>
+
+      <div class="sect">
+        <h3>UI 컴포넌트 <span class="tag" id="uiCnt"></span></h3>
+        <div class="body">
+          <div class="row">
+            <button class="btn sm grow" id="btnUiSave" title="선택한 레이어를 UI 컴포넌트로 저장 (도형 안 글자는 오토 레이아웃으로 묶임)">🧩 선택을 UI로 저장</button>
+          </div>
+          <div id="uiGrid"></div>
+          <p class="hint" id="uiEmpty">저장된 UI 가 없습니다. 도형·텍스트를 Shift+클릭으로 함께 고른 뒤 저장하면, 블로그 이미지 제작에서도 같은 UI 를 꺼내 쓸 수 있습니다.</p>
         </div>
       </div>
 
@@ -193,7 +204,8 @@
 <div id="toast"></div>
 <input type="file" id="filePick" accept="image/*" multiple hidden>
 <script src="../shared/ppt-remote.js?v=20261015-1"></script>
+<script src="../shared/ui-kit.js?v=20261018-1"></script>
 <script src="plans.js?v=20261015-5"></script>
-<script src="app.js?v=20261015-5"></script>
+<script src="app.js?v=20261018-1"></script>
 </body>
 </html>
