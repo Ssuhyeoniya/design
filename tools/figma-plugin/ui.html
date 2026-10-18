@@ -1,0 +1,29 @@
+<style>
+  body{font:12px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:14px;color:#1f2328}
+  h3{margin:0 0 6px;font-size:13px}
+  p{margin:0 0 10px;color:#4b5563}
+  button{width:100%;padding:9px;border:0;border-radius:8px;background:#0068ff;color:#fff;font-weight:700;cursor:pointer;font-size:12.5px}
+  button:disabled{opacity:.5}
+  #log{margin-top:10px;color:#4b5563;white-space:pre-wrap}
+  #log.bad{color:#dc2626}
+</style>
+<h3>이미지 스튜디오로 내보내기</h3>
+<p>내보낼 프레임을 선택하고 아래 버튼을 누르세요. 여러 개를 함께 선택해도 됩니다.<br>받은 파일을 이미지 소스 → 🧩 UI 컴포넌트 → 🎨 피그마에서 가져오기 창에 끌어다 놓으면 됩니다.</p>
+<button id="go">선택한 프레임 내보내기 (.json)</button>
+<div id="log"></div>
+<script>
+const log=(t,bad)=>{const l=document.getElementById('log');l.textContent=t;l.className=bad?'bad':'';};
+document.getElementById('go').onclick=()=>{document.getElementById('go').disabled=true;log('준비 중…');parent.postMessage({pluginMessage:{type:'export'}},'*');};
+onmessage=e=>{
+  const m=e.data.pluginMessage; if(!m)return;
+  if(m.type==='progress')return log(m.text);
+  document.getElementById('go').disabled=false;
+  if(m.type==='error')return log(m.text,true);
+  const json=JSON.stringify(m.data);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));
+  a.download=(m.data.file||'figma').replace(/[\\/:*?"<>|]/g,'_')+'-프레임'+m.data.frames.length+'개.json';
+  document.body.appendChild(a);a.click();a.remove();
+  log(`완료 — 프레임 ${m.data.frames.length}개 (${(json.length/1048576).toFixed(1)}MB) 파일을 내려받았어요.`);
+};
+</script>

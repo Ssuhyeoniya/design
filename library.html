@@ -154,6 +154,12 @@
     <label>저장할 그룹</label>
     <input type="text" id="figGroup" placeholder="비우면 피그마 파일 이름으로">
     <div class="chk"><input type="checkbox" id="figSplit"> 링크한 프레임 안의 프레임·컴포넌트를 각각 따로 저장 (페이지·섹션 링크는 자동)</div>
+    <label>또는 피그마 플러그인으로 가져오기 <span style="font-weight:500;color:var(--text-faint)">— 요청 한도·토큰 없이, 무료 요금제 추천</span></label>
+    <div id="figDrop" style="border:1.5px dashed var(--border-strong);border-radius:10px;padding:12px;text-align:center;font-size:12px;color:var(--text-sub);cursor:pointer;line-height:1.7">
+      플러그인이 만든 <b>.json 파일</b>을 여기에 끌어다 놓거나 클릭해서 선택<br>
+      <span style="color:var(--text-faint)">플러그인 설치: 피그마 데스크톱 → Plugins → Development → Import plugin from manifest… → <a href="tools/figma-plugin/manifest.json" target="_blank" rel="noopener">tools/figma-plugin/manifest.json</a> (<a href="#" id="figPlugZip">파일 3개 받기</a>)</span>
+    </div>
+    <input type="file" id="figFile" accept=".json,application/json" hidden>
     <div id="figLog"></div>
     <div class="row"><button class="btn" id="figClose">닫기</button><button class="btn pri" id="figGo">가져오기</button></div>
   </div></div>
@@ -168,7 +174,7 @@
     <div class="row"><button class="cancel">취소</button><button class="ok">삭제</button></div>
   </div></div>
 
-<script src="shared/ui-kit.js?v=20261018-4"></script>
+<script src="shared/ui-kit.js?v=20261018-5"></script>
 <script>
 const $=s=>document.querySelector(s);
 
@@ -531,7 +537,11 @@ function bindGroups(list,shown){
 async function importUi(files){
   let n=0;
   for(const f of files){
-    try{n+=await UIKit.importJSON(await f.text());}
+    try{
+      const txt=await f.text();
+      if(/"kind"\s*:\s*"figma-export"/.test(txt.slice(0,200))){$('#figBack').classList.add('show');await readFigFile(f);continue;}   // 플러그인 파일이면 피그마 가져오기로
+      n+=await UIKit.importJSON(txt);
+    }
     catch(e){toast(f.name+' — '+(e&&e.message||e),true);}
   }
   if(n){toast(`UI 컴포넌트 ${n}개를 가져왔어`);if(tab!=='ui')switchTab('ui');else renderUi();}
@@ -550,7 +560,11 @@ async function figGet(path,token){
   catch(e){throw new Error('피그마에 연결하지 못했어 — 인터넷 연결이나 회사 보안 프로그램(방화벽)을 확인해줘');}
   if(r.status===403)throw new Error('토큰이 올바르지 않거나 이 파일을 볼 권한이 없어 (403)');
   if(r.status===404)throw new Error('파일이나 프레임을 찾지 못했어 (404) — 링크를 다시 복사해줘');
-  if(r.status===429)throw new Error('피그마 요청 한도를 넘었어 (429) — 1분 뒤 다시 시도해줘');
+  if(r.status===429){
+    const sec=+r.headers.get('Retry-After')||60, plan=r.headers.get('X-Figma-Plan-Tier')||'';
+    const wait=sec>=86400?Math.round(sec/86400*10)/10+'일':sec>=3600?Math.round(sec/3600)+'시간':Math.ceil(sec/60)+'분';
+    throw new Error(`피그마 요청 한도를 넘었어 (429${plan?' · '+plan+' 요금제':''}) — ${wait} 뒤에 다시 열려. 무료 요금제는 한도가 아주 작으니 아래 '피그마 플러그인으로 가져오기' 를 써줘 (한도 없음)`);
+  }
   if(!r.ok)throw new Error('피그마 응답 오류 '+r.status);
   return r.json();
 }
@@ -638,6 +652,50 @@ async function figImport(){
     if(tab!=='ui')switchTab('ui');else renderUi();
   }
 }
+// 피그마 플러그인(tools/figma-plugin)이 내보낸 파일 — API 응답과 같은 노드 모양 + 이미지 원본·그림이 들어 있다
+async function figImportExport(data){
+  $('#figLog').innerHTML='';
+  const group=$('#figGroup').value.trim()||data.file||'피그마';
+  figLog(`플러그인 파일 — ${data.file||''} · 프레임 ${data.frames.length}개`);
+  let saved=0;
+  for(const f of data.frames){
+    try{
+      if(!f.absoluteBoundingBox)throw new Error('프레임이 아니야');
+      const conv=await UIKit.applyClips(UIKit.fromFigma(f,{rasters:data.rasters||{},imageFills:data.imageFills||{}}));
+      conv.source={nodeId:f.id,file:data.file,via:'plugin'};
+      const c=await UIKit.save(f.name||'피그마',conv,group);saved++;
+      const auto=c.nodes.filter(n=>n.pad).length;
+      figLog(`✓ ${f.name} — ${c.w}×${c.h}px · 요소 ${c.nodes.length}개${auto?` · 오토 레이아웃 ${auto}개`:''}`,'ok');
+      (conv.warnings||[]).forEach(w=>figLog('   ⚠ '+w,'warn'));
+    }catch(e){figLog(`✕ ${f.name} — ${e.message||e}`,'bad');}
+  }
+  if(saved){
+    figLog(`완료 — ${saved}개를 📁 ${group} 에 저장했어.`,'ok');
+    curGroup=group;try{localStorage.setItem('libGroup',curGroup);}catch(e){}
+    if(tab!=='ui')switchTab('ui');else renderUi();
+  }
+}
+async function readFigFile(f){
+  try{
+    const d=JSON.parse(await f.text());
+    if(!d||d.kind!=='figma-export'||!Array.isArray(d.frames))throw new Error('피그마 플러그인이 만든 파일이 아니야');
+    await figImportExport(d);
+  }catch(e){$('#figLog').innerHTML='';figLog('✕ '+(e.message||e),'bad');}
+}
+$('#figDrop').onclick=e=>{if(e.target.tagName!=='A')$('#figFile').click();};
+$('#figFile').onchange=e=>{const f=e.target.files[0];if(f)readFigFile(f);e.target.value='';};
+['dragover','dragenter'].forEach(t=>$('#figDrop').addEventListener(t,e=>{e.preventDefault();e.stopPropagation();$('#figDrop').style.borderColor='var(--accent)';}));
+['dragleave','drop'].forEach(t=>$('#figDrop').addEventListener(t,()=>{$('#figDrop').style.borderColor='';}));
+$('#figDrop').addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();const f=e.dataTransfer.files[0];if(f)readFigFile(f);});
+// 플러그인 파일 3개를 한 번에 받는다 (manifest · code · ui) — 같은 폴더에 두고 manifest 를 불러오면 된다
+$('#figPlugZip').onclick=async e=>{
+  e.preventDefault();
+  for(const n of ['manifest.json','code.js','ui.html']){
+    const b=await (await fetch('tools/figma-plugin/'+n,{cache:'no-cache'})).blob();
+    saveBlob(b,n);await new Promise(r=>setTimeout(r,350));
+  }
+  toast('플러그인 파일 3개를 받았어 — 한 폴더에 넣고 manifest.json 을 피그마에서 불러와');
+};
 $('#figOpen').onclick=()=>{
   try{const t=localStorage.getItem('figmaToken');if(t){$('#figToken').value=t;$('#figRemember').checked=true;}}catch(e){}
   $('#figBack').classList.add('show');setTimeout(()=>$('#figLinks').focus(),50);

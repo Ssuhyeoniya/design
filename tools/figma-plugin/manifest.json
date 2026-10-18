@@ -1,0 +1,10 @@
+{
+  "name": "이미지 스튜디오로 내보내기",
+  "id": "image-studio-export",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": { "allowedDomains": ["none"] }
+}
