@@ -70,6 +70,8 @@
   .gchip b{color:var(--text-faint);font-weight:600;margin-left:3px;}
   .gchip.on{background:var(--text);border-color:var(--text);color:#fff;}
   .gchip.on b{color:#c9ced6;}
+  #selAllLbl{display:inline-flex;align-items:center;gap:5px;}
+  #selAllLbl input{margin:0;cursor:pointer;}
   .gacts{display:flex;gap:6px;margin-left:auto;}
   #selbar{display:none;align-items:center;gap:8px;background:#eef4ff;border:1px solid #c9dcff;border-radius:10px;padding:8px 12px;margin-bottom:14px;font-size:12.5px;font-weight:600;}
   #selbar.on{display:flex;}
@@ -166,7 +168,7 @@
     <div class="row"><button class="cancel">취소</button><button class="ok">삭제</button></div>
   </div></div>
 
-<script src="shared/ui-kit.js?v=20261018-3"></script>
+<script src="shared/ui-kit.js?v=20261018-4"></script>
 <script>
 const $=s=>document.querySelector(s);
 
@@ -397,7 +399,9 @@ async function renderUi(){
   const allG=[...new Set([...gnames.filter(Boolean),...newGroups])].sort((a,b)=>a.localeCompare(b,'ko'));
   const shown=list.filter(c=>curGroup==='*'||(c.group||'')===curGroup);
   const chip=(v,label,n)=>`<button class="gchip${curGroup===v?' on':''}" data-g="${esc(v)}">${esc(label)}<b>${n}</b></button>`;
-  const gbar=`<div id="gbar">${chip('*','전체',list.length)}${allG.map(g=>chip(g,'📁 '+g,list.filter(c=>c.group===g).length)).join('')}${gnames.includes('')?chip('','그룹 없음',list.filter(c=>!c.group).length):''}
+  const allPicked=shown.length>0&&shown.every(c=>picked.has(c.id));
+  const gbar=`<div id="gbar"><label class="gchip" id="selAllLbl" title="지금 보이는 컴포넌트를 모두 선택 / 해제"><input type="checkbox" id="selAll"${allPicked?' checked':''}${shown.length?'':' disabled'}> 전체 선택<b>${shown.length}</b></label>
+    ${chip('*','전체',list.length)}${allG.map(g=>chip(g,'📁 '+g,list.filter(c=>c.group===g).length)).join('')}${gnames.includes('')?chip('','그룹 없음',list.filter(c=>!c.group).length):''}
     <button class="gchip" id="gNew">＋ 새 그룹</button>
     ${curGroup!=='*'&&curGroup!==''?`<span class="gacts"><button class="btn small" id="gRen">그룹 이름 바꾸기</button><button class="btn small" id="gExp">그룹 내보내기</button><button class="btn small danger" id="gDel">그룹 삭제</button></span>`:''}</div>
     <div id="selbar"><span id="selN"></span><select id="selTo">${allG.map(g=>`<option value="${esc(g)}">📁 ${esc(g)}</option>`).join('')}<option value="">그룹 없음</option></select><button class="btn small pri" id="selMove">로 옮기기</button><button class="btn small" id="selExp">내보내기</button><button class="btn small danger" id="selDel">삭제</button><button class="btn small" id="selClear">선택 해제</button></div>`;
@@ -427,7 +431,11 @@ async function renderUi(){
   bindGroups(list,shown);
   body.querySelectorAll('.ui-card').forEach(card=>{
     const c=list.find(x=>x.id===+card.dataset.cid);if(!c)return;
-    card.querySelector('.pick').onchange=e=>{if(e.target.checked)picked.add(c.id);else picked.delete(c.id);syncSel();};
+    card.querySelector('.pick').onchange=e=>{
+      if(e.target.checked)picked.add(c.id);else picked.delete(c.id);
+      const sa=$('#selAll');if(sa){const n=shown.filter(x=>picked.has(x.id)).length;sa.checked=n===shown.length;sa.indeterminate=n>0&&n<shown.length;}
+      syncSel();
+    };
     card.querySelector('.sc-grp').onchange=async e=>{
       let g=e.target.value;
       if(g==='__new'){g=(await askText('새 그룹 이름')||'').trim();if(!g){e.target.value=c.group||'';return;}}
@@ -505,6 +513,17 @@ function bindGroups(list,shown){
     for(const id of picked)await UIKit.del(id);picked.clear();renderUi();
   };
   $('#selClear').onclick=()=>{picked.clear();renderUi();};
+  // 전체 선택 — 지금 보고 있는 그룹(또는 전체)의 카드를 한 번에 체크·해제
+  const sa=$('#selAll');
+  if(sa){
+    const some=shown.some(c=>picked.has(c.id));
+    sa.indeterminate=some&&!sa.checked;
+    sa.onchange=()=>{
+      shown.forEach(c=>{if(sa.checked)picked.add(c.id);else picked.delete(c.id);});
+      document.querySelectorAll('.ui-card').forEach(card=>{card.querySelector('.pick').checked=picked.has(+card.dataset.cid);});
+      sa.indeterminate=false;syncSel();
+    };
+  }
   for(const id of [...picked])if(!list.some(c=>c.id===id))picked.delete(id);
   syncSel();
 }

@@ -348,6 +348,7 @@
       for (let ty = y; ty < y + h; ty += th) for (let tx = x; tx < x + w; tx += tw) c.drawImage(im, tx, ty, tw, th);
       return;
     }
+    if (mode === 'STRETCH') { c.drawImage(im, x, y, w, h); return; }    // 원본 전체를 도형 크기로 늘림
     if (mode === 'CROP' && p.crop) {
       const cr = p.crop;
       c.drawImage(im, cr.x * iw, cr.y * ih, cr.w * iw, cr.h * ih, x, y, w, h); return;
@@ -533,9 +534,11 @@
       const src = imageFills && imageFills[p.imageRef]; if (!src) return null;
       const o = { type: 'IMAGE', src, scaleMode: p.scaleMode || 'FILL', opacity: op < 1 ? op : undefined };
       if (p.scalingFactor) o.scale = p.scalingFactor;
-      if (p.scaleMode === 'CROP' && p.imageTransform) {               // [[sx,0,tx],[0,sy,ty]] — 보이는 부분(0~1)
-        const t = p.imageTransform; o.crop = { x: t[0][2], y: t[1][2], w: t[0][0], h: t[1][1] };
-      }
+      // 피그마 REST API 는 '자르기(Crop)' 를 STRETCH + imageTransform 으로 준다.
+      // imageTransform [[sx,0,tx],[0,sy,ty]] = 도형에 보이는 이미지 영역(0~1). 그 영역을 도형 크기로 늘려 그린다
+      if ((p.scaleMode === 'CROP' || p.scaleMode === 'STRETCH') && p.imageTransform) {
+        const t = p.imageTransform; o.scaleMode = 'CROP'; o.crop = { x: t[0][2], y: t[1][2], w: t[0][0], h: t[1][1] };
+      } else if (p.scaleMode === 'STRETCH') o.scaleMode = 'STRETCH';
       return o;
     }
     return null;
