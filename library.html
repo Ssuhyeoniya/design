@@ -157,7 +157,8 @@
     <label>또는 피그마 플러그인으로 가져오기 <span style="font-weight:500;color:var(--text-faint)">— 요청 한도·토큰 없이, 무료 요금제 추천</span></label>
     <div id="figDrop" style="border:1.5px dashed var(--border-strong);border-radius:10px;padding:12px;text-align:center;font-size:12px;color:var(--text-sub);cursor:pointer;line-height:1.7">
       플러그인이 만든 <b>.json 파일</b>을 여기에 끌어다 놓거나 클릭해서 선택<br>
-      <span style="color:var(--text-faint)">플러그인 설치: 피그마 데스크톱 → Plugins → Development → Import plugin from manifest… → <a href="tools/figma-plugin/manifest.json" target="_blank" rel="noopener">tools/figma-plugin/manifest.json</a> (<a href="#" id="figPlugZip">파일 3개 받기</a>)</span>
+      <span style="color:var(--text-faint)">처음 한 번 플러그인 설치: <a href="tools/figma-plugin.zip" download="이미지스튜디오-피그마플러그인.zip"><b>플러그인 받기(.zip)</b></a> → 압축 풀기 →
+      피그마 데스크톱 → Plugins → Development → Import plugin from manifest… → 풀린 <b>이미지스튜디오-피그마플러그인</b> 폴더 안의 manifest.json 선택</span>
     </div>
     <input type="file" id="figFile" accept=".json,application/json" hidden>
     <div id="figLog"></div>
@@ -687,15 +688,6 @@ $('#figFile').onchange=e=>{const f=e.target.files[0];if(f)readFigFile(f);e.targe
 ['dragover','dragenter'].forEach(t=>$('#figDrop').addEventListener(t,e=>{e.preventDefault();e.stopPropagation();$('#figDrop').style.borderColor='var(--accent)';}));
 ['dragleave','drop'].forEach(t=>$('#figDrop').addEventListener(t,()=>{$('#figDrop').style.borderColor='';}));
 $('#figDrop').addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();const f=e.dataTransfer.files[0];if(f)readFigFile(f);});
-// 플러그인 파일 3개를 한 번에 받는다 (manifest · code · ui) — 같은 폴더에 두고 manifest 를 불러오면 된다
-$('#figPlugZip').onclick=async e=>{
-  e.preventDefault();
-  for(const n of ['manifest.json','code.js','ui.html']){
-    const b=await (await fetch('tools/figma-plugin/'+n,{cache:'no-cache'})).blob();
-    saveBlob(b,n);await new Promise(r=>setTimeout(r,350));
-  }
-  toast('플러그인 파일 3개를 받았어 — 한 폴더에 넣고 manifest.json 을 피그마에서 불러와');
-};
 $('#figOpen').onclick=()=>{
   try{const t=localStorage.getItem('figmaToken');if(t){$('#figToken').value=t;$('#figRemember').checked=true;}}catch(e){}
   $('#figBack').classList.add('show');setTimeout(()=>$('#figLinks').focus(),50);
