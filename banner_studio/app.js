@@ -63,6 +63,7 @@ function installFonts() {
 }
 // 규격의 서체명("S-core Dream 6Bold" 등)을 캔버스 font 속성으로 변환
 function parseFont(name) {
+  if (window.UIKit) return UIKit.parseFont(name);       // 무료 글꼴 모음(Noto Sans KR·SUIT 등)까지 해석한다
   const s = String(name || '');
   let m = s.match(/S-?core\s*Dream\s*(\d)/i);
   if (m) return { family: 'SCDream', weight: +m[1] * 100 };
@@ -70,7 +71,7 @@ function parseFont(name) {
   if (m) return { family: 'Pretendard', weight: PRE_W[m[1]] || 400 };
   return { family: 'Pretendard', weight: 400 };
 }
-const fontCss = (f, size) => `${f.weight} ${size}px ${f.family}, "Malgun Gothic", sans-serif`;
+const fontCss = (f, size) => `${f.weight} ${size}px ${window.UIKit ? UIKit.cssFamily(f.family) : f.family}, "Malgun Gothic", sans-serif`;
 
 // ══════════════════════════════════ 상태 ══════════════════════════════════
 let SPECS = null;
@@ -396,8 +397,26 @@ function syncAuto() {
   }
 }
 
+// 무료 글꼴 모음은 쓰는 순간 받는다 — 캔버스는 글꼴이 없으면 대체 글꼴로 그리므로, 받으면 다시 그린다 (UIKit.onFont)
+function needFonts() {
+  if (!window.UIKit) return;
+  for (const l of S.layers) if (l.font && (l.kind === 'text' || (l.kind === 'rect' && l.text))) { const f = parseFont(l.font); UIKit.ensureFont(f.family, f.weight); }
+}
+// 서체 선택 목록 — 기본 서체 + 무료 글꼴 모음 (굵기별)
+const WNAMES = { 100: 'Thin', 200: 'ExtraLight', 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'SemiBold', 700: 'Bold', 800: 'ExtraBold', 900: 'Black' };
+function fontOptions(base, cur) {
+  let h = base.map(f => `<option${f === cur ? ' selected' : ''}>${f}</option>`).join('');
+  if (window.UIKit) for (const F of UIKit.fonts) {
+    if (F.family === 'SCDream') continue;
+    h += `<optgroup label="${esc(F.family)}">` + F.weights.filter(w => w <= 900).map(w => {
+      const n = `${F.family} ${WNAMES[w]}`; return `<option${n === cur ? ' selected' : ''}>${n}</option>`; }).join('') + '</optgroup>';
+  }
+  if (cur && !h.includes(`>${esc(cur)}<`)) h = `<option selected>${esc(cur)}</option>` + h;
+  return h;
+}
+
 function renderArt() {
-  syncAuto();
+  syncAuto(); needFonts();
   art.width = S.w; art.height = S.h;
   actx.clearRect(0, 0, S.w, S.h);
   drawBg(actx, S);
@@ -788,9 +807,8 @@ function paintProps() {
     const m = textMetrics(l);
     h += `<div class="row wide"><label>내용 (Enter = 줄바꿈)</label><textarea data-k="text">${esc(l.text)}</textarea></div>`;
     h += `<div class="row"><label>서체</label><select data-k="font" class="grow">` +
-      ['Pretendard Thin', 'Pretendard Light', 'Pretendard Regular', 'Pretendard Medium', 'Pretendard SemiBold', 'Pretendard Bold', 'Pretendard ExtraBold', 'Pretendard Black',
-        'S-core Dream 3Light', 'S-core Dream 4Regular', 'S-core Dream 5Medium', 'S-core Dream 6Bold', 'S-core Dream 7ExtraBold', 'S-core Dream 8Heavy', 'S-core Dream 9Black']
-        .map(f => `<option${f === l.font ? ' selected' : ''}>${f}</option>`).join('') + '</select></div>';
+      fontOptions(['Pretendard Thin', 'Pretendard Light', 'Pretendard Regular', 'Pretendard Medium', 'Pretendard SemiBold', 'Pretendard Bold', 'Pretendard ExtraBold', 'Pretendard Black',
+        'S-core Dream 3Light', 'S-core Dream 4Regular', 'S-core Dream 5Medium', 'S-core Dream 6Bold', 'S-core Dream 7ExtraBold', 'S-core Dream 8Heavy', 'S-core Dream 9Black'], l.font) + '</select></div>';
     h += `<div class="row"><label>크기</label><input type="number" data-k="size" value="${l.size}" class="grow">
           <label style="flex:0 0 34px">색</label><input type="color" data-k="color" value="${l.color}"></div>`;
     h += `<div class="row"><label>정렬</label><select data-k="align" class="grow">` +
@@ -822,9 +840,8 @@ function paintProps() {
           <p class="hint">글자를 고치면 도형이 늘고 줄어듭니다. 글자를 모두 지우면 도형도 함께 삭제됩니다. 모서리 핸들을 끌면 패딩이 바뀝니다.</p>`;
     h += `<div class="row wide"><label>글자 (도형을 더블클릭해도 입력됩니다)</label><textarea data-k="text">${esc(l.text || '')}</textarea></div>`;
     h += `<div class="row"><label>서체</label><select data-k="font" class="grow">` +
-      ['Pretendard Regular', 'Pretendard Medium', 'Pretendard SemiBold', 'Pretendard Bold', 'Pretendard ExtraBold',
-        'S-core Dream 5Medium', 'S-core Dream 6Bold', 'S-core Dream 7ExtraBold']
-        .map(f => `<option${f === l.font ? ' selected' : ''}>${f}</option>`).join('') + '</select></div>';
+      fontOptions(['Pretendard Regular', 'Pretendard Medium', 'Pretendard SemiBold', 'Pretendard Bold', 'Pretendard ExtraBold',
+        'S-core Dream 5Medium', 'S-core Dream 6Bold', 'S-core Dream 7ExtraBold'], l.font) + '</select></div>';
     h += `<div class="row"><label>크기</label><input type="number" data-k="size" value="${l.size || 40}" class="grow">
           <label style="flex:0 0 34px">색</label><input type="color" data-k="color" value="${l.color || '#111111'}"></div>`;
     h += `<div class="row"><label>정렬</label><select data-k="align" class="grow">` +
@@ -1111,7 +1128,7 @@ function startEdit(layer) {
   ed.contentEditable = 'plaintext-only';
   if (ed.contentEditable !== 'plaintext-only') ed.contentEditable = 'true'; // 미지원 브라우저 대비
   const f = parseFont(l.font);
-  ed.style.cssText = `font:${f.weight} ${l.size * k}px ${f.family},"Malgun Gothic",sans-serif;` +
+  ed.style.cssText = `font:${f.weight} ${l.size * k}px ${window.UIKit ? UIKit.cssFamily(f.family) : f.family},"Malgun Gothic",sans-serif;` +
     `line-height:${l.lh};letter-spacing:${l.ls * l.size * k}px;color:${l.color};text-align:${l.align};` +
     `caret-color:${l.color}`;
   ed.textContent = l.text || '';
@@ -1995,6 +2012,7 @@ async function boot() {
   };
   addEventListener('beforeunload', e => { if (uiDirty()) { e.preventDefault(); e.returnValue = ''; } });
   if (window.UIKit) UIKit.onImage = () => { if (S) { render(); } };   // 이미지 채우기가 늦게 로드되면 다시 그린다
+  if (window.UIKit) UIKit.onFont = () => { if (S) { render(); paintChecks(); } };   // 글꼴을 받으면 다시 그린다 (줄바꿈·폭도 다시 잰다)
   // 이미지 소스 페이지·다른 탭에서 바뀐 UI·이미지를 돌아올 때 다시 읽는다
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadUi(); loadStock(); } });
 

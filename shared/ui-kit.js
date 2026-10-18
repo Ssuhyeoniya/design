@@ -63,8 +63,61 @@
 
   // ── 글자 측정 ────────────────────────────────────────────────────────────
   const mctx = document.createElement('canvas').getContext('2d');
-  const FAMILY = { Pretendard: 'Pretendard, sans-serif', SCDream: 'SCDream, Pretendard, sans-serif' };
-  const cssFamily = f => FAMILY[f || 'Pretendard'] || f;
+  // ── 글꼴 ──
+  // 프리텐다드·에스코어드림은 각 화면이 이미 갖고 있고, 나머지 무료 글꼴은 저장소 fonts/ 에 있다 (tools/fonts-build.py).
+  // 글꼴마다 fonts/<slug>/font.css 가 따로 있어서, 실제로 쓰는 글꼴의 CSS 만 그때 불러온다 (ensureFont).
+  const FONT_LIB = [
+    ['SCDream', 's-core-dream', [100, 200, 300, 400, 500, 600, 700, 800, 900]],   // 배너 스튜디오 동봉본을 가리킨다
+    ['Black Han Sans', 'black-han-sans', [400]],
+    ['Do Hyeon', 'do-hyeon', [400]],
+    ['Gmarket Sans', 'gmarket-sans', [500]],
+    ['Gothic A1', 'gothic-a1', [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+    ['Gowun Batang', 'gowun-batang', [400, 700]],
+    ['Gowun Dodum', 'gowun-dodum', [400]],
+    ['IBM Plex Sans KR', 'ibm-plex-sans-kr', [100, 200, 300, 400, 500, 600, 700]],
+    ['Inter', 'inter', [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+    ['Jalnan Gothic', 'jalnan-gothic', [400]],
+    ['Jua', 'jua', [400]],
+    ['Montserrat', 'montserrat', [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+    ['Nanum Gothic', 'nanum-gothic', [400, 700, 800]],
+    ['Nanum Myeongjo', 'nanum-myeongjo', [400, 700, 800]],
+    ['Nanum Pen Script', 'nanum-pen-script', [400]],
+    ['NanumSquare Neo', 'nanum-square-neo', [300, 400, 700, 800, 900]],
+    ['Noto Sans KR', 'noto-sans-kr', [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+    ['Poppins', 'poppins', [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+    ['Roboto', 'roboto', [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+    ['SUIT', 'suit', [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+    ['Song Myung', 'song-myung', [400]],
+    ['Spoqa Han Sans Neo', 'spoqa-han-sans-neo', [100, 300, 400, 500, 700]],
+    ['Wanted Sans', 'wanted-sans', [400, 500, 600, 700, 800, 900, 1000]]
+  ];
+  const SYSTEM_UI = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Malgun Gothic", sans-serif';   // 피그마의 SF Pro(아이폰 화면) — 맥에서는 같은 글꼴
+  const FONT_BASE = (() => { try { return new URL('../fonts/', document.currentScript.src).href; } catch (e) { return 'fonts/'; } })();
+  const libOf = f => FONT_LIB.find(x => x[0] === f);
+  const FAMILY = { Pretendard: 'Pretendard, sans-serif', SCDream: 'SCDream, Pretendard, sans-serif', System: SYSTEM_UI };
+  const cssFamily = f => FAMILY[f || 'Pretendard'] || (libOf(f) ? `'${f}', Pretendard, sans-serif` : f);
+  // CSS 글꼴 문자열("'Noto Sans KR',sans-serif") 에서 글꼴 이름만
+  const familyOf = css => { const m = String(css || '').match(/^\s*['"]?([^'",]+)/); return m ? m[1].trim() : ''; };
+  const linked = new Map();          // slug → Promise (CSS 로드)
+  const fontDone = new Set();        // '글꼴|굵기' — 받아 둔 것
+  let onFont = null;
+  function ensureFont(family, weight) {
+    const L = libOf(familyOf(family)); if (!L) return Promise.resolve(false);
+    let p = linked.get(L[1]);
+    if (!p) {
+      p = new Promise(res => {
+        const ln = document.createElement('link'); ln.rel = 'stylesheet'; ln.href = FONT_BASE + L[1] + '/font.css';
+        ln.onload = () => res(true); ln.onerror = () => res(false); document.head.appendChild(ln);
+      });
+      linked.set(L[1], p);
+    }
+    const key = L[0] + '|' + (weight || 400);
+    if (fontDone.has(key)) return Promise.resolve(true);
+    return p.then(ok => ok && document.fonts ? document.fonts.load(`${weight || 400} 16px '${L[0]}'`, '가A').then(() => {
+      if (!fontDone.has(key)) { fontDone.add(key); if (onFont) onFont(L[0]); }         // 처음 받았을 때 한 번만 다시 그리게 알린다
+      return true;
+    }) : ok);
+  }
   const plain = t => String(t || '').replace(/\[\[|\]\]/g, '');
   const lines = t => plain(t).split('\n');
   // 눈에 보이는 글자 폭(마지막 글자 뒤 자간 제외)과 줄 높이 합
@@ -140,7 +193,7 @@
   function fromBlog(layers) {
     const ids = new Set(layers.map(l => l.id)), nodes = [], label = new Map();
     for (const l of layers) if (l.type === 't' && l.fitBox && ids.has(l.fitBox)) label.set(l.fitBox, l);
-    const fam = l => l.font || 'Pretendard';
+    const fam = l => { if (!l.font) return 'Pretendard'; const f = familyOf(l.font); return f === 'SCDream' || libOf(f) ? f : /apple-system/.test(l.font) ? 'System' : l.font; };
     for (const l of layers) {
       const native = { app: 'blog', layer: clone(l) };
       if (l.type === 'r' && l.shape !== 'arrow') {
@@ -172,7 +225,7 @@
   function toBlog(comp, at, k, mk) {
     const out = [], skipped = [];
     const base = (n, extra) => n.native && n.native.app === 'blog' ? Object.assign(clone(n.native.layer), extra) : extra;
-    const font = f => (!f || f === 'Pretendard' || f === 'SCDream') ? '' : f;
+    const font = f => (!f || f === 'Pretendard') ? '' : (f === 'System' || libOf(f)) ? cssFamily(f) : f;
     for (const n of scaled(comp, k)) {
       const x = at.x + n.x, y = at.y + n.y;
       if (n.t === 'box') {
@@ -226,12 +279,22 @@
     const s = String(name || '');
     let m = s.match(/S-?core\s*Dream\s*(\d)/i);
     if (m) return { family: 'SCDream', weight: +m[1] * 100 };
+    // 무료 글꼴 모음 — '<글꼴 이름> <굵기 이름>' (예: 'Noto Sans KR Bold', 'SUIT ExtraBold', 'System Regular')
+    for (const fam of ['System', ...FONT_LIB.map(x => x[0]).sort((a, b) => b.length - a.length)]) {
+      if (s.toLowerCase().startsWith(fam.toLowerCase() + ' ') || s.toLowerCase() === fam.toLowerCase()) {
+        const rest = s.slice(fam.length).trim(), n = +rest;
+        return { family: fam, weight: n >= 100 ? n : (PRE_W[rest.replace(/\s+/g, '')] || 400) };
+      }
+    }
     m = s.match(/Pretendard[-\s]*([A-Za-z]+)?/i);
     return { family: 'Pretendard', weight: (m && PRE_W[m[1]]) || 400 };
   }
   function fontName(family, weight) {
     const w = Math.min(900, Math.max(100, Math.round((weight || 400) / 100) * 100));
-    return family === 'SCDream' ? 'S-core Dream ' + SCD[w] : 'Pretendard ' + PRE[w];
+    if (family === 'SCDream') return 'S-core Dream ' + SCD[w];
+    const f = familyOf(family);
+    if (f === 'System' || libOf(f)) return f + ' ' + PRE[w];
+    return 'Pretendard ' + PRE[w];
   }
   // tm(l) = 배너 페이지의 textMetrics (줄바꿈까지 반영한 실제 렌더 정보)
   function fromBanner(layers, tm) {
@@ -482,6 +545,7 @@
   }
   async function thumb(comp, max) {
     max = max || 360;
+    await loadFonts(comp.nodes);
     // 이미지 채우기는 미리 받아 둔다 (썸네일은 한 번만 그린다)
     await Promise.all(comp.nodes.flatMap(n => (n.fx && n.fx.fills || []).filter(p => p.type === 'IMAGE'))
       .map(p => new Promise(res => { const im = img(p.src); if (im) return res(); const i = imgs.get(p.src); i.addEventListener('load', res); i.addEventListener('error', res); })));
@@ -551,12 +615,23 @@
       return null;
     }).filter(Boolean);
   }
-  const FIG_FONTS = [[/pretendard/i, 'Pretendard'], [/s-?core\s*dream|scdream|에스코어/i, 'SCDream'], [/noto sans (kr|korean)|본고딕/i, "'Noto Sans KR',sans-serif"],
-    [/nanum\s*gothic|나눔고딕/i, "'Nanum Gothic',sans-serif"], [/nanum\s*myeongjo|나눔명조/i, "'Nanum Myeongjo',serif"], [/gowun\s*dodum/i, "'Gowun Dodum',sans-serif"],
-    [/gowun\s*batang/i, "'Gowun Batang',serif"], [/jua/i, "'Jua',sans-serif"], [/do\s*hyeon/i, "'Do Hyeon',sans-serif"], [/black\s*han\s*sans/i, "'Black Han Sans',sans-serif"]];
-  function figFont(fam, warn) {
-    for (const [re, v] of FIG_FONTS) if (re.test(fam || '')) return v;
-    if (fam) warn(`서체 '${fam}' 은(는) 없어서 프리텐다드로 바꿨습니다`);
+  // 피그마 글꼴 이름 → 이미지 스튜디오 글꼴 (영문·한글 이름, 띄어쓰기 차이까지 맞춘다)
+  const FIG_FONTS = [[/pretendard/i, 'Pretendard'], [/s-?core\s*dream|scdream|에스코어/i, 'SCDream'],
+    [/^(sf\s*pro|sf\s*compact|\.?sf\s*ns|apple\s*sd|-apple-system|system)/i, 'System'],
+    [/noto\s*sans\s*(kr|korean|cjk\s*kr)|본고딕/i, 'Noto Sans KR'], [/nanum\s*square\s*neo|나눔스퀘어\s*네오/i, 'NanumSquare Neo'],
+    [/nanum\s*square|나눔스퀘어/i, 'NanumSquare Neo'], [/nanum\s*gothic|나눔고딕/i, 'Nanum Gothic'], [/nanum\s*myeongjo|나눔명조/i, 'Nanum Myeongjo'],
+    [/nanum\s*pen|나눔손글씨\s*펜/i, 'Nanum Pen Script'], [/ibm\s*plex\s*sans\s*kr/i, 'IBM Plex Sans KR'], [/gothic\s*a1/i, 'Gothic A1'],
+    [/black\s*han\s*sans|검은고딕/i, 'Black Han Sans'], [/do\s*hyeon|도현/i, 'Do Hyeon'], [/^jua|주아/i, 'Jua'], [/gowun\s*dodum|고운\s*돋움/i, 'Gowun Dodum'],
+    [/gowun\s*batang|고운\s*바탕/i, 'Gowun Batang'], [/song\s*myung|송명/i, 'Song Myung'], [/^suit|수트/i, 'SUIT'], [/spoqa/i, 'Spoqa Han Sans Neo'],
+    [/wanted\s*sans|원티드/i, 'Wanted Sans'], [/gmarket|지마켓/i, 'Gmarket Sans'], [/jalnan|잘난/i, 'Jalnan Gothic'],
+    [/^inter\b/i, 'Inter'], [/^roboto/i, 'Roboto'], [/^montserrat/i, 'Montserrat'], [/^poppins/i, 'Poppins'], [/^(helvetica|arial)/i, 'Inter']];
+  function figFont(fam, warn, weight) {
+    for (const [re, v] of FIG_FONTS) if (re.test(fam || '')) {
+      if (v === 'Gmarket Sans' && weight && weight !== 500) warn(`'${fam}' 은(는) 무료 배포본이 Medium 뿐이라 굵기가 조금 다를 수 있습니다`);
+      if (/^(helvetica|arial)/i.test(fam)) warn(`서체 '${fam}' 은(는) 비슷한 Inter 로 바꿨습니다`);
+      return v;
+    }
+    if (fam) warn(`서체 '${fam}' 은(는) 없어서 프리텐다드로 바꿨습니다 — 무료 글꼴이면 알려 주세요, 모음에 넣겠습니다`);
     return 'Pretendard';
   }
   function fromFigma(root, opts) {
@@ -575,10 +650,11 @@
         if (!i) return;                                                // 완전히 잘려 안 보이는 것
         const inside = i.w >= r.w - .5 && i.h >= r.h - .5;
         if (!inside) {
-          const imgFill = node.fx && (node.fx.fills || []).some(p => p.type === 'IMAGE');
-          if (node.t === 'image' || (node.t === 'box' && imgFill && !node.label)) node.clip = { ...clip };   // 그림은 나중에 픽셀로 자른다 (applyClips)
-          else if (node.t === 'box' && !node.label) Object.assign(node, i);                                // 단색·그라데이션 도형은 크기만 줄인다
-          else warn(`'${node.name}' 일부가 프레임 밖으로 넘쳐 보일 수 있습니다`);
+          // 모서리 없는 단색 사각형만 크기를 줄이고, 나머지(그림·글자·배지·둥근 도형·효과)는 경계에서 픽셀로 잘라 그림으로 바꾼다 (applyClips)
+          const fx = node.fx || {}, plain = node.t === 'box' && !node.label && !node.radius && !fx.radii && !fx.effects && !fx.stroke && fx.shape !== 'ellipse' &&
+            (fx.fills || []).every(p => p.type === 'SOLID');
+          if (plain) Object.assign(node, i);
+          else node.clip = { ...clip };
         }
       }
       nodes.push(node);
@@ -597,7 +673,7 @@
       let text = n.characters || '';
       if (st.textCase === 'UPPER') text = text.toUpperCase(); else if (st.textCase === 'LOWER') text = text.toLowerCase();
       if (n.characterStyleOverrides && n.characterStyleOverrides.some(Boolean)) warn(`'${n.name}' 의 글자별 서식(일부 색·굵기)은 첫 서식으로 통일했습니다`);
-      const t = { t: 'text', x: b.x, y: b.y, w: b.w, text, size, weight: st.fontWeight || 400, family: figFont(st.fontFamily, warn),
+      const t = { t: 'text', x: b.x, y: b.y, w: b.w, text, size, weight: st.fontWeight || 400, family: figFont(st.fontFamily, warn, st.fontWeight),
         color: fill && fill.type === 'SOLID' ? frgba(fill.color, (fill.opacity == null ? 1 : fill.opacity)) : '#000000',
         align: { CENTER: 'center', RIGHT: 'right', JUSTIFIED: 'left' }[st.textAlignHorizontal] || 'left',
         lh: st.lineHeightPx ? +(st.lineHeightPx / size).toFixed(3) : 1.3, ls: st.letterSpacing ? +(st.letterSpacing / size).toFixed(4) : 0,
@@ -681,12 +757,26 @@
     walk(root, 1);
     if (!nodes.length) throw new Error('가져올 수 있는 요소가 없습니다');
     // 루트 기준 좌표 → 정규화 (효과는 도형 밖으로 번져도 좌표에는 넣지 않는다)
+    // 내용을 자르는 프레임이면 크기 = 피그마 프레임 크기 그대로 (넘친 요소 때문에 여백이 생기지 않게)
+    if (root.clipsContent) {
+      nodes.forEach(n => { n.x = Math.round(n.x); n.y = Math.round(n.y); delete n.cx; delete n.cy; delete n.gw; });
+      return { nodes, w: Math.round(root.absoluteBoundingBox.width), h: Math.round(root.absoluteBoundingBox.height), fixed: true, origin: 'figma', warnings: [...warns] };
+    }
     const res = normalize(nodes);
     return { ...res, origin: 'figma', warnings: [...warns] };
+  }
+  // 글자를 그림으로 구울 때 쓸 글꼴을 먼저 받아 둔다 (없으면 시스템 글꼴로 그려져 모양이 달라진다)
+  async function loadFonts(nodes) {
+    if (!document.fonts) return;
+    const want = new Map();
+    for (const n of nodes) for (const st of [n.t === 'text' ? n : null, n.label].filter(Boolean)) want.set(`${st.weight || 400} 16px ${cssFamily(st.family)}`, st);
+    await Promise.all([...want.values()].map(st => ensureFont(st.family, st.weight)));
+    await Promise.all([...want.keys()].map(f => document.fonts.load(f, '가A').catch(() => {})));
   }
   // 잘라내기(clip)가 남은 그림·이미지 채우기 도형을 실제 픽셀로 잘라 PNG 로 바꾼다 (모서리 둥근 프레임도 반영)
   async function applyClips(conv) {
     let n = 0;
+    if (conv.nodes.some(x => x.clip && (x.t === 'text' || x.label))) await loadFonts(conv.nodes);
     for (const node of conv.nodes) {
       if (!node.clip) continue;
       const c = node.clip, i = (() => { const x = Math.max(node.x, c.x), y = Math.max(node.y, c.y), x2 = Math.min(node.x + node.w, c.x + c.w), y2 = Math.min(node.y + node.h, c.y + c.h); return { x, y, w: x2 - x, h: y2 - y }; })();
@@ -697,15 +787,19 @@
       if (node.t === 'image') {
         const im = await loadImg(node.src); if (!im) { delete node.clip; continue; }
         g.drawImage(im, node.x, node.y, node.w, node.h);
+      } else if (node.t === 'text') {
+        drawLines(g, node, node.x, node.y, node.w, node.align);
       } else {
         await Promise.all((node.fx.fills || []).filter(p => p.type === 'IMAGE').map(p => loadImg(p.src).then(im => { if (im) imgs.set(p.src, im); })));
         paintBox(g, node, { k: S });
+        if (node.label) { const m = measure(node.label); drawLines(g, node.label, node.x, node.y + (node.h - m.h) / 2, node.w, 'center'); }
       }
       let src; try { src = cv.toDataURL('image/png'); } catch (e) { delete node.clip; continue; }   // 다른 출처 주소(만료 대비 미변환)면 자르지 않는다
       Object.assign(node, { t: 'image', x: i.x, y: i.y, w: i.w, h: i.h, src, opacity: 1, radius: 0 });
-      delete node.clip; delete node.fx; delete node.fill; n++;
+      for (const k of ['clip', 'fx', 'fill', 'label', 'pad', 'text', 'shadows']) delete node[k];
+      n++;
     }
-    if (n) Object.assign(conv, normalize(conv.nodes));
+    if (n && !conv.fixed) Object.assign(conv, normalize(conv.nodes));
     return conv;
   }
   // 피그마에서 따로 받아야 할 것 — PNG 로 렌더할 노드 id, 이미지 채우기 ref
@@ -762,5 +856,6 @@
 
   window.UIKit = { list, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
     exportJSON, importJSON, parseFont, fontName, fromFigma, figmaNeeds, parseFigmaLink, applyClips,
-    paintBox, paintURL, outset, hasFx, textShadowCSS, img, set onImage(fn) { onImage = fn; } };
+    paintBox, paintURL, outset, hasFx, textShadowCSS, img, set onImage(fn) { onImage = fn; },
+    fonts: FONT_LIB.map(x => ({ family: x[0], weights: x[2] })), ensureFont, loadFonts, cssFamily, familyOf, set onFont(fn) { onFont = fn; } };
 })();

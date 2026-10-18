@@ -5,6 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>이미지 소스 라이브러리 · 이미지 스튜디오</title>
 <style>
+  /* 컴포넌트 썸네일·잘린 글자를 그림으로 구울 때 스튜디오와 같은 글꼴을 쓴다 */
+@font-face{font-family:Pretendard;src:url("banner_studio/fonts/Pretendard/Pretendard-Thin.otf")format("opentype");font-weight:100;font-display:swap}
+@font-face{font-family:Pretendard;src:url("banner_studio/fonts/Pretendard/Pretendard-ExtraLight.otf")format("opentype");font-weight:200;font-display:swap}
+@font-face{font-family:Pretendard;src:url("banner_studio/fonts/Pretendard/Pretendard-Light.otf")format("opentype");font-weight:300;font-display:swap}
+@font-face{font-family:Pretendard;src:url("banner_studio/fonts/Pretendard/Pretendard-Regular.otf")format("opentype");font-weight:400;font-display:swap}
+@font-face{font-family:Pretendard;src:url("banner_studio/fonts/Pretendard/Pretendard-Medium.otf")format("opentype");font-weight:500;font-display:swap}
+@font-face{font-family:Pretendard;src:url("banner_studio/fonts/Pretendard/Pretendard-SemiBold.otf")format("opentype");font-weight:600;font-display:swap}
+@font-face{font-family:Pretendard;src:url("banner_studio/fonts/Pretendard/Pretendard-Bold.otf")format("opentype");font-weight:700;font-display:swap}
+@font-face{font-family:Pretendard;src:url("banner_studio/fonts/Pretendard/Pretendard-ExtraBold.otf")format("opentype");font-weight:800;font-display:swap}
+@font-face{font-family:Pretendard;src:url("banner_studio/fonts/Pretendard/Pretendard-Black.otf")format("opentype");font-weight:900;font-display:swap}
+@font-face{font-family:SCDream;src:url("banner_studio/fonts/SCDream/SCDream1.otf")format("opentype");font-weight:100;font-display:swap}
+@font-face{font-family:SCDream;src:url("banner_studio/fonts/SCDream/SCDream2.otf")format("opentype");font-weight:200;font-display:swap}
+@font-face{font-family:SCDream;src:url("banner_studio/fonts/SCDream/SCDream3.otf")format("opentype");font-weight:300;font-display:swap}
+@font-face{font-family:SCDream;src:url("banner_studio/fonts/SCDream/SCDream4.otf")format("opentype");font-weight:400;font-display:swap}
+@font-face{font-family:SCDream;src:url("banner_studio/fonts/SCDream/SCDream5.otf")format("opentype");font-weight:500;font-display:swap}
+@font-face{font-family:SCDream;src:url("banner_studio/fonts/SCDream/SCDream6.otf")format("opentype");font-weight:600;font-display:swap}
+@font-face{font-family:SCDream;src:url("banner_studio/fonts/SCDream/SCDream7.otf")format("opentype");font-weight:700;font-display:swap}
+@font-face{font-family:SCDream;src:url("banner_studio/fonts/SCDream/SCDream8.otf")format("opentype");font-weight:800;font-display:swap}
+@font-face{font-family:SCDream;src:url("banner_studio/fonts/SCDream/SCDream9.otf")format("opentype");font-weight:900;font-display:swap}
   :root{
     --bg:#f5f5f7;--panel:#ffffff;--border:#e5e7eb;--border-strong:#d0d3da;
     --text:#1f2328;--text-sub:#4b5563;--text-faint:#9aa1ab;--accent:#0068ff;--danger:#dc2626;
@@ -152,7 +171,8 @@
     <input type="password" id="figToken" placeholder="figd_… (피그마 → Settings → Security → Personal access tokens, 'File content: Read only')" autocomplete="off">
     <div class="chk"><input type="checkbox" id="figRemember"> 이 브라우저에 토큰 기억 (공용 PC 에서는 끄세요)</div>
     <label>저장할 그룹</label>
-    <input type="text" id="figGroup" placeholder="비우면 피그마 파일 이름으로">
+    <input type="text" id="figGroup" placeholder="비우면 피그마 파일 이름으로" list="figGroupList" autocomplete="off">
+    <datalist id="figGroupList"></datalist>
     <div class="chk"><input type="checkbox" id="figSplit"> 링크한 프레임 안의 프레임·컴포넌트를 각각 따로 저장 (페이지·섹션 링크는 자동)</div>
     <label>또는 피그마 플러그인으로 가져오기 <span style="font-weight:500;color:var(--text-faint)">— 요청 한도·토큰 없이, 무료 요금제 추천</span></label>
     <div id="figDrop" style="border:1.5px dashed var(--border-strong);border-radius:10px;padding:12px;text-align:center;font-size:12px;color:var(--text-sub);cursor:pointer;line-height:1.7">
@@ -161,6 +181,7 @@
       피그마 데스크톱 → Plugins → Development → Import plugin from manifest… → 풀린 <b>이미지스튜디오-피그마플러그인</b> 폴더 안의 manifest.json 선택</span>
     </div>
     <input type="file" id="figFile" accept=".json,application/json" hidden>
+    <div id="figReady" style="display:none;margin-top:10px;padding:9px 12px;border-radius:9px;background:#eef4ff;border:1px solid #c9dcff;font-size:12.5px"></div>
     <div id="figLog"></div>
     <div class="row"><button class="btn" id="figClose">닫기</button><button class="btn pri" id="figGo">가져오기</button></div>
   </div></div>
@@ -175,7 +196,7 @@
     <div class="row"><button class="cancel">취소</button><button class="ok">삭제</button></div>
   </div></div>
 
-<script src="shared/ui-kit.js?v=20261018-5"></script>
+<script src="shared/ui-kit.js?v=20261018-7"></script>
 <script>
 const $=s=>document.querySelector(s);
 
@@ -540,7 +561,7 @@ async function importUi(files){
   for(const f of files){
     try{
       const txt=await f.text();
-      if(/"kind"\s*:\s*"figma-export"/.test(txt.slice(0,200))){$('#figBack').classList.add('show');await readFigFile(f);continue;}   // 플러그인 파일이면 피그마 가져오기로
+      if(/"kind"\s*:\s*"figma-export"/.test(txt.slice(0,200))){await openFig();await readFigFile(f);continue;}   // 플러그인 파일이면 피그마 가져오기 창에 '준비' 로 (그룹을 정한 뒤 가져오기)
       n+=await UIKit.importJSON(txt);
     }
     catch(e){toast(f.name+' — '+(e&&e.message||e),true);}
@@ -586,9 +607,16 @@ async function figDownload(map,label){
 }
 const SPLIT_TYPES=new Set(['CANVAS','SECTION']);
 async function figImport(){
+  if(figPending){
+    const d=figPending.data;
+    $('#figGo').disabled=true;
+    try{await figImportExport(d);figPending=null;paintFigReady();}
+    finally{$('#figGo').disabled=false;}
+    return;
+  }
   const token=$('#figToken').value.trim();
   const links=$('#figLinks').value.split(/\s+/).map(x=>x.trim()).filter(Boolean);
-  if(!links.length)return toast('피그마 링크를 넣어줘',true);
+  if(!links.length)return toast('플러그인 파일을 넣거나 피그마 링크를 넣어줘',true);
   if(!token)return toast('피그마 개인 액세스 토큰을 넣어줘',true);
   try{if($('#figRemember').checked)localStorage.setItem('figmaToken',token);else localStorage.removeItem('figmaToken');}catch(e){}
   const parsed=links.map(u=>({u,...(UIKit.parseFigmaLink(u)||{})}));
@@ -676,21 +704,39 @@ async function figImportExport(data){
     if(tab!=='ui')switchTab('ui');else renderUi();
   }
 }
+// 플러그인 파일은 넣는 즉시 저장하지 않고 '준비됨' 으로 둔다 — 그룹을 정한 뒤 [가져오기] 를 눌러야 저장된다
+let figPending=null;
+function paintFigReady(){
+  const r=$('#figReady');
+  if(!figPending){r.style.display='none';return;}
+  const d=figPending.data;
+  r.style.display='';
+  r.innerHTML=`📄 <b>${esc(figPending.name)}</b> — 프레임 ${d.frames.length}개 (${esc(d.frames.slice(0,4).map(f=>f.name).join(', '))}${d.frames.length>4?' …':''}) 준비됨<br>
+    <span style="color:var(--text-sub)">그룹을 정하고 <b>가져오기</b> 를 누르면 저장돼.</span> <a href="#" id="figReadyX">빼기</a>`;
+  $('#figReadyX').onclick=e=>{e.preventDefault();figPending=null;paintFigReady();};
+  if(!$('#figGroup').value)$('#figGroup').placeholder=`비우면 '${d.file||'피그마'}' 그룹으로`;
+}
 async function readFigFile(f){
   try{
     const d=JSON.parse(await f.text());
     if(!d||d.kind!=='figma-export'||!Array.isArray(d.frames))throw new Error('피그마 플러그인이 만든 파일이 아니야');
-    await figImportExport(d);
-  }catch(e){$('#figLog').innerHTML='';figLog('✕ '+(e.message||e),'bad');}
+    figPending={name:f.name,data:d};$('#figLog').innerHTML='';$('#figLog').style.display='none';
+    paintFigReady();
+  }catch(e){figPending=null;paintFigReady();$('#figLog').innerHTML='';figLog('✕ '+(e.message||e),'bad');}
 }
 $('#figDrop').onclick=e=>{if(e.target.tagName!=='A')$('#figFile').click();};
 $('#figFile').onchange=e=>{const f=e.target.files[0];if(f)readFigFile(f);e.target.value='';};
 ['dragover','dragenter'].forEach(t=>$('#figDrop').addEventListener(t,e=>{e.preventDefault();e.stopPropagation();$('#figDrop').style.borderColor='var(--accent)';}));
 ['dragleave','drop'].forEach(t=>$('#figDrop').addEventListener(t,()=>{$('#figDrop').style.borderColor='';}));
 $('#figDrop').addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();const f=e.dataTransfer.files[0];if(f)readFigFile(f);});
+async function openFig(){
+  try{const gs=await UIKit.groups();$('#figGroupList').innerHTML=gs.filter(g=>g.name).map(g=>`<option value="${esc(g.name)}">`).join('');}catch(e){}
+  if(!$('#figGroup').value&&curGroup&&curGroup!=='*')$('#figGroup').value=curGroup;
+  $('#figBack').classList.add('show');
+}
 $('#figOpen').onclick=()=>{
   try{const t=localStorage.getItem('figmaToken');if(t){$('#figToken').value=t;$('#figRemember').checked=true;}}catch(e){}
-  $('#figBack').classList.add('show');setTimeout(()=>$('#figLinks').focus(),50);
+  openFig();setTimeout(()=>$('#figLinks').focus(),50);
 };
 $('#figClose').onclick=()=>$('#figBack').classList.remove('show');
 $('#figGo').onclick=figImport;

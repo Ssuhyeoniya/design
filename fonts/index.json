@@ -1,0 +1,237 @@
+[
+ {
+  "family": "Black Han Sans",
+  "slug": "black-han-sans",
+  "weights": [
+   400
+  ]
+ },
+ {
+  "family": "Do Hyeon",
+  "slug": "do-hyeon",
+  "weights": [
+   400
+  ]
+ },
+ {
+  "family": "Gmarket Sans",
+  "slug": "gmarket-sans",
+  "weights": [
+   500
+  ]
+ },
+ {
+  "family": "Gothic A1",
+  "slug": "gothic-a1",
+  "weights": [
+   100,
+   200,
+   300,
+   400,
+   500,
+   600,
+   700,
+   800,
+   900
+  ]
+ },
+ {
+  "family": "Gowun Batang",
+  "slug": "gowun-batang",
+  "weights": [
+   400,
+   700
+  ]
+ },
+ {
+  "family": "Gowun Dodum",
+  "slug": "gowun-dodum",
+  "weights": [
+   400
+  ]
+ },
+ {
+  "family": "IBM Plex Sans KR",
+  "slug": "ibm-plex-sans-kr",
+  "weights": [
+   100,
+   200,
+   300,
+   400,
+   500,
+   600,
+   700
+  ]
+ },
+ {
+  "family": "Inter",
+  "slug": "inter",
+  "weights": [
+   100,
+   200,
+   300,
+   400,
+   500,
+   600,
+   700,
+   800,
+   900
+  ]
+ },
+ {
+  "family": "Jalnan Gothic",
+  "slug": "jalnan-gothic",
+  "weights": [
+   400
+  ]
+ },
+ {
+  "family": "Jua",
+  "slug": "jua",
+  "weights": [
+   400
+  ]
+ },
+ {
+  "family": "Montserrat",
+  "slug": "montserrat",
+  "weights": [
+   100,
+   200,
+   300,
+   400,
+   500,
+   600,
+   700,
+   800,
+   900
+  ]
+ },
+ {
+  "family": "Nanum Gothic",
+  "slug": "nanum-gothic",
+  "weights": [
+   400,
+   700,
+   800
+  ]
+ },
+ {
+  "family": "Nanum Myeongjo",
+  "slug": "nanum-myeongjo",
+  "weights": [
+   400,
+   700,
+   800
+  ]
+ },
+ {
+  "family": "Nanum Pen Script",
+  "slug": "nanum-pen-script",
+  "weights": [
+   400
+  ]
+ },
+ {
+  "family": "NanumSquare Neo",
+  "slug": "nanum-square-neo",
+  "weights": [
+   300,
+   400,
+   700,
+   800,
+   900
+  ]
+ },
+ {
+  "family": "Noto Sans KR",
+  "slug": "noto-sans-kr",
+  "weights": [
+   100,
+   200,
+   300,
+   400,
+   500,
+   600,
+   700,
+   800,
+   900
+  ]
+ },
+ {
+  "family": "Poppins",
+  "slug": "poppins",
+  "weights": [
+   100,
+   200,
+   300,
+   400,
+   500,
+   600,
+   700,
+   800,
+   900
+  ]
+ },
+ {
+  "family": "Roboto",
+  "slug": "roboto",
+  "weights": [
+   100,
+   200,
+   300,
+   400,
+   500,
+   600,
+   700,
+   800,
+   900
+  ]
+ },
+ {
+  "family": "SUIT",
+  "slug": "suit",
+  "weights": [
+   100,
+   200,
+   300,
+   400,
+   500,
+   600,
+   700,
+   800,
+   900
+  ]
+ },
+ {
+  "family": "Song Myung",
+  "slug": "song-myung",
+  "weights": [
+   400
+  ]
+ },
+ {
+  "family": "Spoqa Han Sans Neo",
+  "slug": "spoqa-han-sans-neo",
+  "weights": [
+   100,
+   300,
+   400,
+   500,
+   700
+  ]
+ },
+ {
+  "family": "Wanted Sans",
+  "slug": "wanted-sans",
+  "weights": [
+   400,
+   500,
+   600,
+   700,
+   800,
+   900,
+   1000
+  ]
+ }
+]
