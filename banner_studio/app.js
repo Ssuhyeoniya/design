@@ -349,7 +349,17 @@ function drawLayer(ctx, l) {
       ctx.fillStyle = 'rgba(120,130,150,.25)'; ctx.fillRect(l.x, l.y, l.w, l.h);
     }
   } else if (l.kind === 'rect') {
-    ctx.fillStyle = l.fill; roundRect(ctx, l.x, l.y, l.w, l.h, l.radius || 0); ctx.fill();
+    if (l.fx && window.UIKit) {
+      // 피그마식 채우기·효과 (그라데이션·이미지 채우기·그림자·블러·테두리) — ../shared/ui-kit.js 공용 페인터
+      let backdrop = null;
+      if ((l.fx.effects || []).some(e => e.type === 'BACKGROUND_BLUR' && e.visible !== false)) {
+        backdrop = el('canvas'); backdrop.width = ctx.canvas.width; backdrop.height = ctx.canvas.height;
+        backdrop.getContext('2d').drawImage(ctx.canvas, 0, 0);
+      }
+      ctx.globalAlpha = 1;                                // 투명도는 페인터가 적용한다
+      UIKit.paintBox(ctx, l, { k: ctx.getTransform().a || 1, backdrop });
+      ctx.globalAlpha = l.opacity == null ? 1 : l.opacity;
+    } else { ctx.fillStyle = l.fill; roundRect(ctx, l.x, l.y, l.w, l.h, l.radius || 0); ctx.fill(); }
     // 도형도 글자를 담는다 — 도형 높이 안에서 세로 가운데 정렬
     if (l.text && !(editing && editing.l === l)) drawText(ctx, l, l.y + (l.h - textMetrics(l).h) / 2);
   } else if (l.kind === 'text') {
@@ -365,7 +375,11 @@ function drawText(ctx, l, top) {
   ctx.fillStyle = l.color; ctx.textBaseline = 'top';
   ctx.textAlign = l.align === 'center' ? 'center' : l.align === 'right' ? 'right' : 'left';
   const ax = l.align === 'center' ? l.x + l.w / 2 : l.align === 'right' ? l.x + l.w : l.x;
-  m.lines.forEach((s, i) => ctx.fillText(s, ax, top + i * m.lh + (m.lh - l.size) / 2));
+  const draw = () => m.lines.forEach((s, i) => ctx.fillText(s, ax, top + i * m.lh + (m.lh - l.size) / 2));
+  for (const sh of (l.shadows || [])) {             // 글자 그림자 (피그마 드롭 섀도) — 겹마다 한 번씩
+    ctx.save(); ctx.shadowColor = sh.color; ctx.shadowBlur = sh.blur; ctx.shadowOffsetX = sh.x; ctx.shadowOffsetY = sh.y; draw(); ctx.restore();
+  }
+  draw();
 }
 
 // 오토 레이아웃 — 글자 + 패딩으로 도형 크기를 정한다 (rect.auto = { padX, padY|null }, padY 가 null 이면 높이 고정)
@@ -800,6 +814,7 @@ function paintProps() {
     h += num('X', 'x') + num('Y', 'y') + num('폭', 'w') + num('높이', 'h');
     h += `<div class="row"><label>채움</label><input type="color" data-k="fill" value="${l.fill}"><input type="text" data-k="fill" value="${l.fill}" class="grow mono"></div>`;
     h += `<div class="row"><label>모서리</label><input type="number" data-k="radius" value="${l.radius || 0}" class="grow"></div>`;
+    h += fxPropsHTML(l);
     const au = l.auto;
     h += `<div class="row"><label>오토</label><label class="hint"><input type="checkbox" data-auto="on" ${au ? 'checked' : ''}> 글자에 맞춰 크기 자동 (오토 레이아웃)</label></div>`;
     if (au) h += `<div class="row"><label>패딩 좌우</label><input type="number" min="0" data-auto="padX" value="${au.padX}" class="grow">
@@ -832,13 +847,18 @@ function paintProps() {
     inp.addEventListener(ev, () => {
       if (l.role === 'bi' && ['x', 'w', 'h'].includes(k)) { toast('BI 는 사이즈·좌우 위치가 고정입니다', true); paintProps(); return; }
       let v = inp.type === 'checkbox' ? inp.checked : inp.type === 'number' || inp.type === 'range' ? +inp.value : inp.value;
-      l[k] = v; push(); render(); paintChecks(); measureKB();
+      l[k] = v;
+      // 피그마에서 온 도형 — 색을 고르면 이미지 채우기는 두고 나머지 채우기를 그 색으로, 모서리를 고르면 모서리별 값을 푼다
+      if (l.fx && k === 'fill') l.fx.fills = [{ type: 'SOLID', color: v }, ...(l.fx.fills || []).filter(p => p.type === 'IMAGE')];
+      if (l.fx && k === 'radius') delete l.fx.radii;
+      push(); render(); paintChecks(); measureKB();
       if (['text', 'size', 'w', 'font', 'lh', 'ls', 'align'].includes(k)) paintProps();
       if (k === 'name') paintLayers();
     });
     if (inp.tagName === 'TEXTAREA') inp.addEventListener('input', () => { l.text = inp.value; render(); paintChecks(); });
   });
   box.querySelectorAll('[data-act]').forEach(b => b.onclick = () => layerAct(b.dataset.act, l));
+  bindFxProps(box, l);
   box.querySelectorAll('[data-auto]').forEach(inp => inp.addEventListener('change', () => {
     const k = inp.dataset.auto;
     if (k === 'on') {
@@ -850,6 +870,75 @@ function paintProps() {
     } else if (k === 'padY') l.auto.padY = inp.value === '' ? null : Math.max(0, +inp.value);
     else l.auto.padX = Math.max(0, +inp.value || 0);
     push(); render(); paintProps(); paintChecks(); measureKB();
+  }));
+}
+
+// ── 도형 이미지 채우기 · 효과 (피그마와 같은 모델 — ../shared/ui-kit.js) ──
+const FX_NAME = { DROP_SHADOW: '드롭 섀도', INNER_SHADOW: '이너 섀도', LAYER_BLUR: '레이어 블러', BACKGROUND_BLUR: '배경 블러' };
+const SCALE_NAME = [['FILL', '채우기'], ['FIT', '맞추기'], ['CROP', '자르기'], ['TILE', '바둑판']];
+const imgFillOf = l => l.fx && (l.fx.fills || []).find(p => p.type === 'IMAGE');
+function fxPropsHTML(l) {
+  const f = imgFillOf(l), eff = (l.fx && l.fx.effects) || [];
+  let h = `<div class="row"><label>이미지</label><button class="btn sm grow" data-fx="pick">${f ? '이미지 바꾸기' : '🖼 이미지 채우기'}</button>` +
+    `<button class="btn sm grow" data-fx="stock" title="다음에 누르는 스톡 이미지를 이 도형에 채웁니다">스톡에서</button></div>`;
+  if (f) h += `<div class="row"><label>맞춤</label><select data-fx="mode" class="grow">` +
+    SCALE_NAME.map(([v, n]) => `<option value="${v}"${(f.scaleMode || 'FILL') === v ? ' selected' : ''}>${n}</option>`).join('') +
+    `</select><button class="btn sm" data-fx="unimg">제거</button></div>`;
+  if (eff.length || (l.fx && l.fx.stroke)) {
+    h += `<div class="row wide"><label>효과</label>` + eff.map((e, i) => `<div class="row" style="gap:4px">
+      <label class="hint" style="flex:0 0 auto"><input type="checkbox" data-fxi="${i}" data-fp="visible" ${e.visible === false ? '' : 'checked'}> ${FX_NAME[e.type] || e.type}</label>
+      ${e.x != null ? `<input type="number" data-fxi="${i}" data-fp="x" value="${e.x}" title="X" class="grow"><input type="number" data-fxi="${i}" data-fp="y" value="${e.y}" title="Y" class="grow">` : ''}
+      <input type="number" min="0" data-fxi="${i}" data-fp="blur" value="${e.blur}" title="블러" class="grow">
+      ${e.color ? `<input type="color" data-fxi="${i}" data-fp="color" value="${toHexColor(e.color)}" title="색">` : ''}</div>`).join('') +
+      (l.fx.stroke ? `<p class="hint">테두리 ${l.fx.stroke.width}px · ${{ INSIDE: '안쪽', OUTSIDE: '바깥쪽', CENTER: '가운데' }[l.fx.stroke.align] || ''}</p>` : '') + `</div>`;
+  }
+  h += `<div class="row"><button class="btn sm grow" data-fx="shadow">＋ 그림자</button>` + (l.fx ? `<button class="btn sm grow" data-fx="clear" title="효과·그라데이션·이미지 채우기를 모두 지우고 단색으로">효과 모두 지우기</button>` : '') + `</div>`;
+  return h;
+}
+// 'rgba()'·'#rrggbb' → '#rrggbb' (색 선택기용, 투명도는 유지하지 않는다)
+function toHexColor(c) {
+  const m = String(c).match(/rgba?\(([^)]+)\)/);
+  if (!m) return /^#[0-9a-f]{6}$/i.test(c) ? c : '#000000';
+  return '#' + m[1].split(',').slice(0, 3).map(v => (+v).toString(16).padStart(2, '0')).join('');
+}
+function alphaOf(c) { const m = String(c).match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)/); return m ? +m[1] : 1; }
+function ensureFx(l) {
+  if (!l.fx) l.fx = { fills: [{ type: 'SOLID', color: l.fill }] };
+  if (!l.fx.fills) l.fx.fills = [{ type: 'SOLID', color: l.fill }];
+  return l.fx;
+}
+async function setImageFill(l, src) {
+  // 경로 이미지는 dataURL 로 바꿔 둔다 — UI 로 저장해 다른 화면(블로그)에서 열어도 깨지지 않게
+  if (!/^data:/.test(src)) { try { src = await fileToDataURL(await (await fetch(src)).blob()); } catch { /* 실패하면 경로 그대로 */ } }
+  const fx = ensureFx(l), f = imgFillOf(l);
+  if (f) f.src = src; else fx.fills.push({ type: 'IMAGE', src, scaleMode: 'FILL' });
+  UIKit.img(src);
+  push(); render(); paintProps(); measureKB();
+  toast('도형에 이미지를 채웠습니다 — 맞춤 방식(채우기·맞추기·바둑판)은 속성에서 바꿀 수 있습니다');
+}
+let stockFillTarget = null;                  // '스톡에서' 를 누른 뒤 고르는 스톡 이미지를 채울 도형
+function bindFxProps(box, l) {
+  box.querySelectorAll('[data-fx]').forEach(b => b.addEventListener(b.tagName === 'SELECT' ? 'change' : 'click', () => {
+    const a = b.dataset.fx;
+    if (a === 'pick') {
+      const inp = el('input'); inp.type = 'file'; inp.accept = 'image/*';
+      inp.onchange = async () => { const f = inp.files[0]; if (f) setImageFill(l, await fileToDataURL(f)); };
+      inp.click(); return;
+    }
+    if (a === 'stock') { stockFillTarget = l.id; toast('왼쪽 스톡 이미지를 누르면 이 도형에 채웁니다 (Esc 취소)'); return; }
+    if (a === 'mode') imgFillOf(l).scaleMode = b.value;
+    if (a === 'unimg') { l.fx.fills = l.fx.fills.filter(p => p.type !== 'IMAGE'); }
+    if (a === 'shadow') ensureFx(l).effects = [...(l.fx.effects || []), { type: 'DROP_SHADOW', x: 0, y: Math.round(l.h * 0.06) || 4, blur: Math.round(l.h * 0.15) || 12, spread: 0, color: 'rgba(0,0,0,0.25)' }];
+    if (a === 'clear') delete l.fx;
+    push(); render(); paintProps(); measureKB();
+  }));
+  box.querySelectorAll('[data-fxi]').forEach(inp => inp.addEventListener(inp.type === 'color' ? 'input' : 'change', () => {
+    const e = l.fx.effects[+inp.dataset.fxi], k = inp.dataset.fp;
+    if (k === 'visible') e.visible = inp.checked;
+    else if (k === 'color') { const a = alphaOf(e.color), [r, g, b2] = [1, 3, 5].map(i => parseInt(inp.value.slice(i, i + 2), 16)); e.color = `rgba(${r},${g},${b2},${a})`; }
+    else e[k] = +inp.value || 0;
+    if (inp.type !== 'color') push();
+    render(); measureKB();
   }));
 }
 
@@ -1081,6 +1170,19 @@ document.addEventListener('pointerdown', e => {
   if (editing && !e.target.closest('.inlineEditWrap')) commitEdit();
 }, true);
 
+// 이미지 파일을 도형 위에 끌어다 놓으면 그 도형을 이미지로 채운다 (피그마와 같다). 빈 곳이면 이미지 레이어로 넣는다
+hit.addEventListener('dragover', e => { if (S && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+hit.addEventListener('drop', async e => {
+  if (!S) return;
+  const files = [...e.dataTransfer.files].filter(f => /^image\//.test(f.type));
+  if (!files.length) return;
+  e.preventDefault();
+  const p = toCanvas(e);
+  const tg = [...S.layers].reverse().find(l => !l.hidden && l.kind === 'rect' && p.x >= l.x && p.x <= l.x + l.w && p.y >= l.y && p.y <= l.y + l.h);
+  if (tg) { sel = tg.id; return setImageFill(tg, await fileToDataURL(files[0])); }
+  pasteImages(files);
+});
+
 // 더블클릭 = 바로 편집
 onHit('dblclick', e => {
   const l = pickAt(toCanvas(e));
@@ -1101,6 +1203,7 @@ document.addEventListener('keydown', e => {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   if (editing || (ae && ae.isContentEditable)) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(e.shiftKey); return; }
+  if (e.key === 'Escape' && stockFillTarget) { stockFillTarget = null; toast('이미지 채우기를 취소했습니다'); return; }
   const l = S.layers.find(x => x.id === sel);
   if (!l) return;
   // F2 / Enter 로도 편집을 연다
@@ -1252,7 +1355,12 @@ function paintStock() {
     d.title = `${it.category} / ${it.name} · ${it.kb}KB${it.assetId ? ' · ' + it.assetId + (it.description ? '\n' + it.description : '') : it.builtin ? ' · 기본 제공' : ''}\n클릭하면 캔버스에 추가`;
     d.innerHTML = `<img src="${esc(it.url)}" loading="lazy">` +
       (it.builtin ? '' : '<span class="del" title="보관함에서 삭제">×</span>');
-    d.querySelector('img').onclick = () => addStockImage(it);
+    d.querySelector('img').onclick = () => {
+      const tg = stockFillTarget && S.layers.find(x => x.id === stockFillTarget);
+      stockFillTarget = null;
+      if (tg) return setImageFill(tg, it.url);
+      addStockImage(it);
+    };
     if (!it.builtin) d.querySelector('.del').onclick = async ev => {
       ev.stopPropagation();
       if (!confirm(`보관함에서 삭제합니다.\n\n${it.rel}\n\n이 브라우저 보관함에서 영구 삭제됩니다. 계속할까요?`)) return;
@@ -1401,10 +1509,16 @@ async function loadUi() {
   try { items = await UIKit.list(); } catch (e) { toast('UI 컴포넌트 저장소를 열지 못했습니다 — ' + e.message, true); }
   $('#uiCnt').textContent = items.length ? items.length + '개' : '';
   $('#uiEmpty').style.display = items.length ? 'none' : '';
+  // 그룹 필터 — 이미지 소스 페이지에서 정한 그룹(폴더)
+  const gs = $('#uiGroup'), curG = gs.value;
+  const names = [...new Set(items.map(c => c.group || ''))].sort((a, b) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'ko'));
+  gs.innerHTML = '<option value="*">전체 그룹</option>' + names.map(n => `<option value="${esc(n)}">${esc(n || '그룹 없음')} (${items.filter(c => (c.group || '') === n).length})</option>`).join('');
+  gs.value = names.includes(curG) || curG === '*' ? curG : '*';
+  gs.style.display = names.length > 1 || (names[0] || '') !== '' ? '' : 'none';
   const g = $('#uiGrid'); g.innerHTML = '';
-  for (const c of items) {
+  for (const c of items.filter(c => gs.value === '*' || (c.group || '') === gs.value)) {
     const d = el('div', 'stock');
-    d.title = `${c.name} · ${c.w}×${c.h}px${c.origin === 'blog' ? ' · 블로그 이미지 제작에서 저장' : ''}\n클릭하면 캔버스에 복사해 넣습니다`;
+    d.title = `${c.group ? '[' + c.group + '] ' : ''}${c.name} · ${c.w}×${c.h}px${c.origin === 'blog' ? ' · 블로그 이미지 제작에서 저장' : c.origin === 'figma' ? ' · 피그마에서 가져옴' : ''}\n클릭하면 캔버스에 복사해 넣습니다`;
     d.innerHTML = `<img src="${esc(c.thumb)}" loading="lazy"><span class="nm">${esc(c.name)}</span><span class="del" title="UI 컴포넌트 삭제">×</span>`;
     d.onclick = () => insertUi(c);
     d.querySelector('.del').onclick = async ev => {
@@ -1424,7 +1538,8 @@ async function saveUi() {
   const name = (prompt('UI 컴포넌트 이름', first ? first.text.split('\n')[0].slice(0, 20) : 'UI') || '').trim();
   if (!name) return;
   try {
-    const c = await UIKit.save(name, UIKit.fromBanner(picked, textMetrics));
+    const gv = $('#uiGroup').value;
+    const c = await UIKit.save(name, UIKit.fromBanner(picked, textMetrics), gv === '*' ? '' : gv);
     const auto = c.nodes.filter(n => n.pad).length;
     toast(`UI 컴포넌트로 저장했습니다 — ${c.name}${auto ? ` (오토 레이아웃 ${auto}개)` : ''}`);
   } catch (e) { toast('저장 실패 — ' + e.message, true); }
@@ -1805,6 +1920,8 @@ async function boot() {
 
   // UI 컴포넌트
   $('#btnUiSave').onclick = saveUi;
+  $('#uiGroup').onchange = loadUi;
+  if (window.UIKit) UIKit.onImage = () => { if (S) { render(); } };   // 이미지 채우기가 늦게 로드되면 다시 그린다
   // 이미지 소스 페이지·다른 탭에서 바뀐 UI·이미지를 돌아올 때 다시 읽는다
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadUi(); loadStock(); } });
 

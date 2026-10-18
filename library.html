@@ -64,6 +64,33 @@
   .ui-card .sc-th{background:repeating-conic-gradient(#f1f2f5 0 25%,#fff 0 50%) 0 0/18px 18px;}
   .ui-card .sc-name[contenteditable]{outline:none;border-radius:4px;cursor:text;}
   .ui-card .sc-name[contenteditable]:focus{background:#f0f6ff;}
+  /* 그룹 칩 · 일괄 이동 */
+  #gbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:14px;}
+  .gchip{border:1px solid var(--border-strong);background:#fff;border-radius:999px;font-family:inherit;font-size:12px;font-weight:700;color:var(--text-sub);padding:5px 12px;cursor:pointer;}
+  .gchip b{color:var(--text-faint);font-weight:600;margin-left:3px;}
+  .gchip.on{background:var(--text);border-color:var(--text);color:#fff;}
+  .gchip.on b{color:#c9ced6;}
+  .gacts{display:flex;gap:6px;margin-left:auto;}
+  #selbar{display:none;align-items:center;gap:8px;background:#eef4ff;border:1px solid #c9dcff;border-radius:10px;padding:8px 12px;margin-bottom:14px;font-size:12.5px;font-weight:600;}
+  #selbar.on{display:flex;}
+  #selbar select{font:inherit;border:1px solid var(--border-strong);border-radius:7px;padding:4px 6px;}
+  .ui-card{position:relative;}
+  .ui-card .pick{position:absolute;top:10px;left:10px;width:18px;height:18px;z-index:2;cursor:pointer;}
+  .ui-card .sc-grp{margin-top:7px;width:100%;font:inherit;font-size:11.5px;border:1px solid var(--border);border-radius:7px;padding:4px 6px;color:var(--text-sub);background:#fafbfc;}
+  .ui-card .warn{color:#b45309;cursor:help;}
+  /* 피그마 가져오기 */
+  #figBack{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:300;display:none;align-items:center;justify-content:center;}
+  #figBack.show{display:flex;}
+  #figBox{background:#fff;border-radius:14px;padding:22px 24px;width:620px;max-width:94vw;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  #figBox h2{margin:0 0 4px;font-size:16px;}
+  #figBox .sub{font-size:12px;color:var(--text-sub);line-height:1.6;margin-bottom:14px;}
+  #figBox label{display:block;font-size:12px;font-weight:700;margin:12px 0 5px;}
+  #figBox textarea,#figBox input[type=text],#figBox input[type=password]{width:100%;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:8px;padding:8px 10px;font:12.5px/1.5 inherit;font-family:inherit;}
+  #figBox textarea{height:110px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;}
+  #figBox .chk{display:flex;gap:6px;align-items:center;font-weight:500;font-size:12px;margin-top:8px;}
+  #figBox .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+  #figLog{margin-top:12px;font:11.5px/1.7 ui-monospace,Menlo,Consolas,monospace;background:#f6f7f9;border-radius:8px;padding:10px 12px;max-height:220px;overflow:auto;white-space:pre-wrap;display:none;}
+  #figLog .bad{color:var(--danger);} #figLog .ok{color:#15803d;} #figLog .warn{color:#b45309;}
   .ui-tip{font-size:12px;color:var(--text-sub);line-height:1.7;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:18px;}
 
   /* 확인 모달 */
@@ -73,6 +100,14 @@
   #confirmBox .msg{font-size:13.5px;line-height:1.6;white-space:pre-wrap;color:var(--text);}
   #confirmBox .row{display:flex;gap:8px;margin-top:18px;justify-content:flex-end;}
   #confirmBox .row button{border-radius:8px;font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 16px;cursor:pointer;border:1px solid var(--border-strong);background:#fff;}
+  #txtBack{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:320;display:none;align-items:center;justify-content:center;}
+  #txtBack.show{display:flex;}
+  #txtBox{background:#fff;border-radius:12px;padding:20px 22px;width:340px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  #txtBox .msg{font-size:13px;font-weight:700;margin-bottom:10px;}
+  #txtBox input{width:100%;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;}
+  #txtBox .row{display:flex;gap:8px;margin-top:14px;justify-content:flex-end;}
+  #txtBox .row button{border-radius:8px;font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 16px;cursor:pointer;border:1px solid var(--border-strong);background:#fff;}
+  #txtBox .row .ok{background:var(--accent);border-color:var(--accent);color:#fff;}
   #confirmBox .row .ok{background:var(--danger);border-color:var(--danger);color:#fff;}
 </style>
 </head>
@@ -95,6 +130,7 @@
       <button class="btn small danger" id="clearAll">🗑 전체 삭제</button>
     </div>
     <div class="actions" id="actUi" style="display:none">
+      <button class="btn small pri" id="figOpen" title="피그마 프레임 링크로 텍스트·도형·효과·오토 레이아웃을 편집 가능한 상태로 가져오기">🎨 피그마에서 가져오기</button>
       <button class="btn small" id="uiImport" title="다른 PC·팀원이 내보낸 UI 컴포넌트 파일(.json) 가져오기">⤒ 가져오기</button>
       <button class="btn small" id="uiExportAll" title="모든 UI 컴포넌트를 .json 파일로 내려받기">⤓ 전체 내보내기</button>
     </div>
@@ -104,12 +140,33 @@
   <div id="toast"></div>
   <div id="body"><div class="empty">불러오는 중…</div></div>
 
+  <div id="figBack"><div id="figBox">
+    <h2>🎨 피그마에서 가져오기</h2>
+    <div class="sub">프레임 링크를 넣으면 텍스트·도형·그라데이션·이미지 채우기·그림자·블러·테두리·오토 레이아웃 패딩을 <b>편집 가능한 상태</b>로 가져와. 아이콘·벡터처럼 직접 그릴 수 없는 것만 피그마가 그린 그림으로 받아.<br>
+      링크 복사: 피그마에서 프레임 선택 → 우클릭 → <b>선택 항목 링크 복사</b> (Ctrl+L / ⌘L)</div>
+    <label>피그마 링크 (한 줄에 하나씩, 여러 개 가능)</label>
+    <textarea id="figLinks" placeholder="https://www.figma.com/design/파일키/파일이름?node-id=3-5"></textarea>
+    <label>피그마 개인 액세스 토큰</label>
+    <input type="password" id="figToken" placeholder="figd_… (피그마 → Settings → Security → Personal access tokens, 'File content: Read only')" autocomplete="off">
+    <div class="chk"><input type="checkbox" id="figRemember"> 이 브라우저에 토큰 기억 (공용 PC 에서는 끄세요)</div>
+    <label>저장할 그룹</label>
+    <input type="text" id="figGroup" placeholder="비우면 피그마 파일 이름으로">
+    <div class="chk"><input type="checkbox" id="figSplit"> 링크한 프레임 안의 프레임·컴포넌트를 각각 따로 저장 (페이지·섹션 링크는 자동)</div>
+    <div id="figLog"></div>
+    <div class="row"><button class="btn" id="figClose">닫기</button><button class="btn pri" id="figGo">가져오기</button></div>
+  </div></div>
+
+  <div id="txtBack"><div id="txtBox">
+    <div class="msg"></div><input type="text" maxlength="40">
+    <div class="row"><button class="cancel">취소</button><button class="ok">확인</button></div>
+  </div></div>
+
   <div id="confirmBack"><div id="confirmBox">
     <div class="msg"></div>
     <div class="row"><button class="cancel">취소</button><button class="ok">삭제</button></div>
   </div></div>
 
-<script src="shared/ui-kit.js?v=20261018-1"></script>
+<script src="shared/ui-kit.js?v=20261018-2"></script>
 <script>
 const $=s=>document.querySelector(s);
 
@@ -184,6 +241,19 @@ function saveBlob(blob,name){
   const a=document.createElement('a');const u=URL.createObjectURL(blob);
   a.href=u;a.download=name;document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(u);a.remove();},400);
+}
+// 글자 입력 모달 (네이티브 prompt 가 막힌 환경 대응)
+function askText(msg,def){
+  return new Promise(res=>{
+    const back=$('#txtBack'),box=$('#txtBox'),inp=box.querySelector('input');
+    box.querySelector('.msg').textContent=msg;inp.value=def||'';
+    const close=v=>{back.classList.remove('show');inp.onkeydown=null;res(v);};
+    box.querySelector('.ok').onclick=()=>close(inp.value.trim()||null);
+    box.querySelector('.cancel').onclick=()=>close(null);
+    back.onclick=e=>{if(e.target===back)close(null);};
+    inp.onkeydown=e=>{if(e.key==='Enter')close(inp.value.trim()||null);if(e.key==='Escape')close(null);};
+    back.classList.add('show');setTimeout(()=>{inp.focus();inp.select();},50);
+  });
 }
 function askConfirm(msg,okLabel){
   return new Promise(res=>{
@@ -320,15 +390,31 @@ async function renderUi(){
   const tip='<div class="ui-tip"><b>🧩 UI 컴포넌트</b> — 피그마의 컴포넌트처럼 버튼·배지·말풍선 같은 UI 를 저장해 두고 블로그 이미지 제작·배너 스튜디오에서 꺼내 써.<br>'+
     '저장: 스튜디오에서 도형·텍스트를 Shift+클릭으로 함께 고른 뒤 <b>🧩 선택을 UI로 저장</b>. 도형 안의 글자는 <b>오토 레이아웃</b>으로 묶여서, 넣은 뒤 글자를 고치면 도형이 패딩에 맞춰 늘고 줄고, 글자를 다 지우면 도형도 사라져.<br>'+
     '넣을 때는 복사본이라 여기서 이름을 바꾸거나 지워도 이미 만든 시안은 그대로야. 다른 PC·팀원과는 <b>⤓ 내보내기 / ⤒ 가져오기</b>(.json)로 나눠.</div>';
-  if(!list.length){body.innerHTML=tip+'<div class="empty">저장된 UI 컴포넌트가 없어.</div>';return;}
-  body.innerHTML=tip+'<div class="src-grid">'+list.map(c=>{
+  if(!list.length){body.innerHTML=tip+'<div class="empty">저장된 UI 컴포넌트가 없어.<br><b>🎨 피그마에서 가져오기</b> 로 피그마 프레임을 바로 가져올 수도 있어.</div>';return;}
+  // 그룹(폴더) — 칩으로 골라 보고, 카드마다 그룹을 바꾸거나 여러 개를 골라 한 번에 옮긴다
+  const gnames=[...new Set(list.map(c=>c.group||''))].sort((a,b)=>a===''?1:b===''?-1:a.localeCompare(b,'ko'));
+  if(curGroup!=='*'&&!gnames.includes(curGroup)&&!newGroups.includes(curGroup))curGroup='*';
+  const allG=[...new Set([...gnames.filter(Boolean),...newGroups])].sort((a,b)=>a.localeCompare(b,'ko'));
+  const shown=list.filter(c=>curGroup==='*'||(c.group||'')===curGroup);
+  const chip=(v,label,n)=>`<button class="gchip${curGroup===v?' on':''}" data-g="${esc(v)}">${esc(label)}<b>${n}</b></button>`;
+  const gbar=`<div id="gbar">${chip('*','전체',list.length)}${allG.map(g=>chip(g,'📁 '+g,list.filter(c=>c.group===g).length)).join('')}${gnames.includes('')?chip('','그룹 없음',list.filter(c=>!c.group).length):''}
+    <button class="gchip" id="gNew">＋ 새 그룹</button>
+    ${curGroup!=='*'&&curGroup!==''?`<span class="gacts"><button class="btn small" id="gRen">그룹 이름 바꾸기</button><button class="btn small" id="gExp">그룹 내보내기</button><button class="btn small danger" id="gDel">그룹 삭제</button></span>`:''}</div>
+    <div id="selbar"><span id="selN"></span><select id="selTo">${allG.map(g=>`<option value="${esc(g)}">📁 ${esc(g)}</option>`).join('')}<option value="">그룹 없음</option></select><button class="btn small pri" id="selMove">로 옮기기</button><button class="btn small" id="selExp">내보내기</button><button class="btn small danger" id="selDel">삭제</button><button class="btn small" id="selClear">선택 해제</button></div>`;
+  const gopts=c=>allG.map(g=>`<option value="${esc(g)}"${c.group===g?' selected':''}>📁 ${esc(g)}</option>`).join('')+`<option value=""${!c.group?' selected':''}>그룹 없음</option><option value="__new">＋ 새 그룹…</option>`;
+  body.innerHTML=tip+gbar+(shown.length?'':'<div class="empty">이 그룹에는 아직 컴포넌트가 없어. 다른 그룹에서 카드를 골라 이 그룹으로 옮겨 봐.</div>')+'<div class="src-grid">'+shown.map(c=>{
     const auto=c.nodes.filter(n=>n.pad).length;
+    const fxn=c.nodes.filter(n=>n.fx&&((n.fx.effects||[]).length||(n.fx.fills||[]).some(p=>p.type!=='SOLID'))).length;
+    const wn=(c.warnings||[]).length;
     return `<div class="src-card ui-card" data-cid="${c.id}">
+      <input type="checkbox" class="pick" title="여러 개 골라 한 번에 옮기기"${picked.has(c.id)?' checked':''}>
       <div class="sc-th"><img src="${c.thumb}" loading="lazy" alt=""></div>
       <div class="sc-meta">
         <div class="sc-name" contenteditable="true" spellcheck="false" title="클릭해서 이름 수정">${esc(c.name)}</div>
-        <div class="sc-sub"><span><b>크기</b> ${c.w}×${c.h}px</span><span><b>요소</b> ${c.nodes.length}개</span>${auto?`<span><b>오토 레이아웃</b> ${auto}개</span>`:''}
-          <span><b>만든 곳</b> ${c.origin==='banner'?'배너 스튜디오':'블로그 이미지 제작'}</span><span><b>저장</b> ${fmtTs(c.ts)}</span></div>
+        <div class="sc-sub"><span><b>크기</b> ${c.w}×${c.h}px</span><span><b>요소</b> ${c.nodes.length}개</span>${auto?`<span><b>오토 레이아웃</b> ${auto}개</span>`:''}${fxn?`<span><b>효과</b> ${fxn}개</span>`:''}
+          <span><b>만든 곳</b> ${c.origin==='banner'?'배너 스튜디오':c.origin==='figma'?'피그마':'블로그 이미지 제작'}</span><span><b>저장</b> ${fmtTs(c.ts)}</span>
+          ${wn?`<span class="warn" title="${esc(c.warnings.join('\n'))}">⚠ 확인 ${wn}건</span>`:''}</div>
+        <select class="sc-grp" title="그룹 옮기기">${gopts(c)}</select>
       </div>
       <div class="sc-acts">
         <button class="sc-png">PNG 다운로드</button>
@@ -337,8 +423,15 @@ async function renderUi(){
       </div>
     </div>`;
   }).join('')+'</div>';
+  bindGroups(list,shown);
   body.querySelectorAll('.ui-card').forEach(card=>{
     const c=list.find(x=>x.id===+card.dataset.cid);if(!c)return;
+    card.querySelector('.pick').onchange=e=>{if(e.target.checked)picked.add(c.id);else picked.delete(c.id);syncSel();};
+    card.querySelector('.sc-grp').onchange=async e=>{
+      let g=e.target.value;
+      if(g==='__new'){g=(await askText('새 그룹 이름')||'').trim();if(!g){e.target.value=c.group||'';return;}}
+      await UIKit.setGroup(c.id,g);toast(g?`📁 ${g} 로 옮겼어`:'그룹에서 뺐어');renderUi();
+    };
     const nm=card.querySelector('.sc-name');
     nm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nm.blur();}});
     nm.addEventListener('blur',async()=>{
@@ -358,6 +451,58 @@ async function renderUi(){
     };
   });
 }
+/* ===== UI 그룹 ===== */
+let curGroup='*';
+const newGroups=[];          // 아직 컴포넌트가 없는 새 그룹 (옮기면 실제 그룹이 된다)
+const picked=new Set();
+try{curGroup=localStorage.getItem('libGroup')||'*';}catch(e){}
+function syncSel(){
+  const bar=$('#selbar');if(!bar)return;
+  bar.classList.toggle('on',picked.size>0);
+  $('#selN').textContent=`${picked.size}개 선택 →`;
+}
+function safeName(n){return String(n).replace(/[\\/:*?"<>|]/g,'_');}
+function bindGroups(list,shown){
+  document.querySelectorAll('#gbar .gchip[data-g]').forEach(b=>b.onclick=()=>{curGroup=b.dataset.g;try{localStorage.setItem('libGroup',curGroup);}catch(e){}renderUi();});
+  $('#gNew').onclick=async()=>{
+    const g=(await askText('새 그룹 이름 (예: 버튼, 배지, 대장마켓)')||'').trim();if(!g)return;
+    if(!newGroups.includes(g))newGroups.push(g);
+    curGroup=g;renderUi();
+    if(picked.size)toast(`선택한 ${picked.size}개를 옮기려면 위 파란 줄에서 '📁 ${g}' 로 옮기기`);
+  };
+  if($('#gRen'))$('#gRen').onclick=async()=>{
+    const to=(await askText('그룹 이름 바꾸기',curGroup)||'').trim();if(!to||to===curGroup)return;
+    await UIKit.renameGroup(curGroup,to);const i=newGroups.indexOf(curGroup);if(i>=0)newGroups[i]=to;
+    curGroup=to;toast('그룹 이름을 바꿨어 — '+to);renderUi();
+  };
+  if($('#gExp'))$('#gExp').onclick=()=>{
+    const items=list.filter(c=>c.group===curGroup);
+    if(!items.length)return toast('내보낼 컴포넌트가 없어',true);
+    saveBlob(new Blob([UIKit.exportJSON(items)],{type:'application/json'}),'UI-'+safeName(curGroup)+'.json');
+  };
+  if($('#gDel'))$('#gDel').onclick=async()=>{
+    const items=list.filter(c=>c.group===curGroup);
+    if(!items.length){newGroups.splice(newGroups.indexOf(curGroup),1);curGroup='*';return renderUi();}
+    const all=await askConfirm(`📁 ${curGroup} — 컴포넌트 ${items.length}개\n\n[그룹째 삭제] 컴포넌트까지 모두 삭제\n[취소] 를 누르면 그룹만 풀고 컴포넌트는 '그룹 없음' 으로 남길지 다시 물어봐.`,'그룹째 삭제');
+    if(all){for(const c of items)await UIKit.del(c.id);toast(`${items.length}개를 삭제했어`);}
+    else{
+      const un=await askConfirm(`그룹만 풀까요?\n컴포넌트 ${items.length}개는 '그룹 없음' 으로 옮겨져.`,'그룹만 풀기');
+      if(!un)return;
+      await UIKit.setGroup(items.map(c=>c.id),'');toast('그룹을 풀었어');
+    }
+    curGroup='*';renderUi();
+  };
+  $('#selMove').onclick=async()=>{const g=$('#selTo').value;await UIKit.setGroup([...picked],g);toast(`${picked.size}개를 ${g?'📁 '+g+' 로':'그룹 없음으로'} 옮겼어`);picked.clear();renderUi();};
+  $('#selExp').onclick=()=>{const items=list.filter(c=>picked.has(c.id));saveBlob(new Blob([UIKit.exportJSON(items)],{type:'application/json'}),'UI-선택'+items.length+'개.json');};
+  $('#selDel').onclick=async()=>{
+    if(!await askConfirm(`선택한 UI 컴포넌트 ${picked.size}개를 삭제할까요?\n이미 시안에 넣은 사본은 그대로 남습니다.`,'삭제'))return;
+    for(const id of picked)await UIKit.del(id);picked.clear();renderUi();
+  };
+  $('#selClear').onclick=()=>{picked.clear();renderUi();};
+  for(const id of [...picked])if(!list.some(c=>c.id===id))picked.delete(id);
+  syncSel();
+}
+
 async function importUi(files){
   let n=0;
   for(const f of files){
@@ -366,6 +511,115 @@ async function importUi(files){
   }
   if(n){toast(`UI 컴포넌트 ${n}개를 가져왔어`);if(tab!=='ui')switchTab('ui');else renderUi();}
 }
+/* ===== 피그마에서 가져오기 (REST API · shared/ui-kit.js fromFigma) =====
+   1) GET /v1/files/:key/nodes?ids=…   노드 트리 (텍스트·도형·효과·오토 레이아웃)
+   2) GET /v1/files/:key/images        이미지 채우기 원본 (imageRef → 주소)
+   3) GET /v1/images/:key?ids=…        벡터·아이콘처럼 직접 못 그리는 노드만 PNG 렌더
+   받은 이미지는 dataURL 로 바꿔 저장한다 — 피그마 임시 주소는 며칠 뒤 만료된다.
+   토큰은 이 브라우저(localStorage)에만 둔다. */
+const FIG_API='https://api.figma.com/v1';
+function figLog(msg,cls){const L=$('#figLog');L.style.display='block';const d=document.createElement('div');if(cls)d.className=cls;d.textContent=msg;L.appendChild(d);L.scrollTop=L.scrollHeight;}
+async function figGet(path,token){
+  let r;
+  try{r=await fetch(FIG_API+path,{headers:{'X-Figma-Token':token}});}
+  catch(e){throw new Error('피그마에 연결하지 못했어 — 인터넷 연결이나 회사 보안 프로그램(방화벽)을 확인해줘');}
+  if(r.status===403)throw new Error('토큰이 올바르지 않거나 이 파일을 볼 권한이 없어 (403)');
+  if(r.status===404)throw new Error('파일이나 프레임을 찾지 못했어 (404) — 링크를 다시 복사해줘');
+  if(r.status===429)throw new Error('피그마 요청 한도를 넘었어 (429) — 1분 뒤 다시 시도해줘');
+  if(!r.ok)throw new Error('피그마 응답 오류 '+r.status);
+  return r.json();
+}
+async function urlToDataURL(u){
+  const r=await fetch(u);if(!r.ok)throw new Error('HTTP '+r.status);
+  return fileToDataURL(await r.blob());
+}
+async function figDownload(map,label){
+  const out={},keys=Object.keys(map).filter(k=>map[k]);
+  let fail=0;
+  for(const [i,k] of keys.entries()){
+    try{out[k]=await urlToDataURL(map[k]);}
+    catch(e){out[k]=map[k];fail++;}                // 받지 못하면 주소 그대로 (며칠 뒤 만료될 수 있음)
+    if(keys.length>4&&(i+1)%5===0)figLog(`  ${label} ${i+1}/${keys.length}`);
+  }
+  if(fail)figLog(`  ⚠ ${label} ${fail}개는 파일로 받지 못해 피그마 주소로 연결했어 (며칠 뒤 만료될 수 있음)`,'warn');
+  return out;
+}
+const SPLIT_TYPES=new Set(['CANVAS','SECTION']);
+async function figImport(){
+  const token=$('#figToken').value.trim();
+  const links=$('#figLinks').value.split(/\s+/).map(x=>x.trim()).filter(Boolean);
+  if(!links.length)return toast('피그마 링크를 넣어줘',true);
+  if(!token)return toast('피그마 개인 액세스 토큰을 넣어줘',true);
+  try{if($('#figRemember').checked)localStorage.setItem('figmaToken',token);else localStorage.removeItem('figmaToken');}catch(e){}
+  const parsed=links.map(u=>({u,...(UIKit.parseFigmaLink(u)||{})}));
+  const bad=parsed.filter(p=>!p.fileKey||!p.nodeId);
+  if(bad.length)return toast('node-id 가 있는 프레임 링크가 아니야 — 피그마에서 프레임을 선택하고 링크를 복사해줘',true);
+  $('#figLog').innerHTML='';$('#figGo').disabled=true;
+  let saved=0,lastGroup='';
+  try{
+    const byFile=new Map();
+    parsed.forEach(p=>{if(!byFile.has(p.fileKey))byFile.set(p.fileKey,[]);if(!byFile.get(p.fileKey).includes(p.nodeId))byFile.get(p.fileKey).push(p.nodeId);});
+    for(const [key,ids] of byFile){
+      figLog(`파일 ${key} — 프레임 ${ids.length}개 불러오는 중…`);
+      const res=await figGet(`/files/${key}/nodes?ids=${encodeURIComponent(ids.join(','))}`,token);
+      const group=$('#figGroup').value.trim()||res.name||'피그마';lastGroup=group;
+      const targets=[];
+      for(const id of ids){
+        const nd=res.nodes&&res.nodes[id];
+        if(!nd||!nd.document){figLog(`✕ ${id} — 찾지 못했어`,'bad');continue;}
+        const doc=nd.document;
+        if(SPLIT_TYPES.has(doc.type)||!doc.absoluteBoundingBox||$('#figSplit').checked)
+          (doc.children||[]).filter(c=>c.visible!==false&&c.absoluteBoundingBox).forEach(c=>targets.push(c));
+        else targets.push(doc);
+      }
+      if(!targets.length)continue;
+      // 필요한 이미지 모으기
+      const rIds=new Set(),refs=new Set();
+      targets.forEach(t=>{const n=UIKit.figmaNeeds(t);n.rasters.forEach(x=>rIds.add(x));n.imageRefs.forEach(x=>refs.add(x));});
+      let imageFills={},rasters={};
+      if(refs.size){
+        figLog(`  이미지 채우기 ${refs.size}개 받는 중…`);
+        const im=await figGet(`/files/${key}/images`,token);
+        const all=(im.meta&&im.meta.images)||im.images||{},want={};
+        refs.forEach(r=>{if(all[r])want[r]=all[r];});
+        imageFills=await figDownload(want,'이미지 채우기');
+      }
+      if(rIds.size){
+        figLog(`  아이콘·벡터 ${rIds.size}개 렌더 요청 중…`);
+        const arr=[...rIds],urls={};
+        for(let i=0;i<arr.length;i+=50){
+          const r=await figGet(`/images/${key}?ids=${encodeURIComponent(arr.slice(i,i+50).join(','))}&format=png&scale=2`,token);
+          Object.assign(urls,r.images||{});
+        }
+        rasters=await figDownload(urls,'아이콘·벡터');
+      }
+      for(const t of targets){
+        try{
+          const conv=UIKit.fromFigma(t,{rasters,imageFills});
+          conv.source={fileKey:key,nodeId:t.id,file:res.name};
+          const c=await UIKit.save(t.name||'피그마',conv,group);
+          saved++;
+          const auto=c.nodes.filter(n=>n.pad).length;
+          figLog(`✓ ${t.name} — ${c.w}×${c.h}px · 요소 ${c.nodes.length}개${auto?` · 오토 레이아웃 ${auto}개`:''}`,'ok');
+          (conv.warnings||[]).forEach(w=>figLog('   ⚠ '+w,'warn'));
+        }catch(e){figLog(`✕ ${t.name} — ${e.message||e}`,'bad');}
+      }
+    }
+  }catch(e){figLog('✕ '+(e.message||e),'bad');}
+  finally{$('#figGo').disabled=false;}
+  if(saved){
+    figLog(`완료 — ${saved}개를 📁 ${lastGroup} 에 저장했어. 블로그 이미지 제작·배너 스튜디오의 UI 컴포넌트 목록에서 바로 쓸 수 있어.`,'ok');
+    curGroup=lastGroup;try{localStorage.setItem('libGroup',curGroup);}catch(e){}
+    if(tab!=='ui')switchTab('ui');else renderUi();
+  }
+}
+$('#figOpen').onclick=()=>{
+  try{const t=localStorage.getItem('figmaToken');if(t){$('#figToken').value=t;$('#figRemember').checked=true;}}catch(e){}
+  $('#figBack').classList.add('show');setTimeout(()=>$('#figLinks').focus(),50);
+};
+$('#figClose').onclick=()=>$('#figBack').classList.remove('show');
+$('#figGo').onclick=figImport;
+
 $('#uiImport').onclick=()=>$('#uiImportInput').click();
 $('#uiImportInput').onchange=e=>{importUi([...e.target.files]);e.target.value='';};
 $('#uiExportAll').onclick=async()=>{

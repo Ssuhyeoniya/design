@@ -74,6 +74,7 @@
           <div class="row">
             <button class="btn sm grow" id="btnUiSave" title="선택한 레이어를 UI 컴포넌트로 저장 (도형 안 글자는 오토 레이아웃으로 묶임)">🧩 선택을 UI로 저장</button>
           </div>
+          <select id="uiGroup" style="display:none"><option value="*">전체 그룹</option></select>
           <div id="uiGrid"></div>
           <p class="hint" id="uiEmpty">저장된 UI 가 없습니다. 도형·텍스트를 Shift+클릭으로 함께 고른 뒤 저장하면, 블로그 이미지 제작에서도 같은 UI 를 꺼내 쓸 수 있습니다.</p>
         </div>
@@ -204,8 +205,8 @@
 <div id="toast"></div>
 <input type="file" id="filePick" accept="image/*" multiple hidden>
 <script src="../shared/ppt-remote.js?v=20261015-1"></script>
-<script src="../shared/ui-kit.js?v=20261018-1"></script>
+<script src="../shared/ui-kit.js?v=20261018-2"></script>
 <script src="plans.js?v=20261015-5"></script>
-<script src="app.js?v=20261018-1"></script>
+<script src="app.js?v=20261018-2"></script>
 </body>
 </html>

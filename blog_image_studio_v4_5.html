@@ -121,6 +121,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   #stockEmpty{font-size:.69rem;color:var(--text-faint);line-height:1.6;display:none;}
   /* UI 컴포넌트 (스톡 보관함 아래) */
   #stockbar .ui-head{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:.72rem;font-weight:700;color:var(--text-sub);}
+  #uiGroup{width:100%;}
   #uiGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
   .uic{position:relative;aspect-ratio:3/2;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;cursor:pointer;
     background:repeating-conic-gradient(#f1f2f5 0 25%,#fff 0 50%) 0 0/12px 12px;}
@@ -450,6 +451,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div id="stockGrid"></div>
       <p id="stockEmpty">아직 등록된 이미지가 없어. 위 영역에 끌어다 놓으면 배너 스튜디오와 같은 보관함에 저장돼.</p>
       <div class="ui-head">🧩 UI 컴포넌트 <span id="uiCnt"></span></div>
+      <select id="uiGroup" style="display:none"><option value="*">전체 그룹</option></select>
       <div id="uiGrid"></div>
       <p id="uiEmpty">저장된 UI 가 없어. 도형·텍스트를 Shift+클릭으로 함께 고른 뒤 우측 <b>🧩 선택을 UI로 저장</b> 을 누르면 여기와 배너 스튜디오에 같이 보여.</p>
     </div>
@@ -530,7 +532,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="exportZone"></div>
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
-<script src="shared/ui-kit.js?v=20261018-1"></script>
+<script src="shared/ui-kit.js?v=20261018-2"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -804,6 +806,68 @@ function withFitPartners(arr,ids){
   });
   return [...out];
 }
+/* ── 도형 이미지 채우기 · 효과 (피그마와 같은 모델 — shared/ui-kit.js) ── */
+const FX_NAME={DROP_SHADOW:'드롭 섀도',INNER_SHADOW:'이너 섀도',LAYER_BLUR:'레이어 블러',BACKGROUND_BLUR:'배경 블러'};
+const imgFillOf=l=>l.fx&&(l.fx.fills||[]).find(p=>p.type==='IMAGE');
+function fxPropsHTML(l){
+  const f=imgFillOf(l), eff=(l.fx&&l.fx.effects)||[];
+  let h=`<div class="row">
+      <div class="field"><label>이미지 채우기</label><button class="btn small" id="fxPick" style="width:100%">${f?'이미지 바꾸기':'🖼 이미지 채우기'}</button></div>
+      <div class="field"><label>&nbsp;</label><button class="btn small" id="fxStock" style="width:100%" title="다음에 누르는 스톡 이미지를 이 도형에 채워">스톡에서 고르기</button></div>
+    </div>`;
+  if(f)h+=`<div class="row">
+      <div class="field"><label>맞춤</label><select id="fxMode">${[['FILL','채우기'],['FIT','맞추기'],['CROP','자르기'],['TILE','바둑판']].map(([v,n])=>`<option value="${v}"${(f.scaleMode||'FILL')===v?' selected':''}>${n}</option>`).join('')}</select></div>
+      <div class="field"><label>&nbsp;</label><button class="btn small" id="fxUnimg" style="width:100%">이미지 제거</button></div>
+    </div>`;
+  if(eff.length)h+=`<div class="field"><label>효과</label>${eff.map((e,i)=>`<div class="row" style="align-items:center;gap:4px;margin-bottom:4px">
+      <label class="chkline" style="flex:0 0 auto;white-space:nowrap"><input type="checkbox" data-fxi="${i}" data-fp="visible"${e.visible===false?'':' checked'}> ${FX_NAME[e.type]||e.type}</label>
+      ${e.x!=null?`<input type="number" data-fxi="${i}" data-fp="x" value="${e.x}" title="X" style="width:48px"><input type="number" data-fxi="${i}" data-fp="y" value="${e.y}" title="Y" style="width:48px">`:''}
+      <input type="number" min="0" data-fxi="${i}" data-fp="blur" value="${e.blur}" title="블러" style="width:48px">
+      ${e.color?`<input type="color" data-fxi="${i}" data-fp="color" value="${toHex6(e.color)}" title="색">`:''}</div>`).join('')}</div>`;
+  if(l.fx&&l.fx.stroke)h+=`<div class="hint" style="margin-bottom:6px">테두리 ${l.fx.stroke.width}px · ${{INSIDE:'안쪽',OUTSIDE:'바깥쪽',CENTER:'가운데'}[l.fx.stroke.align]||''} (피그마에서 가져온 값)</div>`;
+  h+=`<div class="row">
+      <div class="field"><button class="btn small" id="fxShadow" style="width:100%">＋ 그림자</button></div>
+      ${l.fx?`<div class="field"><button class="btn small" id="fxClear" style="width:100%" title="효과·그라데이션·이미지 채우기를 지우고 단색으로">효과 모두 지우기</button></div>`:''}
+    </div>`;
+  return h;
+}
+function ensureFx(l){
+  if(!l.fx)l.fx={fills:[{type:'SOLID',color:l.fill}]};
+  if(!l.fx.fills)l.fx.fills=[{type:'SOLID',color:l.fill}];
+  if(l.stroke&&!l.fx.stroke){l.fx.stroke={color:l.stroke,width:l.strokeW||3,align:'INSIDE'};}
+  return l.fx;
+}
+async function setImageFill(l,src){
+  src=await stockSrc(src);
+  const fx=ensureFx(l), f=imgFillOf(l);
+  if(f)f.src=src; else fx.fills.push({type:'IMAGE',src,scaleMode:'FILL'});
+  UIKit.img(src);
+  selLayer=l.id; renderAll(); recordHistory();
+  showUiNote('도형에 이미지를 채웠어 — 맞춤 방식(채우기·맞추기·바둑판)은 우측 박스 편집에서 바꿔');
+}
+let stockFillTarget=null;   // '스톡에서 고르기' 를 누른 뒤 고르는 스톡 이미지를 채울 도형
+function bindFxProps(l){
+  const on=(id,ev,fn)=>{const e=document.getElementById(id);if(e)e[ev]=fn;};
+  on('fxPick','onclick',()=>{
+    const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+    inp.onchange=async()=>{const f=inp.files[0];if(f)setImageFill(l,await fileToDataURL(f));};
+    inp.click();
+  });
+  on('fxStock','onclick',()=>{stockFillTarget=l.id;showUiNote('왼쪽 스톡 이미지를 누르면 이 도형에 채워져 (Esc 취소)');});
+  on('fxMode','onchange',e=>{imgFillOf(l).scaleMode=e.target.value;renderAll();});
+  on('fxUnimg','onclick',()=>{l.fx.fills=l.fx.fills.filter(p=>p.type!=='IMAGE');renderAll();});
+  on('fxShadow','onclick',()=>{const fx=ensureFx(l);fx.effects=[...(fx.effects||[]),{type:'DROP_SHADOW',x:0,y:Math.round(l.h*0.06)||4,blur:Math.round(l.h*0.15)||12,spread:0,color:'rgba(0,0,0,0.25)'}];renderAll();});
+  on('fxClear','onclick',()=>{delete l.fx;renderAll();});
+  document.querySelectorAll('#props [data-fxi]').forEach(inp=>inp.addEventListener(inp.type==='color'?'input':'change',()=>{
+    const e=l.fx.effects[+inp.dataset.fxi],k=inp.dataset.fp;
+    if(k==='visible')e.visible=inp.checked;
+    else if(k==='color'){const am=String(e.color).match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)/),a=am?+am[1]:1;
+      const [r,g,b]=[1,3,5].map(i=>parseInt(inp.value.slice(i,i+2),16));e.color=`rgba(${r},${g},${b},${a})`;}
+    else e[k]=+inp.value||0;
+    renderCanvas();
+  }));
+}
+
 /* 오토 레이아웃 — 텍스트와 그 아래 도형을 묶어, 지금 여백을 패딩으로 고정한다.
    이후 글자를 고치면 도형이 글자 + 패딩에 맞춰 늘고 준다 (피그마 Hug) */
 function makeAutoLayout(){
@@ -1137,7 +1201,7 @@ function layerHTML(l){
   if(l.type==='t'){
     const colored=l.rich?sanitizeRich(l.rich):esc(l.text).replace(/\[\[([\s\S]+?)\]\]/g,`<span style="color:${l.accent||'#00e31e'}">$1</span>`);
     const inner=l.hl?`<span class="hl-inner" style="background:${l.hlColor};padding:.06em .18em;">${colored}</span>`:colored;
-    return {cls:'layer t',style:`left:${l.x}px;top:${l.y}px;width:${l.w}px;font-size:${l.size}px;font-weight:${l.weight};color:${l.color};text-align:${l.align};line-height:${l.lh};letter-spacing:${l.ls}em;${l.font?`font-family:${l.font};`:''}${l.rot?`transform:rotate(${l.rot}deg);transform-origin:${l.rotOrigin||'center center'};`:''}`,html:inner};
+    return {cls:'layer t',style:`left:${l.x}px;top:${l.y}px;width:${l.w}px;font-size:${l.size}px;font-weight:${l.weight};color:${l.color};text-align:${l.align};line-height:${l.lh};letter-spacing:${l.ls}em;${l.font?`font-family:${l.font};`:''}${l.shadows&&l.shadows.length&&window.UIKit?`text-shadow:${UIKit.textShadowCSS(l.shadows)};`:''}${l.opacity!=null&&l.opacity<1?`opacity:${l.opacity};`:''}${l.rot?`transform:rotate(${l.rot}deg);transform-origin:${l.rotOrigin||'center center'};`:''}`,html:inner};
   }
   if(l.type==='i'){
     if(l.crop){
@@ -1154,6 +1218,15 @@ function layerHTML(l){
     let fs=`left:${l.x}px;top:${l.y}px;width:${W}px;height:${l.h}px;`;
     if(l.rot)fs+=`transform:rotate(${l.rot}deg);transform-origin:center center;`;
     return {cls:'layer',style:fs,html:`<img src="${funnelSVG(l)}" draggable="false" style="width:100%;height:100%;display:block">`};
+  }
+  if(l.fx&&l.shape!=='arrow'&&window.UIKit){
+    // 피그마식 채우기·효과(그라데이션·이미지 채우기·그림자·블러·테두리) — 공용 페인터로 PNG 를 구워 얹는다 (출력도 같은 그림)
+    const pu=UIKit.paintURL(l,2), m=pu.m;
+    let fs=`left:${l.x}px;top:${l.y}px;width:${l.w}px;height:${l.h}px;`;
+    if(l.rot)fs+=`transform:rotate(${l.rot}deg);transform-origin:${l.rotOrigin||'center center'};`;
+    const bb=(l.fx.effects||[]).find(e=>e.type==='BACKGROUND_BLUR'&&e.visible!==false);
+    if(bb)fs+=`backdrop-filter:blur(${bb.blur/2}px);-webkit-backdrop-filter:blur(${bb.blur/2}px);border-radius:${l.fx.shape==='ellipse'?'50%':(l.fx.radii||[l.radius||0]).map(v=>v+'px').join(' ')};`;
+    return {cls:'layer',style:fs,html:`<img src="${pu.url}" draggable="false" style="position:absolute;left:${-m}px;top:${-m}px;width:${l.w+m*2}px;height:${l.h+m*2}px;max-width:none;pointer-events:none">`};
   }
   if(l.shape==='arrow'){
     let as=`left:${l.x}px;top:${l.y}px;width:${l.w}px;height:${l.h}px;`;
@@ -1553,6 +1626,7 @@ function renderProps(){
       <div class="field"><label>채움색</label><input type="color" id="pFill" value="${toHex6(l.fill)}"></div>
       <div class="field"><label>라운드</label><input type="number" id="pRad" value="${l.radius}"></div>
     </div>
+    ${l.shape!=='arrow'?fxPropsHTML(l):''}
     <div class="field"><button class="btn small" id="pToArrow" style="width:100%">${l.shape==='arrow'?'사각형으로 되돌리기':'화살표로 변환'}</button></div>
     ${l.shape==='arrow'?`<div class="row">
       <div class="field"><label>화살촉 길이</label><input type="range" id="pHeadW" min="12" max="80" value="${Math.round((l.headW!=null?l.headW:0.36)*100)}"></div>
@@ -1792,6 +1866,7 @@ function bindProps(s,l){
     $('#pLh').onchange=e=>{_applyText('lh',+e.target.value,l);rc();};
     $('#pLs').onchange=e=>{_applyText('ls',+e.target.value,l);rc();};
   }
+  if(l.type==='r'&&l.shape!=='arrow')bindFxProps(l);
   if(l.type==='r'){
     $('#pH').onchange=e=>{
       const v=+e.target.value, s0=slides[cur];
@@ -1799,7 +1874,7 @@ function bindProps(s,l){
       const ts=LS(s0).filter(x=>x.type==='r'&&ids.has(x.id));
       if(ts.length>1) ts.forEach(x=>x.h=v); else l.h=v;
       rc();};
-    $('#pFill').oninput=e=>{l.fill=e.target.value;rc();};
+    $('#pFill').oninput=e=>{l.fill=e.target.value;if(l.fx)l.fx.fills=[{type:'SOLID',color:l.fill},...(l.fx.fills||[]).filter(p=>p.type==='IMAGE')];rc();};
     if(l.shape==='arrow'){
       $('#pHeadW').oninput=e=>{l.headW=(+e.target.value)/100;rc();};
       $('#pThick').oninput=e=>{l.thick=(+e.target.value)/100;rc();};
@@ -1819,7 +1894,7 @@ function bindProps(s,l){
       });
       renderAll(); recordHistory();
     };
-    $('#pRad').onchange=e=>{l.radius=+e.target.value;rc();};
+    $('#pRad').onchange=e=>{l.radius=+e.target.value;if(l.fx)delete l.fx.radii;rc();};
     $('#pStroke').oninput=e=>{l.stroke=e.target.value;if(!l.strokeW)l.strokeW=3;rc();};
     $('#pStrokeW').onchange=e=>{const v=+e.target.value;if(v<=0){delete l.stroke;delete l.strokeW;}else l.strokeW=v;rc();};
     $('#pRot').onchange=e=>{const v=+e.target.value;if(v){l.rot=v;l.rotOrigin='center center';}else{delete l.rot;delete l.rotOrigin;}rc();};
@@ -3280,7 +3355,12 @@ function paintStock(){
     d.title=`${it.category} / ${it.name}${it.kb?' · '+it.kb+'KB':''}${it.assetId?' · '+it.assetId+(it.description?'\n'+it.description:''):''}\n클릭하면 캔버스에 추가 · 캔버스로 끌어다 놓아도 돼`;
     d.innerHTML=`<img src="${esc(it.url)}" loading="lazy" draggable="true">`+(it.builtin?'':'<span class="del" title="보관함에서 삭제">×</span>');
     const img=d.querySelector('img');
-    img.onclick=()=>insertStock(it);
+    img.onclick=()=>{
+      const s0=slides[cur], tg=stockFillTarget&&s0&&LS(s0).find(x=>x.id===stockFillTarget);
+      stockFillTarget=null;
+      if(tg)return setImageFill(tg,it.url);
+      insertStock(it);
+    };
     img.addEventListener('dragstart',ev=>{ev.dataTransfer.setData('text/x-stock',String(STOCK.indexOf(it)));ev.dataTransfer.effectAllowed='copy';});
     if(!it.builtin)d.querySelector('.del').onclick=async ev=>{
       ev.stopPropagation();
@@ -3338,7 +3418,11 @@ canvas.addEventListener('drop',e=>{
   e.preventDefault();e.stopPropagation();
   const it=STOCK[+k];if(!it)return;
   const z=canvas._z||1,rc=canvas.getBoundingClientRect();
-  insertStock(it,{x:(e.clientX-rc.left)/z-curOffX(slides[cur]),y:(e.clientY-rc.top)/z});
+  const at={x:(e.clientX-rc.left)/z-curOffX(slides[cur]),y:(e.clientY-rc.top)/z};
+  // 도형 위에 놓으면 그 도형을 이미지로 채운다 (피그마와 같다)
+  const tg=LS(slides[cur]).slice().reverse().find(l=>l.type==='r'&&l.shape!=='arrow'&&!l.guide&&at.x>=l.x&&at.x<=l.x+l.w&&at.y>=l.y&&at.y<=l.y+l.h);
+  if(tg)return setImageFill(tg,it.url);
+  insertStock(it,at);
 });
 $('#stockFold').onclick=()=>{
   const f=$('#stockbar').classList.toggle('fold');
@@ -3373,10 +3457,16 @@ async function loadUi(){
   try{items=await UIKit.list();}catch(e){}
   $('#uiCnt').textContent=items.length?'· '+items.length+'개':'';
   $('#uiEmpty').style.display=items.length?'none':'';
+  // 그룹 필터 — 이미지 소스 페이지에서 정한 그룹(폴더)
+  const gs=$('#uiGroup'),curG=gs.value;
+  const names=[...new Set(items.map(c=>c.group||''))].sort((a,b)=>a===''?1:b===''?-1:a.localeCompare(b,'ko'));
+  gs.innerHTML='<option value="*">전체 그룹</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n||'그룹 없음')} (${items.filter(c=>(c.group||'')===n).length})</option>`).join('');
+  gs.value=(names.includes(curG)||curG==='*')?curG:'*';
+  gs.style.display=(names.length>1||(names[0]||'')!=='')?'':'none';
   const g=$('#uiGrid');g.innerHTML='';
-  items.forEach(c=>{
+  items.filter(c=>gs.value==='*'||(c.group||'')===gs.value).forEach(c=>{
     const d=document.createElement('div');d.className='uic';
-    d.title=`${c.name} · ${c.w}×${c.h}px${c.origin==='banner'?' · 배너 스튜디오에서 저장':''}\n클릭하면 캔버스에 복사해 넣어`;
+    d.title=`${c.group?'['+c.group+'] ':''}${c.name} · ${c.w}×${c.h}px${c.origin==='banner'?' · 배너 스튜디오에서 저장':c.origin==='figma'?' · 피그마에서 가져옴':''}\n클릭하면 캔버스에 복사해 넣어`;
     d.innerHTML=`<img src="${esc(c.thumb)}" loading="lazy" alt=""><span class="nm">${esc(c.name)}</span><span class="del" title="UI 컴포넌트 삭제">×</span>`;
     d.onclick=()=>insertUi(c);
     d.querySelector('.del').onclick=async ev=>{
@@ -3399,7 +3489,8 @@ async function saveUi(){
   const name=await askName('UI 컴포넌트 이름',first?first.text.replace(/\[\[|\]\]/g,'').split('\n')[0].slice(0,20):'UI');
   if(!name)return;
   try{
-    const c=await UIKit.save(name,UIKit.fromBlog(picked));
+    const gv=$('#uiGroup').value;
+    const c=await UIKit.save(name,UIKit.fromBlog(picked),gv==='*'?'':gv);
     const auto=c.nodes.filter(n=>n.pad).length;
     showUiNote(`UI 컴포넌트로 저장했어 — ${c.name}${auto?` (오토 레이아웃 ${auto}개)`:''}`);
   }catch(err){alert('저장 실패: '+err.message);}
@@ -3427,6 +3518,9 @@ function showUiNote(msg){
   clearTimeout(_uiNoteT);_uiNoteT=setTimeout(()=>{n.style.display='none';},3200);
 }
 window.addEventListener('focus',()=>{loadUi();});
+$('#uiGroup').onchange=loadUi;
+if(window.UIKit)UIKit.onImage=()=>{renderCanvas();};   // 이미지 채우기가 늦게 로드되면 다시 그린다
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&stockFillTarget){stockFillTarget=null;showUiNote('이미지 채우기를 취소했어');}});
 loadUi();
 
 /* ================= 네비: 이미지 소스 라이브러리(별도 페이지) 열기 ================= */
