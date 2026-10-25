@@ -271,6 +271,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .layer-item .lname{flex:1;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .layer-item .ldel{border:none;background:none;color:var(--text-faint);cursor:pointer;font-size:13px;}
   .layer-item .ldel:hover{color:var(--danger);}
+  .layer-list{max-height:360px;}
+  .layer-item .tw{width:10px;flex:none;font-size:10px;color:var(--text-faint);cursor:pointer;text-align:center;}
+  .layer-item.grp{background:transparent;}
+  .layer-item.child{margin-left:16px;}
+  .layer-item .lcnt{font-size:11px;color:var(--text-faint);}
+  .layer-item.dropB{box-shadow:inset 0 2px 0 var(--accent);}
+  .layer-item.dropA{box-shadow:inset 0 -2px 0 var(--accent);}
+  .layer-item.dropIn{border-color:var(--accent);background:var(--accent-soft);}
   .align-group{display:flex;border:1px solid var(--border-strong);border-radius:7px;overflow:hidden;}
   .align-group button{flex:1;border:none;background:#fff;padding:6px 0;cursor:pointer;font-size:11.5px;color:var(--text-sub);font-weight:600;}
   .align-group button.on{background:var(--accent-soft);color:var(--accent);}
@@ -534,7 +542,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="exportZone"></div>
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
-<script src="shared/ui-kit.js?v=20261025-9"></script>
+<script src="shared/ui-kit.js?v=20261025-10"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -1283,7 +1291,86 @@ function layerHTML(l){
   }
   return {cls:'layer'+(l.guide?' g':''),style:rstyle,html:rhtml};
 }
-function lname(l){return l.type==='t'?(l.text.split('\n')[0]||'(빈 텍스트)'):l.type==='i'?'이미지':l.type==='f'?'스포트라이트':'박스';}
+/* ===== 레이어 패널 (피그마식) =====
+ * 위가 앞. 그룹은 ▾/▸ 로 접고 펼치고 하위 요소는 들여 쓴다. 목록에서 고르면 캔버스도 같이 고른다(Shift = 여러 개).
+ * 끌어다 놓아 순서 변경 · 그룹 머리줄 가운데 = 그 그룹 안 맨 앞 · 그룹 밖 위아래 = 그룹에서 빠짐 · 그룹 머리줄을 끌면 그룹째 */
+const layerCollapsed=new Set();
+let layerDragIds=null;
+function selIdsNow(){const ids=new Set(selSet||[]);if(selLayer!=null)ids.add(selLayer);return [...ids];}
+function layerRowsHTML(s){
+  const ids=selIdsNow();let prevG=null,h='';
+  for(const x of LS(s).slice().reverse()){
+    if(x.gid&&x.gid!==prevG){
+      const mem=LS(s).filter(y=>y.gid===x.gid),on=mem.every(y=>ids.includes(y.id)),shut=layerCollapsed.has(x.gid);
+      h+=`<div class="layer-item grp${on?' on':''}" data-gid="${x.gid}" draggable="true"><span class="tw" data-tw="${x.gid}">${shut?'▸':'▾'}</span><span class="ico">▦</span><span class="lname">${esc(x.gname||'그룹')}</span><span class="lcnt">${mem.length}</span></div>`;
+    }
+    prevG=x.gid||null;
+    if(x.gid&&layerCollapsed.has(x.gid))continue;
+    h+=`<div class="layer-item${x.gid?' child':''}${ids.includes(x.id)?' on':''}" data-lid="${x.id}" draggable="true"><span class="tw"></span><span class="ico">${lico(x)}</span><span class="lname">${esc(lname(x))}</span><button class="ldel" data-ldel="${x.id}">✕</button></div>`;
+  }
+  return h;
+}
+function bindLayerRows(s){
+  const box=props.querySelector('.layer-list');if(!box)return;
+  const clear=()=>box.querySelectorAll('.dropB,.dropA,.dropIn').forEach(x=>x.classList.remove('dropB','dropA','dropIn'));
+  box.querySelectorAll('.layer-item').forEach(it=>{
+    const gid=it.dataset.gid?+it.dataset.gid||it.dataset.gid:null, lid=it.dataset.lid?+it.dataset.lid:null;
+    const members=()=>LS(s).filter(y=>String(y.gid)===String(gid));
+    it.onclick=e=>{
+      if(e.target.dataset.tw!=null){const g=members()[0].gid;if(layerCollapsed.has(g))layerCollapsed.delete(g);else layerCollapsed.add(g);renderAll();return;}
+      if(e.target.dataset.ldel){
+        const gone=withFitPartners(LS(s),[+e.target.dataset.ldel]);
+        setLS(s,LS(s).filter(x=>!gone.includes(x.id)));
+        if(gone.includes(selLayer))selLayer=null;selSet=(selSet||[]).filter(i=>!gone.includes(i));
+        renderAll();return;
+      }
+      const list=gid!=null?members().map(y=>y.id):[lid];
+      if(e.shiftKey){const cur=new Set(selIdsNow());list.forEach(i=>cur.has(i)?cur.delete(i):cur.add(i));selSet=[...cur];selLayer=selSet[selSet.length-1]??null;}
+      else{selSet=list.slice();selLayer=list[list.length-1];}
+      renderAll();
+    };
+    if(gid!=null)it.ondblclick=()=>{const mem=members(),v=prompt('그룹 이름',mem[0].gname||'그룹');if(v==null)return;mem.forEach(y=>y.gname=v.trim()||'그룹');renderAll();};
+    it.addEventListener('dragstart',e=>{
+      const sel=selIdsNow();
+      layerDragIds={ids:gid!=null?members().map(y=>y.id):(sel.includes(lid)?sel:[lid]),group:gid!=null?members()[0].gid:null};
+      e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','layer');}catch(err){}
+    });
+    it.addEventListener('dragover',e=>{
+      if(!layerDragIds)return;e.preventDefault();
+      const rc=it.getBoundingClientRect(),y=(e.clientY-rc.top)/rc.height;clear();
+      it.classList.add(gid!=null&&!layerDragIds.group&&y>.3&&y<.7?'dropIn':y<.5?'dropB':'dropA');
+    });
+    it.addEventListener('dragleave',()=>it.classList.remove('dropB','dropA','dropIn'));
+    it.addEventListener('drop',e=>{
+      e.preventDefault();if(!layerDragIds)return;
+      const mode=it.classList.contains('dropIn')?'in':it.classList.contains('dropB')?'before':'after';clear();
+      moveLayersTo(s,layerDragIds,gid!=null?{g:members()[0].gid}:{l:LS(s).find(y=>y.id===lid)},mode);layerDragIds=null;
+    });
+    it.addEventListener('dragend',()=>{layerDragIds=null;clear();});
+  });
+  const cur=box.querySelector('.layer-item.on:not(.grp)');if(cur&&cur.scrollIntoView)cur.scrollIntoView({block:'nearest'});
+}
+function moveLayersTo(s,dr,target,mode){
+  const all=LS(s),moving=all.filter(x=>dr.ids.includes(x.id));
+  if(!moving.length)return;
+  if(target.l&&dr.ids.includes(target.l.id))return;
+  if(target.g!=null&&dr.group===target.g)return;
+  const rest=all.filter(x=>!dr.ids.includes(x.id));let at,gid;
+  if(target.g!=null){
+    const mem=rest.filter(x=>x.gid===target.g);if(!mem.length)return;
+    const top=rest.indexOf(mem[mem.length-1]),bottom=rest.indexOf(mem[0]);
+    if(mode==='in'){at=top+1;gid=target.g;}else{at=mode==='before'?top+1:bottom;gid=null;}
+  }else{
+    const ti=rest.indexOf(target.l);at=mode==='before'?ti+1:ti;gid=target.l.gid||null;
+    if(dr.group&&gid){const mem=rest.filter(x=>x.gid===gid);at=mode==='before'?rest.indexOf(mem[mem.length-1])+1:rest.indexOf(mem[0]);gid=null;}
+  }
+  if(!dr.group)moving.forEach(x=>{if(gid){x.gid=gid;x.gname=(rest.find(y=>y.gid===gid)||{}).gname;if(!x.gname)delete x.gname;}else{delete x.gid;delete x.gname;}});
+  rest.splice(at,0,...moving);
+  const cnt={};rest.forEach(x=>{if(x.gid)cnt[x.gid]=(cnt[x.gid]||0)+1;});
+  rest.forEach(x=>{if(x.gid&&cnt[x.gid]<2){delete x.gid;delete x.gname;}});
+  setLS(s,rest);renderAll();
+}
+function lname(l){if(l.name&&l.type!=='t')return l.name;return l.type==='t'?(l.text.split('\n')[0]||'(빈 텍스트)'):l.type==='i'?'이미지':l.type==='f'?'스포트라이트':'박스';}
 function lico(l){return l.type==='t'?'𝐓':l.type==='i'?'🖼':l.type==='f'?'◢':'▭';}
 
 function renderCanvas(){
@@ -1540,13 +1627,7 @@ function renderProps(){
   </div>
   <div class="sec">
     <h3>레이어</h3>
-    <div class="layer-list">
-      ${LS(s).slice().reverse().map(x=>`
-        <div class="layer-item${x.id===selLayer?' on':''}" data-lid="${x.id}">
-          <span class="ico">${lico(x)}</span><span class="lname">${esc(lname(x))}</span>
-          <button class="ldel" data-ldel="${x.id}">✕</button>
-        </div>`).join('')}
-    </div>
+    <div class="layer-list">${layerRowsHTML(s)}</div>
     <div class="btn-row">
       <button class="btn small" id="addTextBtn">＋ 텍스트</button>
       <button class="btn small" id="addImgBtn2">＋ 이미지</button>
@@ -1851,15 +1932,7 @@ function bindProps(s,l){
     renderAll();
   });
   $('#bgPick').oninput=e=>{s.bg=e.target.value;renderCanvas();renderSlideList();$('#infoBg').textContent=s.bg;};
-  props.querySelectorAll('.layer-item').forEach(it=>it.onclick=e=>{
-    if(e.target.dataset.ldel){
-      const gone=withFitPartners(LS(s),[+e.target.dataset.ldel]);
-      setLS(s,LS(s).filter(x=>!gone.includes(x.id)));
-      if(selLayer==e.target.dataset.ldel)selLayer=null;
-      renderAll();return;
-    }
-    selLayer=+it.dataset.lid;renderAll();
-  });
+  bindLayerRows(s);
   $('#lzTop').onclick=()=>moveLayerZ('top');
   $('#lzUp') .onclick=()=>moveLayerZ('up');
   $('#lzDn') .onclick=()=>moveLayerZ('down');

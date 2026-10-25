@@ -253,7 +253,7 @@
   // mk = { nid, tLayer, iLayer, rLayer } — 블로그 페이지의 레이어 생성기
   function toBlog(comp, at, k, mk) {
     const out = [], skipped = [];
-    const base = (n, extra) => n.native && n.native.app === 'blog' ? Object.assign(clone(n.native.layer), extra) : extra;
+    const base = (n, extra) => n.native && n.native.app === 'blog' ? Object.assign(clone(n.native.layer), extra) : (n.name ? Object.assign({ name: n.name }, extra) : extra);   // 피그마 레이어 이름 유지
     const font = f => (!f || f === 'Pretendard') ? '' : (f === 'System' || libOf(f)) ? cssFamily(f) : f;
     const gmap = {};                      // 피그마 그룹(n.grp) → 레이어 그룹(gid)
     const regroup = (from, n) => { if (!n.grp) return; const g = gmap[n.grp] || (gmap[n.grp] = mk.nid()); for (const l of out.slice(from)) { l.gid = g; if (n.grpName) l.gname = n.grpName; } };
@@ -779,13 +779,15 @@
       const r = n.absoluteRenderBounds || n.absoluteBoundingBox;
       push({ t: 'image', x: r.x - ox, y: r.y - oy, w: r.width, h: r.height, src, opacity: 1, radius: 0, name: n.name, fromFigma: n.id });
     };
-    const textNode = (n, op) => {
+    const textNode = (n, op, quiet) => {      // quiet = 피그마 그림이 있는 버튼 라벨 (보이는 건 그대로)
       const st = n.style || {}, b = bb(n);
       const fill = (n.fills || []).filter(visible)[0];
       const size = st.fontSize || 16;
       let text = n.characters || '';
       if (st.textCase === 'UPPER') text = text.toUpperCase(); else if (st.textCase === 'LOWER') text = text.toLowerCase();
-      if (n.characterStyleOverrides && n.characterStyleOverrides.some(Boolean) && !bakes[n.id]) warn(`'${n.name}' 의 글자별 서식(일부 색·굵기)은 첫 서식으로 통일했습니다`);
+      if (n.characterStyleOverrides && n.characterStyleOverrides.some(Boolean)) warn(bakes[n.id] || quiet
+        ? `'${n.name}' 은(는) 글자마다 색·굵기가 달라요 — 보이는 건 피그마 그대로지만, 글자를 고치면 첫 서식으로 통일됩니다`
+        : `'${n.name}' 의 글자별 서식(일부 색·굵기)은 첫 서식으로 통일했습니다`);
       const t = { t: 'text', x: b.x, y: b.y, w: b.w, text, size, weight: st.fontWeight || 400, family: figFont(st.fontFamily, warn, st.fontWeight),
         color: fill && fill.type === 'SOLID' ? frgba(fill.color, (fill.opacity == null ? 1 : fill.opacity)) : '#000000',
         align: { CENTER: 'center', RIGHT: 'right', JUSTIFIED: 'left' }[st.textAlignHorizontal] || 'left',
@@ -858,7 +860,7 @@
           const H = n.layoutMode === 'HORIZONTAL';
           const hugX = n.layoutSizingHorizontal ? n.layoutSizingHorizontal === 'HUG' : (H ? n.primaryAxisSizingMode : n.counterAxisSizingMode) === 'AUTO';
           const hugY = n.layoutSizingVertical ? n.layoutSizingVertical === 'HUG' : (H ? n.counterAxisSizingMode : n.primaryAxisSizingMode) === 'AUTO';
-          const t = textNode(texts[0], op);
+          const t = textNode(texts[0], op, !!bk);
           box.label = { text: t.text, size: t.size, weight: t.weight, family: t.family, color: t.color, tfill: t.tfill, lh: t.lh, ls: t.ls, shadows: t.shadows };
           const pl = n.paddingLeft || 0, pr = n.paddingRight || 0, pt = n.paddingTop || 0, pb = n.paddingBottom || 0;
           if (hugX) box.pad = { x: Math.round((pl + pr) / 2), y: hugY ? Math.round((pt + pb) / 2) : null };
@@ -992,7 +994,7 @@
   }
 
   // 지금 열린 화면의 버전 — 화면 왼쪽 아래에 작게 보인다 (예전 주소·캐시로 열었는지 바로 알 수 있게)
-  const VERSION = '2026-10-25 d';
+  const VERSION = '2026-10-25 e';
   const badge = () => { if (document.getElementById('uikitVer')) return; const b = document.createElement('div'); b.id = 'uikitVer'; b.textContent = '버전 ' + VERSION;
     b.style.cssText = 'position:fixed;left:8px;bottom:6px;z-index:9998;font:11px/1.4 -apple-system,sans-serif;color:#6b7280;background:rgba(255,255,255,.85);padding:2px 7px;border-radius:6px;pointer-events:none';
     document.body.appendChild(b); };
