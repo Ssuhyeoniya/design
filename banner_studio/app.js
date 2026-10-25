@@ -349,6 +349,9 @@ function drawLayer(ctx, l) {
         tx.globalCompositeOperation = 'source-in';
         tx.fillStyle = '#fff'; tx.fillRect(0, 0, t.width, t.height);
         ctx.drawImage(t, l.x, l.y, l.w, l.h);
+      } else if (l.crop && window.UIKit) {        // 자르기 — 이미지 전체를 옮겨 그리고 상자로 자른다 (이미지 밖으로 옮겨도 된다)
+        const r = UIKit.cropDest(l.crop, l);
+        ctx.beginPath(); ctx.rect(l.x, l.y, l.w, l.h); ctx.clip(); ctx.drawImage(img, r.x, r.y, r.w, r.h);
       } else ctx.drawImage(img, ...srcRect(img, l), l.x, l.y, l.w, l.h);
       ctx.restore();
     } else {
@@ -494,6 +497,19 @@ function renderOverlay() {
     const b = bboxOf(m), u = Math.max(1, S.w / 400);
     octx.save(); octx.strokeStyle = '#3d7eff'; octx.lineWidth = u * 0.9; octx.setLineDash([u * 4, u * 3]);
     octx.strokeRect(b.x, b.y, b.w, b.h); octx.restore();
+  }
+  // 이미지 위치 조정(자르기) 모드 — 상자 밖으로 나간 이미지는 흐리게, 이미지 테두리와 모서리 핸들
+  if (cropEdit && (cropEdit.l.id !== sel || !S.layers.includes(cropEdit.l))) cropEdit = null;
+  if (cropEdit) {
+    const cl = cropEdit.l, r = cropRect(cl), u = Math.max(1, S.w / 400), im = cropImg(cl);
+    octx.save();
+    if (im) { octx.globalAlpha = .35; octx.drawImage(im, r.x, r.y, r.w, r.h); octx.globalAlpha = 1; }
+    octx.strokeStyle = '#3d7eff'; octx.lineWidth = u; octx.setLineDash([u * 4, u * 3]); octx.strokeRect(cl.x, cl.y, cl.w, cl.h);
+    octx.setLineDash([]); octx.strokeRect(r.x, r.y, r.w, r.h);
+    octx.fillStyle = '#fff'; octx.lineWidth = u * 0.7;
+    for (const [hx, hy] of cropCorners(r)) { octx.beginPath(); octx.rect(hx - u * 3.5, hy - u * 3.5, u * 7, u * 7); octx.fill(); octx.stroke(); }
+    octx.restore();
+    return;
   }
   // 선택 핸들
   const l = S.layers.find(x => x.id === sel);
@@ -830,6 +846,7 @@ function paintProps() {
     h += `<div class="row"><label>옵션</label><label class="hint"><input type="checkbox" data-k="flip" ${l.flip ? 'checked' : ''}> 좌우반전</label>`;
     if (l.role === 'bi') h += `<label class="hint"><input type="checkbox" data-k="white" ${l.white ? 'checked' : ''}> 화이트</label>`;
     h += `</div>`;
+    if (l.role !== 'bi') h += `<div class="row"><button class="btn sm grow" data-act="imgPick">이미지 바꾸기</button><button class="btn sm grow" data-act="imgCrop" title="캔버스에서 이미지를 더블클릭해도 됩니다">✥ 위치·크기 조정</button></div>`;
     if (l.role !== 'bi') h += `<div class="row"><button class="btn sm grow" data-act="fitZone">${isFree(SPECS[S.type]) ? '캔버스에 맞추기' : '권장 영역에 맞추기'}</button><button class="btn sm grow" data-act="fitRatio">원본 비율</button></div>`;
     if (l.assetId) h += `<p class="hint">라이브러리 에셋 <b class="mono">${esc(l.assetId)}</b>${l.slot ? ' · 슬롯 ' + esc(l.slot) : ''}${l.crop ? ' · 크롭 적용' : ''}</p>`;
     else if (l.role !== 'bi') h += `<p class="hint">브라우저 보관함 이미지 — 라이브러리에 등록되지 않아 기획안에는 저장되지 않습니다.</p>`;
@@ -906,7 +923,8 @@ function fxPropsHTML(l) {
     `<button class="btn sm grow" data-fx="stock" title="다음에 누르는 스톡 이미지를 이 도형에 채웁니다">스톡에서</button></div>`;
   if (f) h += `<div class="row"><label>맞춤</label><select data-fx="mode" class="grow">` +
     SCALE_NAME.map(([v, n]) => `<option value="${v}"${(f.scaleMode || 'FILL') === v ? ' selected' : ''}>${n}</option>`).join('') +
-    `</select><button class="btn sm" data-fx="unimg">제거</button></div>`;
+    `</select><button class="btn sm" data-fx="unimg">제거</button></div>` +
+    `<div class="row"><button class="btn sm grow" data-fx="crop" title="캔버스에서 도형을 더블클릭해도 됩니다">✥ 이미지 위치·크기 조정 (더블클릭)</button></div>`;
   if (eff.length || (l.fx && l.fx.stroke)) {
     h += `<div class="row wide"><label>효과</label>` + eff.map((e, i) => `<div class="row" style="gap:4px">
       <label class="hint" style="flex:0 0 auto"><input type="checkbox" data-fxi="${i}" data-fp="visible" ${e.visible === false ? '' : 'checked'}> ${FX_NAME[e.type] || e.type}</label>
@@ -934,10 +952,11 @@ async function setImageFill(l, src) {
   // 경로 이미지는 dataURL 로 바꿔 둔다 — UI 로 저장해 다른 화면(블로그)에서 열어도 깨지지 않게
   if (!/^data:/.test(src)) { try { src = await fileToDataURL(await (await fetch(src)).blob()); } catch { /* 실패하면 경로 그대로 */ } }
   const fx = ensureFx(l), f = imgFillOf(l);
-  if (f) f.src = src; else fx.fills.push({ type: 'IMAGE', src, scaleMode: 'FILL' });
+  if (f) { f.src = src; if (f.scaleMode === 'CROP') { f.scaleMode = 'FILL'; delete f.crop; } }   // 새 이미지는 채우기(가운데)로 — 더블클릭해서 위치를 옮긴다
+  else fx.fills.push({ type: 'IMAGE', src, scaleMode: 'FILL' });
   UIKit.img(src);
   push(); render(); paintProps(); measureKB();
-  toast('도형에 이미지를 채웠습니다 — 맞춤 방식(채우기·맞추기·바둑판)은 속성에서 바꿀 수 있습니다');
+  toast('도형에 이미지를 채웠습니다 — 더블클릭하면 이미지 위치·크기를 옮길 수 있습니다');
 }
 let stockFillTarget = null;                  // '스톡에서' 를 누른 뒤 고르는 스톡 이미지를 채울 도형
 function bindFxProps(box, l) {
@@ -949,6 +968,7 @@ function bindFxProps(box, l) {
       inp.click(); return;
     }
     if (a === 'stock') { stockFillTarget = l.id; toast('왼쪽 스톡 이미지를 누르면 이 도형에 채웁니다 (Esc 취소)'); return; }
+    if (a === 'crop') { enterCrop(l); return; }
     if (a === 'mode') imgFillOf(l).scaleMode = b.value;
     if (a === 'unimg') { l.fx.fills = l.fx.fills.filter(p => p.type !== 'IMAGE'); }
     if (a === 'shadow') ensureFx(l).effects = [...(l.fx.effects || []), { type: 'DROP_SHADOW', x: 0, y: Math.round(l.h * 0.06) || 4, blur: Math.round(l.h * 0.15) || 12, spread: 0, color: 'rgba(0,0,0,0.25)' }];
@@ -968,6 +988,21 @@ function bindFxProps(box, l) {
 function layerAct(a, l) {
   const i = S.layers.indexOf(l);
   if (a === 'edit') { startEdit(l); return; }
+  if (a === 'imgCrop') { enterCrop(l); return; }
+  if (a === 'imgPick') {                    // 이미지 바꾸기 — 상자 크기는 그대로, 새 이미지는 가운데 채우기. 더블클릭해서 위치를 옮긴다
+    const inp = el('input'); inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return;
+      const src = await fileToDataURL(f), im = await loadImg(src).catch(() => null);
+      if (!im) return toast('이미지를 열지 못했습니다', true);
+      imgCache.set(src, im);
+      Object.assign(l, { src, crop: UIKit.modeCrop('FILL', im.width, im.height, l.w, l.h) });
+      delete l.assetId; delete l.bake;
+      push(); render(); paintProps(); measureKB();
+      toast('이미지를 바꿨습니다 — 더블클릭하면 위치·크기를 옮길 수 있습니다');
+    };
+    inp.click(); return;
+  }
   if (a === 'del') { S.layers.splice(i, 1); sel = null; }
   if (a === 'dup') {
     const c = Object.assign(JSON.parse(JSON.stringify(l)), { id: uid(), x: l.x + 20, y: l.y + 20, name: l.name + ' 사본' });
@@ -979,7 +1014,7 @@ function layerAct(a, l) {
   if (a === 'fitZone') fitToZone(l);
   if (a === 'fitRatio') {
     const im = imgCache.get(l.src);
-    if (im) l.h = Math.round(l.w * im.height / im.width);
+    if (im) { l.h = Math.round(l.w * im.height / im.width); delete l.crop; }
   }
   push(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
 }
@@ -1003,6 +1038,39 @@ function toCanvas(e) {
   const r = art.getBoundingClientRect();
   return { x: (e.clientX - r.left) / (r.width / S.w), y: (e.clientY - r.top) / (r.height / S.h) };
 }
+// ── 이미지 위치 조정 (피그마 '자르기' 모드) ──
+// 이미지를 더블클릭하면 들어간다: 이미지를 끌어 위치를 옮기고, 모서리를 끌어 크기를 바꾼다 (비율 유지).
+// Enter·Esc·더블클릭·바깥 클릭으로 끝낸다. 이미지 레이어는 l.crop, 도형 이미지 채우기는 scaleMode 'CROP' + crop 으로 남는다
+let cropEdit = null;                         // { l }
+const cropFill = l => l.kind === 'rect' ? imgFillOf(l) : null;
+const canCrop = l => !!l && !l.hidden && window.UIKit && ((l.kind === 'image' && l.role !== 'bi' && !l.white) || (l.kind === 'rect' && !!imgFillOf(l)));
+const cropImg = l => l.kind === 'image' ? imgCache.get(l.src) : UIKit.img(cropFill(l).src);
+const cropOf = l => l.kind === 'image' ? l.crop : cropFill(l).crop;
+const cropRect = l => UIKit.cropDest(cropOf(l), l);
+const cropCorners = r => [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
+function setCropRect(l, r) { const c = UIKit.destCrop(r, l), o = cropOf(l); for (const k of ['x', 'y', 'w', 'h']) o[k] = +c[k].toFixed(5); }
+function enterCrop(l) {
+  const im = cropImg(l);
+  if (!im || !im.naturalWidth && !im.width) return toast('이미지를 아직 불러오는 중입니다 — 잠시 뒤 다시 더블클릭하세요', true);
+  if (editing) commitEdit();
+  if (l.kind === 'image') { if (!l.crop) l.crop = { x: 0, y: 0, w: 1, h: 1 }; }
+  else {
+    const f = cropFill(l);
+    if (f.scaleMode !== 'CROP' || !f.crop) { f.crop = UIKit.modeCrop(f.scaleMode, im.naturalWidth || im.width, im.naturalHeight || im.height, l.w, l.h); f.scaleMode = 'CROP'; }
+  }
+  sel = l.id; multi.clear(); cropEdit = { l };
+  paintLayers(); paintProps(); render();
+  toast('이미지 위치 조정 — 이미지를 끌어 옮기고 모서리로 크기를 바꾸세요. 끝내려면 Enter · Esc · 바깥 클릭');
+}
+function exitCrop() { if (!cropEdit) return; cropEdit = null; push(); paintProps(); render(); }
+function cropHit(p) {
+  const l = cropEdit.l, r = cropRect(l), tol = Math.max(6, S.w / 90);
+  const i = cropCorners(r).findIndex(([x, y]) => Math.abs(p.x - x) < tol && Math.abs(p.y - y) < tol);
+  if (i >= 0) return { corner: i };
+  const inR = (b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+  return inR(r) || inR(l) ? { move: true } : null;
+}
+
 function pickAt(p) {
   for (let i = S.layers.length - 1; i >= 0; i--) {
     const l = S.layers[i]; if (l.hidden) continue;
@@ -1029,6 +1097,7 @@ const onHit = (type, fn) => hit.addEventListener(type, e => { if (S) fn(e); });
 
 onHit('pointermove', e => {
   if (drag) return;
+  if (cropEdit) { const h = cropHit(toCanvas(e)); hit.style.cursor = !h ? 'default' : h.move ? 'move' : (h.corner % 2 ? 'nesw' : 'nwse') + '-resize'; return; }
   const p = toCanvas(e), hk = handleAt(p);
   hit.style.cursor = hk ? ({ n: 'ns', s: 'ns', e: 'ew', w: 'ew', nw: 'nwse', se: 'nwse', ne: 'nesw', sw: 'nesw' }[hk] + '-resize')
     : pickAt(p) ? 'move' : 'default';
@@ -1036,6 +1105,15 @@ onHit('pointermove', e => {
 
 onHit('pointerdown', e => {
   const p = toCanvas(e);
+  if (cropEdit) {
+    const h = cropHit(p);
+    if (h) {
+      drag = { mode: h.move ? 'cropMove' : 'cropScale', corner: h.corner, l: cropEdit.l, r0: cropRect(cropEdit.l), p0: p };
+      try { hit.setPointerCapture(e.pointerId); } catch { /* 무시 */ }
+      return;
+    }
+    exitCrop();                                         // 바깥 클릭 = 끝내기 (그 자리 선택은 아래에서 이어서)
+  }
   const hk = handleAt(p);
   if (hk) {
     const l = S.layers.find(x => x.id === sel);
@@ -1064,6 +1142,19 @@ onHit('pointermove', e => {
   if (!drag) return;
   const p = toCanvas(e), l = drag.l, s = drag.s;
   let dx = p.x - drag.p0.x, dy = p.y - drag.p0.y;
+  if (drag.mode === 'cropMove' || drag.mode === 'cropScale') {
+    const r0 = drag.r0;
+    if (drag.mode === 'cropMove') {
+      if (e.shiftKey) { if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0; }
+      setCropRect(l, { x: r0.x + dx, y: r0.y + dy, w: r0.w, h: r0.h });
+    } else {                                            // 맞은편 모서리를 고정하고 비율을 지킨 채 키우고 줄인다
+      const [ax, ay] = cropCorners(r0)[(drag.corner + 2) % 4];
+      const k = Math.max(8 / r0.w, Math.abs(p.x - ax) / r0.w, Math.abs(p.y - ay) / r0.h);
+      const w = r0.w * k, h = r0.h * k;
+      setCropRect(l, { x: p.x < ax ? ax - w : ax, y: p.y < ay ? ay - h : ay, w, h });
+    }
+    renderArt(); renderOverlay(); return;
+  }
   if (drag.mode === 'move') {
     // Shift = 일자 이동 (파워포인트처럼 더 많이 움직인 쪽 축으로만). 떼면 다시 자유 이동
     if (e.shiftKey) { if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0; }
@@ -1213,9 +1304,16 @@ hit.addEventListener('drop', async e => {
   pasteImages(files);
 });
 
+// 더블클릭하면 브라우저가 페이지 글자를 선택해 두고, 이어서 끌면 '선택 영역 끌기'가 시작돼 캔버스 끌기가 끊긴다 — 막는다
+hit.addEventListener('dragstart', e => e.preventDefault());
+hit.addEventListener('mousedown', e => { if (e.detail > 1) e.preventDefault(); });
 // 더블클릭 = 바로 편집
 onHit('dblclick', e => {
+  try { getSelection().removeAllRanges(); } catch { /* 무시 */ }
+  if (cropEdit) { exitCrop(); return; }
   const l = pickAt(toCanvas(e));
+  // 이미지(또는 글자 없는 이미지 채우기 도형)를 더블클릭 = 이미지 위치 조정 (피그마와 같다)
+  if (canCrop(l) && !(l.kind === 'rect' && l.text && l.text.trim())) { enterCrop(l); return; }
   if (l && !l.lockSize) startEdit(l);
 });
 
@@ -1235,6 +1333,7 @@ document.addEventListener('keydown', e => {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   if (editing || (ae && ae.isContentEditable)) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(e.shiftKey); return; }
+  if (cropEdit && (e.key === 'Escape' || e.key === 'Enter')) { e.preventDefault(); exitCrop(); return; }
   if (e.key === 'Escape' && stockFillTarget) { stockFillTarget = null; toast('이미지 채우기를 취소했습니다'); return; }
   const l = S.layers.find(x => x.id === sel);
   if (!l) return;

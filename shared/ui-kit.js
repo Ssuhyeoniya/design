@@ -343,6 +343,9 @@
         nodes.push({ t: 'text', x: l.x, y: l.y, w: l.w, h: Math.round(Math.max(m.h, l.size)), text: l.text, size: l.size,
           weight: f.weight, family: f.family, color: l.color, align: l.align, lh: l.lh, ls: l.ls, shadows: l.shadows, opacity: l.opacity, native, bake: bakeOf(l),
           cx: m.left + m.maxW / 2, cy: l.y + m.h / 2, gw: m.maxW });
+      } else if (l.kind === 'image' && l.crop && !l.flip && !l.white) {   // 위치를 옮긴(자른) 이미지 = 이미지 채우기(자르기) 도형
+        nodes.push({ t: 'box', x: l.x, y: l.y, w: l.w, h: l.h, fill: 'transparent', radius: l.radius || 0, opacity: l.opacity == null ? 1 : l.opacity,
+          fx: { fills: [{ type: 'IMAGE', src: l.src, scaleMode: 'CROP', crop: { ...l.crop } }] }, native, noNest: true });
       } else if (l.kind === 'image') {
         nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: l.h, src: l.src, opacity: l.opacity == null ? 1 : l.opacity, radius: l.radius || 0, native });
       }
@@ -436,6 +439,14 @@
     }
     return { style: p.color || '#000' };
   }
+  // 자르기(crop) ↔ 이미지가 놓인 사각형 (도형 b 기준). 피그마의 '자르기' 모드에서 이미지를 끌고 키우는 것과 같은 모델
+  const cropDest = (cr, b) => ({ x: b.x - cr.x / cr.w * b.w, y: b.y - cr.y / cr.h * b.h, w: b.w / cr.w, h: b.h / cr.h });
+  const destCrop = (r, b) => ({ x: (b.x - r.x) / r.w, y: (b.y - r.y) / r.h, w: b.w / r.w, h: b.h / r.h });
+  // 채우기·맞추기로 보이던 모양을 그대로 자르기 값으로 (자르기 모드로 들어갈 때 이미지가 튀지 않게)
+  function modeCrop(mode, iw, ih, w, h) {
+    const k = mode === 'FIT' ? Math.min(w / iw, h / ih) : Math.max(w / iw, h / ih), dw = iw * k, dh = ih * k;
+    return destCrop({ x: (w - dw) / 2, y: (h - dh) / 2, w: dw, h: dh }, { x: 0, y: 0, w, h });
+  }
   // 이미지 채우기 — 피그마의 채우기(FILL) · 맞추기(FIT) · 자르기(CROP) · 바둑판(TILE)
   function drawImageFill(c, p, b) {
     const im = img(p.src); if (!im) return;
@@ -447,9 +458,8 @@
       return;
     }
     if (mode === 'STRETCH') { c.drawImage(im, x, y, w, h); return; }    // 원본 전체를 도형 크기로 늘림
-    if (mode === 'CROP' && p.crop) {
-      const cr = p.crop;
-      c.drawImage(im, cr.x * iw, cr.y * ih, cr.w * iw, cr.h * ih, x, y, w, h); return;
+    if (mode === 'CROP' && p.crop) {                // crop = 도형에 보이는 이미지 영역(0~1). 영역이 이미지 밖으로 나가도 되게 이미지 전체를 옮겨 그린다 (도형으로 잘림)
+      const r = cropDest(p.crop, b); c.drawImage(im, r.x, r.y, r.w, r.h); return;
     }
     const k = mode === 'FIT' ? Math.min(w / iw, h / ih) : Math.max(w / iw, h / ih);
     const dw = iw * k, dh = ih * k;
@@ -928,6 +938,6 @@
   window.UIKit = { list, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, png, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
     exportJSON, importJSON, parseFont, fontName, fromFigma, figmaNeeds, parseFigmaLink, applyClips,
     paintBox, paintURL, outset, hasFx, textShadowCSS, img, set onImage(fn) { onImage = fn; },
-    bakeOk, bakeSig, labelSig,
+    bakeOk, bakeSig, labelSig, cropDest, destCrop, modeCrop,
     fonts: FONT_LIB.map(x => ({ family: x[0], weights: x[2] })), ensureFont, loadFonts, cssFamily, familyOf, set onFont(fn) { onFont = fn; } };
 })();
