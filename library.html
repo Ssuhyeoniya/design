@@ -196,7 +196,7 @@
     <div class="row"><button class="cancel">취소</button><button class="ok">삭제</button></div>
   </div></div>
 
-<script src="shared/ui-kit.js?v=20261018-8"></script>
+<script src="shared/ui-kit.js?v=20261025-1"></script>
 <script>
 const $=s=>document.querySelector(s);
 
@@ -482,7 +482,7 @@ async function renderUi(){
     card.querySelector('.sc-th').ondblclick=edit;
     card.querySelector('.sc-th').title='더블클릭해서 편집';
     card.querySelector('.sc-png').onclick=async()=>{
-      const blob=await (await fetch(await UIKit.thumb(c,Math.max(c.w,c.h)))).blob();
+      const blob=await (await fetch(await UIKit.png(c,1))).blob();
       saveBlob(blob,c.name.replace(/[\\/:*?"<>|]/g,'_')+'.png');
     };
     card.querySelector('.sc-json').onclick=()=>saveBlob(new Blob([UIKit.exportJSON([c])],{type:'application/json'}),'UI-'+c.name.replace(/[\\/:*?"<>|]/g,'_')+'.json');
@@ -764,6 +764,16 @@ $('#clearAll').onclick=async()=>{
 };
 try{if(localStorage.getItem('libTab')==='ui'){tab='ui';}}catch(e){}
 switchTab(tab);
+// 새 버전 알림 — 브라우저가 예전 페이지를 기억해 두면 예전 가져오기 코드로 돌아간다. 서버의 최신 페이지와 비교해 다르면 새로고침을 권한다
+(async()=>{try{
+  const mine=(document.querySelector('script[src*="ui-kit.js"]')||{}).getAttribute?.('src')||'';
+  const html=await (await fetch(location.pathname+'?_='+Date.now(),{cache:'no-store'})).text();
+  const live=(html.match(/src="(shared\/ui-kit\.js\?v=[^"]+)"/)||[])[1];
+  if(live&&mine&&live!==mine){const b=document.createElement('div');
+    b.style.cssText='position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:9999;background:#111827;color:#fff;padding:10px 14px;border-radius:10px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.25)';
+    b.innerHTML='새 버전이 있어 — <a href="#" style="color:#93c5fd;font-weight:700">새로고침</a> 후 다시 가져오면 피그마와 똑같이 나와';
+    b.querySelector('a').onclick=e=>{e.preventDefault();location.replace(location.pathname+'?v='+Date.now()+location.hash);};document.body.appendChild(b);}
+}catch(e){}})();
 </script>
 </body>
 </html>
