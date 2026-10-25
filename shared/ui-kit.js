@@ -141,8 +141,8 @@
   // 피그마 플러그인이 요소마다 피그마가 직접 그린 PNG 를 함께 준다. 레이어에 { src, dx, dy, w, h, alpha, sig } 로 붙여 두고,
   // 레이어 값이 가져온 그대로(sig 가 같음)인 동안은 그 그림을 그대로 그린다 = 피그마와 100% 같다.
   // 글자·색·크기를 고치면 sig 가 달라져 그때부터 편집 가능한 레이어로 다시 그린다 (되돌리면 다시 그림으로).
-  const SIG_KEYS = ['w', 'h', 'fill', 'radius', 'fx', 'stroke', 'strokeW', 'text', 'rich', 'size', 'weight', 'font', 'color', 'align', 'lh', 'ls', 'opacity', 'auto', 'tail', 'shape', 'rot', 'shadows'];
-  const LABEL_KEYS = ['text', 'rich', 'size', 'weight', 'font', 'color', 'lh', 'ls', 'shadows'];
+  const SIG_KEYS = ['w', 'h', 'fill', 'radius', 'fx', 'stroke', 'strokeW', 'text', 'rich', 'size', 'weight', 'font', 'color', 'align', 'lh', 'ls', 'opacity', 'auto', 'tail', 'shape', 'rot', 'shadows', 'tfill'];
+  const LABEL_KEYS = ['text', 'rich', 'size', 'weight', 'font', 'color', 'lh', 'ls', 'shadows', 'tfill'];
   // 오토 레이아웃 도형(배너 rect.auto · 블로그 'A:' 표시)은 폭·높이가 글자에서 정해지므로 비교에서 뺀다
   function bakeSig(l, extra, keys) {
     const o = {}, auto = !keys && (l.auto || String(extra || '').startsWith('A:'));
@@ -174,7 +174,7 @@
       if (nodes.some(x => x !== b && x !== t && inside(x) && !(x.w >= b.w && x.h >= b.h))) continue;
       used.add(t);
       const m = measure(t);
-      b.label = { text: t.text, size: t.size, weight: t.weight, family: t.family, color: t.color, lh: t.lh, ls: t.ls, rich: t.rich || null, shadows: t.shadows, native: t.native };
+      b.label = { text: t.text, size: t.size, weight: t.weight, family: t.family, color: t.color, tfill: t.tfill, lh: t.lh, ls: t.ls, rich: t.rich || null, shadows: t.shadows, native: t.native };
       b.pad = { x: Math.max(0, Math.round((b.w - m.w) / 2)), y: Math.max(0, Math.round((b.h - m.h) / 2)) };
     }
     return nodes.filter(n => !used.has(n));
@@ -226,7 +226,7 @@
         const t = label.get(l.id);
         n.bake = bakeOf(l, t ? 'A:' + labelSig(t) : '');
         if (t) {
-          n.label = { text: t.text, size: t.size, weight: t.weight, family: fam(t), color: t.color, lh: t.lh, ls: t.ls, rich: t.rich || null, shadows: t.shadows, native: { app: 'blog', layer: clone(t) } };
+          n.label = { text: t.text, size: t.size, weight: t.weight, family: fam(t), color: t.color, tfill: t.tfill, lh: t.lh, ls: t.ls, rich: t.rich || null, shadows: t.shadows, native: { app: 'blog', layer: clone(t) } };
           n.pad = { x: t.fitPad != null ? t.fitPad : Math.round(t.size * 0.45), y: t.fitPadY != null ? t.fitPadY : null };
         }
         nodes.push(n);
@@ -235,7 +235,7 @@
         const st = { text: l.text, size: l.size, weight: l.weight, family: fam(l), ls: l.ls, lh: l.lh };
         const m = measure(st);
         const off = l.align === 'center' ? (l.w - m.w) / 2 : l.align === 'right' ? l.w - m.w : 0;
-        nodes.push({ t: 'text', x: l.x, y: l.y, w: l.w, h: Math.round(m.h), ...st, color: l.color, align: l.align || 'left',
+        nodes.push({ t: 'text', x: l.x, y: l.y, w: l.w, h: Math.round(m.h), ...st, color: l.color, align: l.align || 'left', tfill: l.tfill,
           rich: l.rich || null, shadows: l.shadows, native, bake: bakeOf(l, ''), cx: l.x + off + m.w / 2, cy: l.y + m.h / 2, gw: m.w });
       } else if (l.type === 'i') {
         nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: Math.round(l.w / (l.ar || 1)), src: l.src, opacity: 1, radius: 0, native });
@@ -267,6 +267,7 @@
             font: font(L.family), x, y, w: n.w, align: 'center' }));
           if (L.rich) t.rich = L.rich; else delete t.rich;
           if (L.shadows && L.shadows.length) t.shadows = L.shadows; else delete t.shadows;
+          if (L.tfill) t.tfill = clone(L.tfill); else delete t.tfill;
           delete t.gid; t.id = mk.nid();
           if (n.pad) { t.fitBox = r.id; t.fitPad = n.pad.x; t.fitPadY = n.pad.y; t.fitAll = true; delete t.fitDy; }
           else { delete t.fitBox; t.y = Math.round(y + (n.h - measure(t).h) / 2); }
@@ -279,6 +280,7 @@
         const t = mk.tLayer(base(n, { text: n.text, size: n.size, weight: n.weight || 400, color: n.color, align: n.align, lh: n.lh || 1.3, ls: n.ls || 0,
           font: font(n.family), x, y, w: n.w }));
         if (n.rich) t.rich = n.rich;
+        if (n.tfill) t.tfill = clone(n.tfill); else delete t.tfill;
         if (n.shadows && n.shadows.length) t.shadows = n.shadows; else delete t.shadows;
         if (n.opacity != null && n.opacity < 1) t.opacity = n.opacity;
         delete t.fitBox; delete t.gid; t.id = mk.nid();
@@ -335,14 +337,14 @@
         const n = { t: 'box', x: l.x, y: l.y, w: l.w, h: l.h, fill: l.fill, radius: l.radius || 0, opacity: l.opacity == null ? 1 : l.opacity, native, fx: l.fx ? clone(l.fx) : undefined, bake: bakeOf(l), noNest: !!l.bake };
         if (l.text && l.text.trim()) {
           const f = parseFont(l.font);
-          n.label = { text: l.text, size: l.size, weight: f.weight, family: f.family, color: l.color, lh: l.lh, ls: l.ls, shadows: l.shadows };
+          n.label = { text: l.text, size: l.size, weight: f.weight, family: f.family, color: l.color, tfill: l.tfill, lh: l.lh, ls: l.ls, shadows: l.shadows };
           n.pad = l.auto ? { x: l.auto.padX, y: l.auto.padY } : null;
         }
         nodes.push(n);
       } else if (l.kind === 'text') {
         const f = parseFont(l.font), m = tm(l);
         nodes.push({ t: 'text', x: l.x, y: l.y, w: l.w, h: Math.round(Math.max(m.h, l.size)), text: l.text, size: l.size,
-          weight: f.weight, family: f.family, color: l.color, align: l.align, lh: l.lh, ls: l.ls, shadows: l.shadows, opacity: l.opacity, native, bake: bakeOf(l),
+          weight: f.weight, family: f.family, color: l.color, tfill: l.tfill, align: l.align, lh: l.lh, ls: l.ls, shadows: l.shadows, opacity: l.opacity, native, bake: bakeOf(l),
           cx: m.left + m.maxW / 2, cy: l.y + m.h / 2, gw: m.maxW });
       } else if (l.kind === 'image' && l.crop && !l.flip && !l.white) {   // 위치를 옮긴(자른) 이미지 = 이미지 채우기(자르기) 도형
         nodes.push({ t: 'box', x: l.x, y: l.y, w: l.w, h: l.h, fill: 'transparent', radius: l.radius || 0, opacity: l.opacity == null ? 1 : l.opacity,
@@ -352,7 +354,8 @@
       }
     }
     if (frame) {
-      const ns = autoNest(nodes); ns.forEach(n => { delete n.cx; delete n.cy; delete n.gw; });
+      // 피그마 프레임은 레이어 구조를 그대로 둔다 — 화면 배경 같은 큰 도형에 글자를 라벨로 합치면 글자가 사라진다
+      const ns = nodes; ns.forEach(n => { delete n.cx; delete n.cy; delete n.gw; });
       return { nodes: ns, w: Math.round(frame.w), h: Math.round(frame.h), fixed: true, frame: true, origin: 'banner' };
     }
     return { ...normalize(autoNest(nodes)), origin: 'banner' };
@@ -373,6 +376,7 @@
           x, y, w: n.w, h: n.h, fill: n.fill || '#ffffff', radius: n.radius || 0, opacity: n.opacity == null ? 1 : n.opacity });
         if (L) Object.assign(r, { text: L.text.replace(/\[\[|\]\]/g, ''), size: L.size, lh: L.lh || 1.3, ls: L.ls || 0, color: L.color, align: 'center', font: fontName(L.family, L.weight) });
         else Object.assign(r, { text: '', size: r.size || 40, lh: 1.3, ls: -0.02, color: '#111111', align: 'center', font: r.font || 'Pretendard SemiBold' });
+        if (L && L.tfill) r.tfill = clone(L.tfill); else delete r.tfill;
         if (L && n.pad) r.auto = { padX: n.pad.x, padY: n.pad.y }; else delete r.auto;
         if (n.fx) r.fx = n.fx; else delete r.fx;
         if (L && L.shadows && L.shadows.length) r.shadows = L.shadows; else delete r.shadows;
@@ -381,7 +385,8 @@
       } else if (n.t === 'text') {
         out.push(base(n, { kind: 'text', role: 'free', name: (n.text || '텍스트').split('\n')[0].slice(0, 20), x, y, w: n.w,
           text: String(n.text || '').replace(/\[\[|\]\]/g, ''), size: n.size, lh: n.lh || 1.3, ls: n.ls || 0, color: n.color, align: n.align || 'left',
-          font: fontName(n.family, n.weight), shadows: n.shadows && n.shadows.length ? n.shadows : undefined, opacity: n.opacity == null ? 1 : n.opacity }));
+          font: fontName(n.family, n.weight), shadows: n.shadows && n.shadows.length ? n.shadows : undefined, opacity: n.opacity == null ? 1 : n.opacity,
+          tfill: n.tfill ? clone(n.tfill) : undefined }));
         attachBake(out[out.length - 1], n.bake);
       } else if (n.t === 'image') {
         out.push(base(n, { kind: 'image', role: 'object', name: '이미지', x, y, w: n.w, h: n.h, src: n.src, opacity: n.opacity == null ? 1 : n.opacity, radius: n.radius || 0 }));
@@ -439,6 +444,28 @@
       return { style: add(c.createRadialGradient(0, 0, 0, 0, 0, rx)), tf: [a.x, a.y, Math.atan2(z.y - a.y, z.x - a.x), ry / rx] };
     }
     return { style: p.color || '#000' };
+  }
+  // 글자 그라데이션 (피그마 글자 채우기) — 글자 상자 b 기준. 원형·다이아몬드는 원으로 근사
+  function textPaint(c, p, b) {
+    const s = paintStyle(c, p, b);
+    if (!s.tf) return s.style;
+    const hs = p.handles || [{ x: .5, y: .5 }, { x: 1, y: .5 }], a = { x: b.x + hs[0].x * b.w, y: b.y + hs[0].y * b.h }, z = { x: b.x + hs[1].x * b.w, y: b.y + hs[1].y * b.h };
+    const g = c.createRadialGradient(a.x, a.y, 0, a.x, a.y, Math.max(.5, Math.hypot(z.x - a.x, z.y - a.y)));
+    (p.stops || []).forEach(st => g.addColorStop(Math.max(0, Math.min(1, st.pos)), st.color)); return g;
+  }
+  // CSS 로 — 블로그 화면의 글자(배경을 글자 모양으로 자르기). 피그마 핸들 → CSS 각도·멈춤 위치
+  function gradCSS(p, w, h) {
+    const hs = p.handles || [{ x: 0, y: .5 }, { x: 1, y: .5 }], st = (p.stops || []);
+    if (p.type === 'GRADIENT_LINEAR') {
+      const ax = hs[0].x * w, ay = hs[0].y * h, zx = hs[1].x * w, zy = hs[1].y * h, dx = zx - ax, dy = zy - ay;
+      const ang = Math.atan2(dx, -dy), L = Math.abs(w * Math.sin(ang)) + Math.abs(h * Math.cos(ang)) || 1;   // CSS 그라데이션 선 길이
+      const len = Math.hypot(dx, dy), ux = dx / (len || 1), uy = dy / (len || 1);
+      const t0 = ((ax - w / 2) * ux + (ay - h / 2) * uy + L / 2) / L, t1 = t0 + len / L;   // 핸들 시작·끝을 CSS 선 위 비율로
+      return `linear-gradient(${(ang * 180 / Math.PI).toFixed(1)}deg, ${st.map(s => `${s.color} ${((t0 + (t1 - t0) * s.pos) * 100).toFixed(1)}%`).join(', ')})`;
+    }
+    if (p.type === 'GRADIENT_ANGULAR') return `conic-gradient(from ${(Math.atan2(hs[1].y * h - hs[0].y * h, hs[1].x * w - hs[0].x * w) * 180 / Math.PI + 90).toFixed(1)}deg at ${hs[0].x * 100}% ${hs[0].y * 100}%, ${st.map(s => `${s.color} ${(s.pos * 100).toFixed(1)}%`).join(', ')})`;
+    const r = Math.hypot((hs[1].x - hs[0].x) * w, (hs[1].y - hs[0].y) * h);
+    return `radial-gradient(circle ${r.toFixed(1)}px at ${hs[0].x * 100}% ${hs[0].y * 100}%, ${st.map(s => `${s.color} ${(s.pos * 100).toFixed(1)}%`).join(', ')})`;
   }
   // 자르기(crop) ↔ 이미지가 놓인 사각형 (도형 b 기준). 피그마의 '자르기' 모드에서 이미지를 끌고 키우는 것과 같은 모델
   const cropDest = (cr, b) => ({ x: b.x - cr.x / cr.w * b.w, y: b.y - cr.y / cr.h * b.h, w: b.w / cr.w, h: b.h / cr.h });
@@ -579,7 +606,7 @@
   function drawLines(c, st, x, y, w, align) {
     c.font = `${st.weight || 400} ${st.size}px ${cssFamily(st.family)}`;
     try { c.letterSpacing = ((st.ls || 0) * st.size).toFixed(2) + 'px'; } catch (e) { /* 미지원 브라우저 */ }
-    c.fillStyle = st.color || '#111'; c.textBaseline = 'middle';
+    c.fillStyle = st.tfill ? textPaint(c, st.tfill, { x, y, w, h: measure(st).h }) : st.color || '#111'; c.textBaseline = 'middle';
     c.textAlign = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left';
     const ax = align === 'center' ? x + w / 2 : align === 'right' ? x + w : x, L = st.size * (st.lh || 1.3);
     const draw = () => lines(st.text).forEach((s, i) => c.fillText(s, ax, y + i * L + L / 2));
@@ -743,7 +770,9 @@
         opacity: op, name: n.name };
       const sh = figEffects(n).filter(e => e.type === 'DROP_SHADOW').map(e => ({ x: e.x, y: e.y, blur: e.blur, color: e.color }));
       if (sh.length) t.shadows = sh;
-      if (fill && fill.type !== 'SOLID') warn(`'${n.name}' 글자의 그라데이션·이미지 채우기는 단색으로 바꿨습니다`);
+      if (fill && /^GRADIENT_/.test(fill.type)) {                       // 글자 그라데이션은 그대로 (고쳐도 그라데이션 유지)
+        t.tfill = figPaint(fill); const s0 = (t.tfill.stops || [])[0]; if (s0) t.color = s0.color;
+      } else if (fill && fill.type !== 'SOLID') warn(`'${n.name}' 글자의 이미지 채우기는 단색으로 바꿨습니다`);
       const m = measure(t);
       // 피그마에서 한 줄(또는 자동 폭)이던 글자는 브라우저 글꼴이 조금만 넓어도 줄바꿈된다 — 폭에 여유를 주고 정렬 기준점은 지킨다
       const L1 = st.lineHeightPx || size * 1.3, oneLine = b.h < L1 * (text.split('\n').length + 0.5);
@@ -806,7 +835,7 @@
           const hugX = n.layoutSizingHorizontal ? n.layoutSizingHorizontal === 'HUG' : (H ? n.primaryAxisSizingMode : n.counterAxisSizingMode) === 'AUTO';
           const hugY = n.layoutSizingVertical ? n.layoutSizingVertical === 'HUG' : (H ? n.counterAxisSizingMode : n.primaryAxisSizingMode) === 'AUTO';
           const t = textNode(texts[0], op);
-          box.label = { text: t.text, size: t.size, weight: t.weight, family: t.family, color: t.color, lh: t.lh, ls: t.ls, shadows: t.shadows };
+          box.label = { text: t.text, size: t.size, weight: t.weight, family: t.family, color: t.color, tfill: t.tfill, lh: t.lh, ls: t.ls, shadows: t.shadows };
           const pl = n.paddingLeft || 0, pr = n.paddingRight || 0, pt = n.paddingTop || 0, pb = n.paddingBottom || 0;
           if (hugX) box.pad = { x: Math.round((pl + pr) / 2), y: hugY ? Math.round((pt + pb) / 2) : null };
           if (pl !== pr || (hugY && pt !== pb)) warn(`'${n.name}' 의 좌우·상하 패딩이 달라 평균값으로 맞췄습니다`);
@@ -939,6 +968,6 @@
   window.UIKit = { list, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, png, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
     exportJSON, importJSON, parseFont, fontName, fromFigma, figmaNeeds, parseFigmaLink, applyClips,
     paintBox, paintURL, outset, hasFx, textShadowCSS, img, set onImage(fn) { onImage = fn; },
-    bakeOk, bakeSig, labelSig, cropDest, destCrop, modeCrop,
+    bakeOk, bakeSig, labelSig, cropDest, destCrop, modeCrop, textPaint, gradCSS,
     fonts: FONT_LIB.map(x => ({ family: x[0], weights: x[2] })), ensureFont, loadFonts, cssFamily, familyOf, set onFont(fn) { onFont = fn; } };
 })();

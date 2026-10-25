@@ -381,7 +381,7 @@ function drawLayer(ctx, l) {
 function drawText(ctx, l, top) {
   const m = textMetrics(l);
   setTextFont(ctx, l);
-  ctx.fillStyle = l.color; ctx.textBaseline = 'top';
+  ctx.fillStyle = l.tfill && window.UIKit ? UIKit.textPaint(ctx, l.tfill, { x: l.x, y: top, w: l.w, h: m.h }) : l.color; ctx.textBaseline = 'top';   // 글자 그라데이션(피그마) 유지
   ctx.textAlign = l.align === 'center' ? 'center' : l.align === 'right' ? 'right' : 'left';
   const ax = l.align === 'center' ? l.x + l.w / 2 : l.align === 'right' ? l.x + l.w : l.x;
   const draw = () => m.lines.forEach((s, i) => ctx.fillText(s, ax, top + i * m.lh + (m.lh - l.size) / 2));
@@ -889,6 +889,7 @@ function paintProps() {
       let v = inp.type === 'checkbox' ? inp.checked : inp.type === 'number' || inp.type === 'range' ? +inp.value : inp.value;
       l[k] = v;
       // 피그마에서 온 도형 — 색을 고르면 이미지 채우기는 두고 나머지 채우기를 그 색으로, 모서리를 고르면 모서리별 값을 푼다
+      if (k === 'color') delete l.tfill;                 // 단색을 고르면 글자 그라데이션은 뺀다
       if (l.fx && k === 'fill') l.fx.fills = [{ type: 'SOLID', color: v }, ...(l.fx.fills || []).filter(p => p.type === 'IMAGE')];
       if (l.fx && k === 'radius') delete l.fx.radii;
       push(); render(); paintChecks(); measureKB();

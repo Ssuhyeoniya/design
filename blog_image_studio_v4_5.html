@@ -534,7 +534,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="exportZone"></div>
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
-<script src="shared/ui-kit.js?v=20261025-5"></script>
+<script src="shared/ui-kit.js?v=20261025-6"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -1232,7 +1232,7 @@ function layerHTML(l){
   if(l.type==='t'){
     const colored=l.rich?sanitizeRich(l.rich):esc(l.text).replace(/\[\[([\s\S]+?)\]\]/g,`<span style="color:${l.accent||'#00e31e'}">$1</span>`);
     const inner=l.hl?`<span class="hl-inner" style="background:${l.hlColor};padding:.06em .18em;">${colored}</span>`:colored;
-    return {cls:'layer t',style:`left:${l.x}px;top:${l.y}px;width:${l.w}px;font-size:${l.size}px;font-weight:${l.weight};color:${l.color};text-align:${l.align};line-height:${l.lh};letter-spacing:${l.ls}em;${l.font?`font-family:${l.font};`:''}${l.shadows&&l.shadows.length&&window.UIKit?`text-shadow:${UIKit.textShadowCSS(l.shadows)};`:''}${l.opacity!=null&&l.opacity<1?`opacity:${l.opacity};`:''}${l.rot?`transform:rotate(${l.rot}deg);transform-origin:${l.rotOrigin||'center center'};`:''}`,html:inner};
+    return {cls:'layer t',style:`left:${l.x}px;top:${l.y}px;width:${l.w}px;font-size:${l.size}px;font-weight:${l.weight};color:${l.color};${l.tfill&&window.UIKit?`background:${UIKit.gradCSS(l.tfill,l.w,Math.max(1,String(l.text||'').split('\n').length)*l.size*(l.lh||1.3))};-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;`:''}text-align:${l.align};line-height:${l.lh};letter-spacing:${l.ls}em;${l.font?`font-family:${l.font};`:''}${l.shadows&&l.shadows.length&&window.UIKit?`text-shadow:${UIKit.textShadowCSS(l.shadows)};`:''}${l.opacity!=null&&l.opacity<1?`opacity:${l.opacity};`:''}${l.rot?`transform:rotate(${l.rot}deg);transform-origin:${l.rotOrigin||'center center'};`:''}`,html:inner};
   }
   if(l.type==='i'){
     if(l.crop){
@@ -1794,6 +1794,7 @@ function _selTexts(){
 }
 function _applyText(prop,val,fallbackLayer){
   const ts=_selTexts();
+  if(prop==='color')ts.forEach(x=>delete x.tfill);
   if(ts.length>1) ts.forEach(x=>x[prop]=val);
   else if(fallbackLayer) fallbackLayer[prop]=val;
 }
@@ -1891,7 +1892,7 @@ function bindProps(s,l){
     }
     $('#pSize').oninput=e=>{_applyText('size',Math.max(8,+e.target.value||8),l);rc();};
     $('#pWeight').onchange=e=>{_applyText('weight',+e.target.value,l);rc();};
-    $('#pColor').oninput=e=>{_applyText('color',e.target.value,l);rc();};
+    $('#pColor').oninput=e=>{delete l.tfill;_applyText('color',e.target.value,l);rc();};   // 단색을 고르면 글자 그라데이션은 뺀다
     $('#pAccent').oninput=e=>{l.accent=e.target.value;rc();};
     $('#pHl').onchange=e=>{l.hl=e.target.checked;$('#hlColorField').style.display=l.hl?'':'none';rc();};
     $('#pHlColor').oninput=e=>{l.hlColor=e.target.value;rc();};
