@@ -325,7 +325,8 @@
     return 'Pretendard ' + PRE[w];
   }
   // tm(l) = 배너 페이지의 textMetrics (줄바꿈까지 반영한 실제 렌더 정보)
-  function fromBanner(layers, tm) {
+  // frame = { w, h } 이면 좌표를 옮기지 않고 그 크기 그대로 (피그마 프레임 편집 — 캔버스 (0,0) = 프레임 왼쪽 위)
+  function fromBanner(layers, tm, frame) {
     const nodes = [];
     for (const l of layers) {
       const native = { app: 'banner', layer: clone(l) };
@@ -345,6 +346,10 @@
       } else if (l.kind === 'image') {
         nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: l.h, src: l.src, opacity: l.opacity == null ? 1 : l.opacity, radius: l.radius || 0, native });
       }
+    }
+    if (frame) {
+      const ns = autoNest(nodes); ns.forEach(n => { delete n.cx; delete n.cy; delete n.gw; });
+      return { nodes: ns, w: Math.round(frame.w), h: Math.round(frame.h), fixed: true, frame: true, origin: 'banner' };
     }
     return { ...normalize(autoNest(nodes)), origin: 'banner' };
   }
@@ -582,14 +587,15 @@
     // 이미지 채우기는 미리 받아 둔다 (썸네일은 한 번만 그린다)
     await Promise.all(comp.nodes.flatMap(n => (n.fx && n.fx.fills || []).filter(p => p.type === 'IMAGE'))
       .map(p => new Promise(res => { const im = img(p.src); if (im) return res(); const i = imgs.get(p.src); i.addEventListener('load', res); i.addEventListener('error', res); })));
-    const m = comp.frame ? 0 : Math.max(0, ...comp.nodes.map(n => n.t === 'box' ? outset(n) : 0));
+    const isFrame = !!(comp.frame || comp.origin === 'figma');      // 예전에 저장한 피그마 컴포넌트는 frame 표시가 없다
+    const m = isFrame ? 0 : Math.max(0, ...comp.nodes.map(n => n.t === 'box' ? outset(n) : 0));
     const k = opts.scale || Math.min(1, max / Math.max(comp.w + m * 2, comp.h + m * 2, 1));
     const pad = (opts.scale ? 0 : 8) + Math.round(m * k);          // 내려받기는 효과가 번지는 만큼만 (프레임은 0)
     const cv = document.createElement('canvas');
     cv.width = Math.max(1, Math.round(comp.w * k) + pad * 2); cv.height = Math.max(1, Math.round(comp.h * k) + pad * 2);
     const c = cv.getContext('2d');
     c.translate(pad, pad); c.scale(k, k);
-    if (comp.frame) {                                                 // 피그마 프레임 — 경계 밖은 잘라내고 프레임 배경색을 깐다
+    if (isFrame) {                                                    // 피그마 프레임 — 경계 밖은 잘라내고 프레임 배경색을 깐다
       c.beginPath(); c.rect(0, 0, comp.w, comp.h); c.clip();
       if (comp.bg) { c.fillStyle = comp.bg; c.fillRect(0, 0, comp.w, comp.h); }
     }

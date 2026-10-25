@@ -1603,9 +1603,11 @@ async function openUiEditor(id) {
   if (uiDirty() && !confirm('지금 편집 중인 컴포넌트의 저장하지 않은 수정이 사라집니다. 계속할까요?')) return;
   closeEdit();
   // 피그마 프레임은 캔버스 = 프레임 크기 그대로(여백 없음), 배경도 프레임 배경색. 그 밖의 UI 는 그림자가 보이게 약간 띄운다
-  const m = c.frame ? 0 : Math.max(24, ...c.nodes.map(n => n.t === 'box' ? UIKit.outset(n) + 8 : 0));
+  // 예전에 저장한 피그마 컴포넌트는 frame 표시가 없다 — 피그마에서 온 것은 모두 프레임으로 본다
+  const isFrame = !!(c.frame || c.origin === 'figma');
+  const m = isFrame ? 0 : Math.max(24, ...c.nodes.map(n => n.t === 'box' ? UIKit.outset(n) + 8 : 0));
   S = blankState('free');
-  const bgc = c.bg && /^#[0-9a-f]{6}$/i.test(c.bg) ? c.bg : c.frame ? '#ffffff' : '#e9ecf1';
+  const bgc = c.bg && /^#[0-9a-f]{6}$/i.test(c.bg) ? c.bg : isFrame ? '#ffffff' : '#e9ecf1';
   Object.assign(S, { w: Math.max(FREE_MIN, Math.round(c.w + m * 2)), h: Math.max(FREE_MIN, Math.round(c.h + m * 2)),
     bg: { mode: 'solid', c1: bgc, c2: '#5a6478', angle: 90 }, name: c.name });
   S.layers = UIKit.toBanner(c, { x: m, y: m }, 1, uid).layers;   // 편집할 땐 그룹으로 묶지 않는다 — 하나씩 바로 고친다
@@ -1614,7 +1616,7 @@ async function openUiEditor(id) {
   await preloadImgs();
   syncCanvasInputs(); paintSpecInfo(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
   history = []; hIdx = -1; push();
-  uiEdit = { comp: c, snap: history[0] };
+  uiEdit = { comp: c, snap: history[0], frame: isFrame };
   await paintUiEditBar();
   toast(`“${c.name}” 편집 — 글자·색·이미지·효과를 고친 뒤 위의 저장을 누르세요 (캔버스 배경은 저장되지 않습니다)`);
 }
@@ -1639,11 +1641,14 @@ async function saveUiEdit(asNew) {
   let group = $('#uiEdGroup').value;
   if (group === '__new') { group = (prompt('새 그룹 이름') || '').trim(); if (!group) return; }
   try {
-    const conv = UIKit.fromBanner(layers, textMetrics);
+    // 피그마 프레임은 캔버스 = 프레임이라 좌표·크기를 그대로 둔다 (저장 후에도 여백 없이 같은 크기)
+    const conv = UIKit.fromBanner(layers, textMetrics, uiEdit.frame ? { w: S.w, h: S.h } : null);
+    if (uiEdit.frame) { conv.origin = uiEdit.comp.origin || 'figma'; conv.bg = S.bg && S.bg.c1; }
     if (asNew) uiEdit.comp = await UIKit.save(name, conv, group);
     else {
       const c = uiEdit.comp;
       Object.assign(c, { name, group, w: conv.w, h: conv.h, nodes: conv.nodes, edited: Date.now() });
+      if (uiEdit.frame) Object.assign(c, { frame: true, bg: conv.bg });
       c.thumb = await UIKit.thumb(c);
       await UIKit.put(c);
     }
