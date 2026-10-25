@@ -1046,12 +1046,13 @@ onHit('pointerdown', e => {
     const ids0 = selIds();
     const inGroup = !!l && !!l.gid && !e.shiftKey && ids0.length > 1 && ids0.includes(l.id) &&
       S.layers.filter(x => x.gid === l.gid).every(x => ids0.includes(x.id));
-    if (l && e.shiftKey) toggleSel(l.id);               // Shift+클릭 = 다중 선택 추가/해제
+    const shiftOff = !!l && e.shiftKey && ids0.includes(l.id);   // 이미 고른 것을 Shift 로 누름 — 끌면 일자 이동, 그냥 떼면 선택 해제 (파워포인트와 같다)
+    if (l && e.shiftKey && !shiftOff) toggleSel(l.id);   // Shift+클릭 = 다중 선택 추가/해제
     else if (!(l && selIds().length > 1 && selIds().includes(l.id))) { sel = l ? l.id : null; if (l && l.gid && !(wasSel && ids0.length === 1)) selectGroup(l); }  // 묶음 안에서 고른 낱개를 다시 누르면 낱개 유지  // 묶음 안을 누르면 묶음 유지
     paintLayers(); paintProps();
     const group = selLayers();
     if (l && group.includes(l)) drag = {
-      mode: 'move', l, s: { ...l }, p0: p, reselect: wasSel && group.length === 1 && !e.shiftKey, child: inGroup,
+      mode: 'move', l, s: { ...l }, p0: p, reselect: wasSel && group.length === 1 && !e.shiftKey, child: inGroup, shiftOff,
       g: group.map(x => ({ l: x, x: x.x, y: x.y })),
     };
   }
@@ -1061,8 +1062,11 @@ onHit('pointerdown', e => {
 
 onHit('pointermove', e => {
   if (!drag) return;
-  const p = toCanvas(e), dx = p.x - drag.p0.x, dy = p.y - drag.p0.y, l = drag.l, s = drag.s;
+  const p = toCanvas(e), l = drag.l, s = drag.s;
+  let dx = p.x - drag.p0.x, dy = p.y - drag.p0.y;
   if (drag.mode === 'move') {
+    // Shift = 일자 이동 (파워포인트처럼 더 많이 움직인 쪽 축으로만). 떼면 다시 자유 이동
+    if (e.shiftKey) { if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0; }
     for (const g of drag.g) {
       if (!g.l.lockX) g.l.x = Math.round(g.x + dx);
       g.l.y = Math.round(g.y + dy);
@@ -1221,6 +1225,7 @@ onHit('pointerup', e => {
   endDrag();
   if (!d || d.mode !== 'move') return;
   const moved = Math.abs(d.l.x - d.s.x) > 1 || Math.abs(d.l.y - d.s.y) > 1;
+  if (!moved && d.shiftOff) { toggleSel(d.l.id); paintLayers(); paintProps(); renderOverlay(); return; }
   if (!moved && d.child) { sel = d.l.id; multi.clear(); multiFor = sel; paintLayers(); paintProps(); renderOverlay(); return; }
   if (!moved && d.reselect && !d.l.lockSize) startEdit(d.l);
 });
