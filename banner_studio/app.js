@@ -89,9 +89,19 @@ function selIds() {
 }
 const selLayers = () => { const ids = selIds(); return S.layers.filter(l => ids.includes(l.id)); };
 // 그룹(gid) — 캔버스에서 누르면 묶음 전체가 잡힌다. 레이어 목록·더블클릭으로는 낱개를 고친다
+// 목록을 그대로 고른다 (마지막이 주 선택)
+function setSel(list) { sel = list.length ? list[list.length - 1] : null; multi.clear(); multiFor = sel; list.slice(0, -1).forEach(id => multi.add(id)); }
+// 캔버스 클릭 — 피그마처럼: 아무것도 안 고른 상태면 맨 바깥 그룹, 이미 그룹 안을 고르고 있으면 같은 단계의 형제(그룹 또는 낱개)
+function clickTarget(l, cur) {
+  const g = UIKit.gpOf(l); if (!g.length) return [l.id];
+  let depth = -1;
+  for (let i = 0; i < g.length; i++) { const mem = UIKit.groupMembers(S.layers, g[i]).map(x => x.id); if (cur.length && cur.every(id => mem.includes(id)) && !(cur.length === mem.length)) depth = i; }
+  const next = depth + 1;
+  return next < g.length ? UIKit.groupMembers(S.layers, g[next]).map(x => x.id) : [l.id];
+}
 function selectGroup(l) {
   sel = l.id; multi.clear(); multiFor = sel;
-  S.layers.forEach(x => { if (x.gid === l.gid && x !== l) multi.add(x.id); });
+  UIKit.groupMembers(S.layers, UIKit.gpOf(l)[0]).forEach(x => { if (x !== l) multi.add(x.id); });
 }
 function toggleSel(id) {                     // Shift+클릭
   const ids = selIds();
@@ -814,96 +824,57 @@ let layerDrag = null;                        // { ids: [...] } 끌고 있는 레
 function paintLayers() {
   const box = $('#layers'); box.innerHTML = '';
   const ids = selIds();
-  const rows = [];                           // 패널 위→아래 = 앞→뒤
-  let prevG = null;
-  [...S.layers].reverse().forEach(l => {
-    if (l.gid && l.gid !== prevG) rows.push({ g: l.gid, name: l.gname });
-    prevG = l.gid || null;
-    rows.push({ l });
-  });
-  const pick = (e, list) => {                // 목록 선택 → 캔버스 선택
-    if (editing) commitEdit();
-    if (e.shiftKey) list.forEach(x => toggleSel(x.id));
-    else { sel = list[list.length - 1].id; multi.clear(); multiFor = sel; list.slice(0, -1).forEach(x => multi.add(x.id)); }
-    paintLayers(); paintProps(); renderOverlay();
-  };
+  const rows = UIKit.layerRows(S.layers, collapsed);
   for (const r of rows) {
     let d;
-    if (r.g) {
-      const mem = S.layers.filter(x => x.gid === r.g), on = mem.length && mem.every(x => ids.includes(x.id)), shut = collapsed.has(r.g);
+    if (r.g != null) {
+      const mem = UIKit.groupMembers(S.layers, r.g), on = mem.length && mem.every(x => ids.includes(x.id)), shut = collapsed.has(r.g);
       d = el('div', 'layer grp' + (on ? ' sel' : ''));
       d.innerHTML = `<span class="tw">${shut ? '▸' : '▾'}</span><span class="ic">▦</span><span class="nm"><b>${esc(r.name || '그룹')}</b></span><span class="lk">${mem.length}</span>`;
       d.querySelector('.tw').onclick = e => { e.stopPropagation(); if (shut) collapsed.delete(r.g); else collapsed.add(r.g); paintLayers(); };
-      d.onclick = e => pick(e, mem);
-      d.ondblclick = () => { const v = prompt('그룹 이름', r.name || '그룹'); if (v == null) return; mem.forEach(x => { x.gname = v.trim() || '그룹'; }); push(); paintLayers(); };
-      d.dataset.g = r.g;
+      d.onclick = e => pickRows(e, mem.map(x => x.id));
+      d.ondblclick = () => { const v = prompt('그룹 이름', r.name || '그룹'); if (v == null) return; mem.forEach(x => { const g = UIKit.gpOf(x), n = UIKit.gpnOf(x); n[g.indexOf(r.g)] = v.trim() || '그룹'; UIKit.setGp(x, g, n); }); push(); paintLayers(); };
     } else {
       const l = r.l;
-      if (l.gid && collapsed.has(l.gid)) continue;
-      d = el('div', 'layer' + (l.id === sel ? ' sel' : ids.includes(l.id) ? ' sel multi' : '') + (l.lockSize ? ' locked' : '') + (l.hidden ? ' off' : '') + (l.gid ? ' child' : ''));
+      d = el('div', 'layer' + (l.id === sel ? ' sel' : ids.includes(l.id) ? ' sel multi' : '') + (l.lockSize ? ' locked' : '') + (l.hidden ? ' off' : ''));
       const ic = l.kind === 'text' ? 'T' : l.kind === 'rect' ? '▭' : '▣';
       d.innerHTML = `<span class="tw"></span><span class="ic">${ic}</span><span class="nm">${esc(l.name || l.kind)}</span>` +
         `<span class="lk">${l.hidden ? '숨김' : ''}${l.lockSize ? ' 고정' : ''}</span>`;
-      d.onclick = e => pick(e, [l]);
-      d.dataset.id = l.id;
+      d.onclick = e => pickRows(e, [l.id]);
     }
+    d.style.marginLeft = (r.depth * 14) + 'px';
+    if (r.g != null) d.dataset.g = r.g; else d.dataset.id = r.l.id;
     // 끌어다 놓기 — 위/아래 절반 = 그 앞/뒤, 그룹 머리줄 가운데 = 그 그룹 안 맨 앞
     d.draggable = true;
     d.addEventListener('dragstart', e => {
-      const own = r.g ? S.layers.filter(x => x.gid === r.g).map(x => x.id)
-        : ids.includes(r.l.id) ? ids : [r.l.id];
-      layerDrag = { ids: own, group: r.g || null };
+      const own = r.g != null ? UIKit.groupMembers(S.layers, r.g).map(x => x.id) : ids.includes(r.l.id) ? ids : [r.l.id];
+      layerDrag = { ids: own, group: r.g != null ? r.g : null };
       e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', 'layer'); } catch { /* 무시 */ }
     });
     d.addEventListener('dragover', e => {
       if (!layerDrag) return; e.preventDefault();
       const rc = d.getBoundingClientRect(), y = (e.clientY - rc.top) / rc.height;
       box.querySelectorAll('.dropB,.dropA,.dropIn').forEach(x => x.classList.remove('dropB', 'dropA', 'dropIn'));
-      d.classList.add(r.g && !layerDrag.group && y > .3 && y < .7 ? 'dropIn' : y < .5 ? 'dropB' : 'dropA');
+      d.classList.add(r.g != null && y > .3 && y < .7 ? 'dropIn' : y < .5 ? 'dropB' : 'dropA');
     });
     d.addEventListener('dragleave', () => d.classList.remove('dropB', 'dropA', 'dropIn'));
     d.addEventListener('drop', e => {
       e.preventDefault(); if (!layerDrag) return;
       const mode = d.classList.contains('dropIn') ? 'in' : d.classList.contains('dropB') ? 'before' : 'after';
       d.classList.remove('dropB', 'dropA', 'dropIn');
-      moveLayers(layerDrag, r, mode); layerDrag = null;
+      const out = UIKit.moveInTree(S.layers, layerDrag, r.g != null ? { g: r.g } : { l: r.l }, mode); layerDrag = null;
+      if (out) { S.layers = out; push(); render(); paintLayers(); paintProps(); }
     });
     d.addEventListener('dragend', () => { layerDrag = null; box.querySelectorAll('.dropB,.dropA,.dropIn').forEach(x => x.classList.remove('dropB', 'dropA', 'dropIn')); });
     box.appendChild(d);
   }
   const cur = box.querySelector('.layer.sel:not(.grp)'); if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
 }
-// 끌어 놓은 레이어를 옮긴다. 패널의 '앞(before)' = 배열에서 뒤쪽(더 위에 그려짐)
-function moveLayers(dr, target, mode) {
-  const moving = S.layers.filter(x => dr.ids.includes(x.id));
-  if (!moving.length) return;
-  if (target.l && dr.ids.includes(target.l.id)) return;
-  if (target.g && dr.group === target.g) return;
-  const rest = S.layers.filter(x => !dr.ids.includes(x.id));
-  let at, gid;
-  if (target.g) {
-    const mem = rest.filter(x => x.gid === target.g);
-    if (!mem.length) return;
-    const top = rest.indexOf(mem[mem.length - 1]), bottom = rest.indexOf(mem[0]);
-    if (mode === 'in') { at = top + 1; gid = target.g; }               // 그룹 안 맨 앞
-    else { at = mode === 'before' ? top + 1 : bottom; gid = null; }    // 그룹 바깥 위·아래
-  } else {
-    const ti = rest.indexOf(target.l);
-    at = mode === 'before' ? ti + 1 : ti;
-    gid = target.l.gid || null;
-    // 그룹 사이에 낀 자리로 그룹 머리째 옮길 때는 대상 그룹 바깥으로
-    if (dr.group && gid) {
-      const mem = rest.filter(x => x.gid === gid);
-      at = mode === 'before' ? rest.indexOf(mem[mem.length - 1]) + 1 : rest.indexOf(mem[0]); gid = null;
-    }
-  }
-  if (!dr.group) moving.forEach(x => { if (gid) { x.gid = gid; x.gname = (rest.find(y => y.gid === gid) || {}).gname; } else { delete x.gid; delete x.gname; } });
-  rest.splice(at, 0, ...moving);
-  S.layers = rest;
-  // 한 명만 남은 그룹은 푼다
-  const cnt = {}; S.layers.forEach(x => { if (x.gid) cnt[x.gid] = (cnt[x.gid] || 0) + 1; });
-  S.layers.forEach(x => { if (x.gid && cnt[x.gid] < 2) { delete x.gid; delete x.gname; } });
-  push(); render(); paintLayers(); paintProps();
+// 목록 선택 → 캔버스 선택 (Shift = 더하기·빼기)
+function pickRows(e, list) {
+  if (editing) commitEdit();
+  if (e.shiftKey) list.forEach(id => toggleSel(id)); else setSel(list);
+  paintLayers(); paintProps(); renderOverlay();
 }
 
 function paintProps() {
@@ -962,7 +933,7 @@ function paintProps() {
   if (l.kind === 'text' || l.kind === 'rect') {
     h += `<div class="row"><button class="btn sm grow" data-act="edit">캔버스에서 글자 입력</button></div>`;
   }
-  if (l.gid) h += `<div class="row"><button class="btn sm grow" data-act="ungroup" title="Ctrl+Shift+G">그룹 해제 (${S.layers.filter(x => x.gid === l.gid).length}개 묶음)</button></div>`;
+  if (selIds().length > 1 && UIKit.gpOf(l).length) h += `<div class="row"><button class="btn sm grow" data-act="ungroup" title="Ctrl+Shift+G">그룹 해제</button></div>`;
   h += `<div class="row" style="margin-top:9px">
       <button class="btn sm grow" data-act="up">위로</button>
       <button class="btn sm grow" data-act="down">아래로</button>
@@ -1096,9 +1067,9 @@ function layerAct(a, l) {
   if (a === 'del') { S.layers.splice(i, 1); sel = null; }
   if (a === 'dup') {
     const c = Object.assign(JSON.parse(JSON.stringify(l)), { id: uid(), x: l.x + 20, y: l.y + 20, name: l.name + ' 사본' });
-    delete c.gid; S.layers.splice(i + 1, 0, c); sel = c.id;
+    UIKit.setGp(c, null); S.layers.splice(i + 1, 0, c); sel = c.id;
   }
-  if (a === 'ungroup') { const g = l.gid; S.layers.forEach(x => { if (x.gid === g) delete x.gid; }); }
+  if (a === 'ungroup') UIKit.ungroupLayers(S.layers, selIds());
   if (a === 'up' && i < S.layers.length - 1) S.layers.splice(i + 1, 0, S.layers.splice(i, 1)[0]);
   if (a === 'down' && i > 0) S.layers.splice(i - 1, 0, S.layers.splice(i, 1)[0]);
   if (a === 'fitZone') fitToZone(l);
@@ -1213,11 +1184,10 @@ onHit('pointerdown', e => {
     const l = pickAt(p);
     const wasSel = !!l && sel === l.id;                 // 이미 선택돼 있었나
     const ids0 = selIds();
-    const inGroup = !!l && !!l.gid && !e.shiftKey && ids0.length > 1 && ids0.includes(l.id) &&
-      S.layers.filter(x => x.gid === l.gid).every(x => ids0.includes(x.id));
+    const inGroup = !!l && UIKit.gpOf(l).length > 0 && !e.shiftKey && ids0.length > 1 && ids0.includes(l.id);   // 그룹을 고른 채 그 안을 다시 누름 → 떼면 한 단계 안으로
     const shiftOff = !!l && e.shiftKey && ids0.includes(l.id);   // 이미 고른 것을 Shift 로 누름 — 끌면 일자 이동, 그냥 떼면 선택 해제 (파워포인트와 같다)
     if (l && e.shiftKey && !shiftOff) toggleSel(l.id);   // Shift+클릭 = 다중 선택 추가/해제
-    else if (!(l && selIds().length > 1 && selIds().includes(l.id))) { sel = l ? l.id : null; if (l && l.gid && !(wasSel && ids0.length === 1)) selectGroup(l); }  // 묶음 안에서 고른 낱개를 다시 누르면 낱개 유지  // 묶음 안을 누르면 묶음 유지
+    else if (!(l && selIds().length > 1 && selIds().includes(l.id))) { if (!l) setSel([]); else if (wasSel && ids0.length === 1) setSel([l.id]); else setSel(clickTarget(l, ids0)); }  // 묶음 안에서 고른 낱개를 다시 누르면 낱개 유지  // 묶음 안을 누르면 묶음 유지
     paintLayers(); paintProps();
     const group = selLayers();
     if (l && group.includes(l)) drag = {
@@ -1415,7 +1385,7 @@ onHit('pointerup', e => {
   if (!d || d.mode !== 'move') return;
   const moved = Math.abs(d.l.x - d.s.x) > 1 || Math.abs(d.l.y - d.s.y) > 1;
   if (!moved && d.shiftOff) { toggleSel(d.l.id); paintLayers(); paintProps(); renderOverlay(); return; }
-  if (!moved && d.child) { sel = d.l.id; multi.clear(); multiFor = sel; paintLayers(); paintProps(); renderOverlay(); return; }
+  if (!moved && d.child) { setSel(UIKit.deeperSelection(S.layers, selIds(), d.l)); paintLayers(); paintProps(); renderOverlay(); return; }   // 그룹 안으로 한 단계
   if (!moved && d.reselect && !d.l.lockSize) startEdit(d.l);
 });
 
@@ -1433,8 +1403,8 @@ document.addEventListener('keydown', e => {
   const group = selLayers();
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
     e.preventDefault();
-    if (e.shiftKey) { const gs = new Set(group.map(x => x.gid).filter(Boolean)); S.layers.forEach(x => { if (gs.has(x.gid)) { delete x.gid; delete x.gname; } }); toast('그룹을 해제했습니다'); }
-    else if (group.length > 1) { const g = uid(); group.forEach(x => { x.gid = g; delete x.gname; }); toast(`${group.length}개를 그룹으로 묶었습니다 (Ctrl+Shift+G 해제)`); }
+    if (e.shiftKey) { if (UIKit.ungroupLayers(S.layers, group.map(x => x.id))) toast('그룹을 해제했습니다'); }
+    else if (group.length > 1) { if (UIKit.groupLayers(S.layers, group.map(x => x.id), uid())) toast(`${group.length}개를 그룹으로 묶었습니다 (Ctrl+Shift+G 해제)`); }
     push(); paintLayers(); paintProps(); renderOverlay(); return;
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1774,7 +1744,7 @@ async function insertUi(c) {
   const at = { x: Math.round((S.w - c.w * k) / 2), y: Math.round((S.h - c.h * k) / 2) };
   const { layers, skipped } = UIKit.toBanner(c, at, k, uid);
   if (!layers.length) return toast('이 UI 에는 배너 스튜디오에서 쓸 수 있는 요소가 없습니다', true);
-  if (layers.length > 1) { const g = uid(); layers.forEach(l => { l.gid = g; l.gname = c.name; }); }   // 넣은 컴포넌트는 통째로 한 그룹
+  if (layers.length > 1) { const g = uid(); layers.forEach(l => UIKit.setGp(l, [g].concat(UIKit.gpOf(l)), [c.name].concat(UIKit.gpnOf(l)))); }   // 넣은 컴포넌트는 통째로 한 그룹 (안쪽 그룹은 그대로)
   S.layers.push(...layers);
   sel = layers[layers.length - 1].id; multi.clear(); multiFor = sel;
   layers.slice(0, -1).forEach(l => multi.add(l.id));

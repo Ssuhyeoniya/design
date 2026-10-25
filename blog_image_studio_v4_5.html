@@ -274,7 +274,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .layer-list{max-height:360px;}
   .layer-item .tw{width:10px;flex:none;font-size:10px;color:var(--text-faint);cursor:pointer;text-align:center;}
   .layer-item.grp{background:transparent;}
-  .layer-item.child{margin-left:16px;}
   .layer-item .lcnt{font-size:11px;color:var(--text-faint);}
   .layer-item.dropB{box-shadow:inset 0 2px 0 var(--accent);}
   .layer-item.dropA{box-shadow:inset 0 -2px 0 var(--accent);}
@@ -542,7 +541,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="exportZone"></div>
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
-<script src="shared/ui-kit.js?v=20261025-10"></script>
+<script src="shared/ui-kit.js?v=20261025-11"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -1297,30 +1296,39 @@ function layerHTML(l){
 const layerCollapsed=new Set();
 let layerDragIds=null;
 function selIdsNow(){const ids=new Set(selSet||[]);if(selLayer!=null)ids.add(selLayer);return [...ids];}
+// 캔버스 클릭 — 아무것도 안 고른 상태면 맨 바깥 그룹, 그룹 안을 고르고 있으면 같은 단계의 형제
+function blogClickTarget(arr,l,cur){
+  const g=UIKit.gpOf(l);if(!g.length)return [l.id];
+  let depth=-1;
+  for(let i=0;i<g.length;i++){const mem=UIKit.groupMembers(arr,g[i]).map(x=>x.id);if(cur.length&&cur.every(id=>mem.includes(id))&&cur.length!==mem.length)depth=i;}
+  return depth+1<g.length?UIKit.groupMembers(arr,g[depth+1]).map(x=>x.id):[l.id];
+}
 function layerRowsHTML(s){
-  const ids=selIdsNow();let prevG=null,h='';
-  for(const x of LS(s).slice().reverse()){
-    if(x.gid&&x.gid!==prevG){
-      const mem=LS(s).filter(y=>y.gid===x.gid),on=mem.every(y=>ids.includes(y.id)),shut=layerCollapsed.has(x.gid);
-      h+=`<div class="layer-item grp${on?' on':''}" data-gid="${x.gid}" draggable="true"><span class="tw" data-tw="${x.gid}">${shut?'▸':'▾'}</span><span class="ico">▦</span><span class="lname">${esc(x.gname||'그룹')}</span><span class="lcnt">${mem.length}</span></div>`;
+  const ids=selIdsNow();let h='';
+  for(const r of UIKit.layerRows(LS(s),layerCollapsed)){
+    const pad=`style="margin-left:${r.depth*14}px"`;
+    if(r.g!=null){
+      const mem=UIKit.groupMembers(LS(s),r.g),on=mem.length&&mem.every(y=>ids.includes(y.id)),shut=layerCollapsed.has(r.g);
+      h+=`<div class="layer-item grp${on?' on':''}" data-gid="${esc(String(r.g))}" draggable="true" ${pad}><span class="tw" data-tw="1">${shut?'▸':'▾'}</span><span class="ico">▦</span><span class="lname">${esc(r.name||'그룹')}</span><span class="lcnt">${mem.length}</span></div>`;
+    }else{
+      const x=r.l;
+      h+=`<div class="layer-item${ids.includes(x.id)?' on':''}" data-lid="${x.id}" draggable="true" ${pad}><span class="tw"></span><span class="ico">${lico(x)}</span><span class="lname">${esc(lname(x))}</span><button class="ldel" data-ldel="${x.id}">✕</button></div>`;
     }
-    prevG=x.gid||null;
-    if(x.gid&&layerCollapsed.has(x.gid))continue;
-    h+=`<div class="layer-item${x.gid?' child':''}${ids.includes(x.id)?' on':''}" data-lid="${x.id}" draggable="true"><span class="tw"></span><span class="ico">${lico(x)}</span><span class="lname">${esc(lname(x))}</span><button class="ldel" data-ldel="${x.id}">✕</button></div>`;
   }
   return h;
 }
 function bindLayerRows(s){
   const box=props.querySelector('.layer-list');if(!box)return;
   const clear=()=>box.querySelectorAll('.dropB,.dropA,.dropIn').forEach(x=>x.classList.remove('dropB','dropA','dropIn'));
+  const realG=str=>{const l=LS(s).find(y=>UIKit.gpOf(y).some(g=>String(g)===str));return l?UIKit.gpOf(l).find(g=>String(g)===str):null;};
   box.querySelectorAll('.layer-item').forEach(it=>{
-    const gid=it.dataset.gid?+it.dataset.gid||it.dataset.gid:null, lid=it.dataset.lid?+it.dataset.lid:null;
-    const members=()=>LS(s).filter(y=>String(y.gid)===String(gid));
+    const gid=it.dataset.gid!=null?realG(it.dataset.gid):null, lid=it.dataset.lid?+it.dataset.lid:null;
+    const members=()=>UIKit.groupMembers(LS(s),gid);
     it.onclick=e=>{
-      if(e.target.dataset.tw!=null){const g=members()[0].gid;if(layerCollapsed.has(g))layerCollapsed.delete(g);else layerCollapsed.add(g);renderAll();return;}
+      if(e.target.dataset.tw!=null&&gid!=null){if(layerCollapsed.has(gid))layerCollapsed.delete(gid);else layerCollapsed.add(gid);renderAll();return;}
       if(e.target.dataset.ldel){
         const gone=withFitPartners(LS(s),[+e.target.dataset.ldel]);
-        setLS(s,LS(s).filter(x=>!gone.includes(x.id)));
+        setLS(s,LS(s).filter(x=>!gone.includes(x.id)));UIKit.pruneGp(LS(s),true);
         if(gone.includes(selLayer))selLayer=null;selSet=(selSet||[]).filter(i=>!gone.includes(i));
         renderAll();return;
       }
@@ -1329,46 +1337,28 @@ function bindLayerRows(s){
       else{selSet=list.slice();selLayer=list[list.length-1];}
       renderAll();
     };
-    if(gid!=null)it.ondblclick=()=>{const mem=members(),v=prompt('그룹 이름',mem[0].gname||'그룹');if(v==null)return;mem.forEach(y=>y.gname=v.trim()||'그룹');renderAll();};
+    if(gid!=null)it.ondblclick=()=>{const mem=members(),g0=UIKit.gpOf(mem[0]),cur=UIKit.gpnOf(mem[0])[g0.indexOf(gid)];const v=prompt('그룹 이름',cur||'그룹');if(v==null)return;
+      mem.forEach(y=>{const g=UIKit.gpOf(y),n=UIKit.gpnOf(y);n[g.indexOf(gid)]=v.trim()||'그룹';UIKit.setGp(y,g,n);});renderAll();};
     it.addEventListener('dragstart',e=>{
       const sel=selIdsNow();
-      layerDragIds={ids:gid!=null?members().map(y=>y.id):(sel.includes(lid)?sel:[lid]),group:gid!=null?members()[0].gid:null};
+      layerDragIds={ids:gid!=null?members().map(y=>y.id):(sel.includes(lid)?sel:[lid]),group:gid};
       e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','layer');}catch(err){}
     });
     it.addEventListener('dragover',e=>{
       if(!layerDragIds)return;e.preventDefault();
       const rc=it.getBoundingClientRect(),y=(e.clientY-rc.top)/rc.height;clear();
-      it.classList.add(gid!=null&&!layerDragIds.group&&y>.3&&y<.7?'dropIn':y<.5?'dropB':'dropA');
+      it.classList.add(gid!=null&&y>.3&&y<.7?'dropIn':y<.5?'dropB':'dropA');
     });
     it.addEventListener('dragleave',()=>it.classList.remove('dropB','dropA','dropIn'));
     it.addEventListener('drop',e=>{
       e.preventDefault();if(!layerDragIds)return;
       const mode=it.classList.contains('dropIn')?'in':it.classList.contains('dropB')?'before':'after';clear();
-      moveLayersTo(s,layerDragIds,gid!=null?{g:members()[0].gid}:{l:LS(s).find(y=>y.id===lid)},mode);layerDragIds=null;
+      const out=UIKit.moveInTree(LS(s),layerDragIds,gid!=null?{g:gid}:{l:LS(s).find(y=>y.id===lid)},mode);layerDragIds=null;
+      if(out){setLS(s,out);renderAll();}
     });
     it.addEventListener('dragend',()=>{layerDragIds=null;clear();});
   });
   const cur=box.querySelector('.layer-item.on:not(.grp)');if(cur&&cur.scrollIntoView)cur.scrollIntoView({block:'nearest'});
-}
-function moveLayersTo(s,dr,target,mode){
-  const all=LS(s),moving=all.filter(x=>dr.ids.includes(x.id));
-  if(!moving.length)return;
-  if(target.l&&dr.ids.includes(target.l.id))return;
-  if(target.g!=null&&dr.group===target.g)return;
-  const rest=all.filter(x=>!dr.ids.includes(x.id));let at,gid;
-  if(target.g!=null){
-    const mem=rest.filter(x=>x.gid===target.g);if(!mem.length)return;
-    const top=rest.indexOf(mem[mem.length-1]),bottom=rest.indexOf(mem[0]);
-    if(mode==='in'){at=top+1;gid=target.g;}else{at=mode==='before'?top+1:bottom;gid=null;}
-  }else{
-    const ti=rest.indexOf(target.l);at=mode==='before'?ti+1:ti;gid=target.l.gid||null;
-    if(dr.group&&gid){const mem=rest.filter(x=>x.gid===gid);at=mode==='before'?rest.indexOf(mem[mem.length-1])+1:rest.indexOf(mem[0]);gid=null;}
-  }
-  if(!dr.group)moving.forEach(x=>{if(gid){x.gid=gid;x.gname=(rest.find(y=>y.gid===gid)||{}).gname;if(!x.gname)delete x.gname;}else{delete x.gid;delete x.gname;}});
-  rest.splice(at,0,...moving);
-  const cnt={};rest.forEach(x=>{if(x.gid)cnt[x.gid]=(cnt[x.gid]||0)+1;});
-  rest.forEach(x=>{if(x.gid&&cnt[x.gid]<2){delete x.gid;delete x.gname;}});
-  setLS(s,rest);renderAll();
 }
 function lname(l){if(l.name&&l.type!=='t')return l.name;return l.type==='t'?(l.text.split('\n')[0]||'(빈 텍스트)'):l.type==='i'?'이미지':l.type==='f'?'스포트라이트':'박스';}
 function lico(l){return l.type==='t'?'𝐓':l.type==='i'?'🖼':l.type==='f'?'◢':'▭';}
@@ -2246,14 +2236,15 @@ canvas.addEventListener('mousedown',e=>{
   const el=e.target.closest('.layer');
   if(!el||el.isContentEditable)return;
   const s=slides[cur];
+  const prevSel=selIdsNow();
   selLayer=+el.dataset.id;
   const lay=LS(s).find(x=>x.id===selLayer);
-  // 이미 잡힌 그룹을 (끌지 않고) 한 번 더 누르면 그 요소만 고른다 (피그마와 같다) — mouseup 에서 판정
-  _grpChild=(!e.shiftKey&&lay.gid&&selSet.length>1&&selSet.includes(lay.id)&&LS(s).filter(x=>x.gid===lay.gid).every(x=>selSet.includes(x.id)))?{id:lay.id,x:e.clientX,y:e.clientY}:null;
+  // 이미 잡힌 그룹을 (끌지 않고) 한 번 더 누르면 한 단계 안으로 (피그마와 같다) — mouseup 에서 판정
+  _grpChild=(!e.shiftKey&&UIKit.gpOf(lay).length&&prevSel.length>1&&prevSel.includes(lay.id))?{id:lay.id,x:e.clientX,y:e.clientY}:null;
   if(e.shiftKey){
     selSet=selSet.includes(selLayer)?selSet.filter(i=>i!==selLayer):[...selSet,selLayer];
-  }else if(!selSet.includes(selLayer)){
-    selSet=lay.gid?LS(s).filter(x=>x.gid===lay.gid).map(x=>x.id):[selLayer];
+  }else if(!prevSel.includes(selLayer)){
+    selSet=blogClickTarget(LS(s),lay,prevSel);
   }
   drag={list:LS(s).filter(x=>selSet.includes(x.id)).map(L=>({L,ox:L.x,oy:L.y})),sx:e.clientX,sy:e.clientY};
   renderAll();e.preventDefault();
@@ -2410,7 +2401,7 @@ window.addEventListener('mouseup',e=>{
   if(_grpChild){
     const g=_grpChild;_grpChild=null;
     if(drag&&Math.abs(e.clientX-g.x)<4&&Math.abs(e.clientY-g.y)<4){
-      drag=null;selSet=[g.id];selLayer=g.id;renderAll();return;
+      drag=null;const s0=slides[cur],L0=LS(s0).find(x=>x.id===g.id);selSet=L0?UIKit.deeperSelection(LS(s0),selIdsNow(),L0):[g.id];selLayer=g.id;renderAll();return;
     }
   }
   if(drag||resz||rotDrag||radDrag||crDrag||edgeDrag){
@@ -2569,7 +2560,7 @@ window.addEventListener('keydown',e=>{
       picked.forEach(src=>{
         const nl=JSON.parse(JSON.stringify(src));nl.id=nid();
         nl.x=(nl.x||0)+24;nl.y=(nl.y||0)+24;
-        if(src.gid){if(!gidMap[src.gid])gidMap[src.gid]=nid();nl.gid=gidMap[src.gid];}
+        UIKit.remapGp(nl,gidMap,nid);
         delete nl.fitBox;
         LS(s).push(nl);added.push(nl.id);
       });
@@ -2587,11 +2578,10 @@ window.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='g'){
     e.preventDefault();
     if(e.shiftKey){
-      const gids=new Set(LS(s).filter(x=>ids.includes(x.id)&&x.gid).map(x=>x.gid));
-      LS(s).forEach(x=>{if(gids.has(x.gid))delete x.gid;});
+      UIKit.ungroupLayers(LS(s),ids);
     }else if(ids.length>=2){
       const gid=nid();
-      LS(s).forEach(x=>{if(ids.includes(x.id))x.gid=gid;});
+      UIKit.groupLayers(LS(s),ids,gid);
     }
     renderAll();return;
   }
@@ -3698,7 +3688,7 @@ function insertUi(c){
   const at={x:Math.round((P.W-c.w*k)/2),y:Math.round((P.H-c.h*k)/2)};
   const {layers,skipped}=UIKit.toBlog(c,at,k,uiMk);
   if(!layers.length){alert('이 UI 에는 블로그 이미지 제작에서 쓸 수 있는 요소가 없어.');return;}
-  if(layers.length>1){const g=nid();layers.forEach(l=>{l.gid=g;});}
+  if(layers.length>1){const g=nid();layers.forEach(l=>UIKit.setGp(l,[g].concat(UIKit.gpOf(l)),[c.name].concat(UIKit.gpnOf(l))));}   // 넣은 컴포넌트는 통째로 한 그룹 (안쪽 그룹 유지)
   LS(s).push(...layers);
   selSet=layers.map(l=>l.id); selLayer=layers[layers.length-1].id;
   renderAll(); recordHistory();
@@ -3849,7 +3839,7 @@ renderAll();
       nl.id=nid();
       nl.x=Math.min(P.W-20,(nl.x||0)+CLIP_OFF);
       nl.y=Math.min(P.H-20,(nl.y||0)+CLIP_OFF);
-      if(src.gid){ if(!gidMap[src.gid])gidMap[src.gid]=nid(); nl.gid=gidMap[src.gid]; }
+      UIKit.remapGp(nl,gidMap,nid);
       delete nl.fitBox;
       LS(s).push(nl); added.push(nl.id);
     });
@@ -4120,7 +4110,7 @@ renderAll();
       const gidMap={}, ids=[];
       layers.forEach(nl=>{
         nl.id=nid(); delete nl.fitBox;
-        if(nl.gid){ if(!gidMap[nl.gid])gidMap[nl.gid]=nid(); nl.gid=gidMap[nl.gid]; }
+        UIKit.remapGp(nl,gidMap,nid);
         LS(s).push(nl); ids.push(nl.id);
       });
       if(select){ selSet=ids; selLayer=ids[ids.length-1]; }

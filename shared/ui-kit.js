@@ -161,6 +161,109 @@
 
   // 한 줄 글자인가 — 피그마에서 온 표시(nowrap), 없으면(예전 저장본) 피그마 그림 높이가 한 줄인지로 본다
   const oneLineText = n => !!(n.nowrap || (n.bake && !String(n.text || '').includes('\n') && n.bake.h < (n.size || 16) * (n.lh || 1.3) * 1.6));
+  // ── 그룹 계층 (피그마 레이어 패널처럼 그룹 안 그룹) ─────────────────────────
+  // 레이어마다 gp = [바깥 그룹 id, …, 안쪽 그룹 id], gpn = 같은 순서의 그룹 이름. gid·gname 은 바깥 그룹(예전 코드 호환)
+  const gpOf = l => l.gp && l.gp.length ? l.gp : l.gid != null ? [l.gid] : [];
+  const gpnOf = l => { const g = gpOf(l); return g.map((_, i) => (l.gpn && l.gpn[i]) || (i === 0 && l.gname) || '그룹'); };
+  function setGp(l, gp, gpn) {
+    if (!gp || !gp.length) { delete l.gp; delete l.gpn; delete l.gid; delete l.gname; return; }
+    l.gp = gp.slice(); l.gpn = gp.map((_, i) => (gpn && gpn[i]) || '그룹'); l.gid = l.gp[0]; l.gname = l.gpn[0];
+  }
+  // 저장본 노드 → { gp, gpn } (예전 저장본의 grp 한 단계도 읽는다)
+  const nodeGp = n => n.gp && n.gp.length ? { gp: n.gp, gpn: n.gpn || [] } : n.grp ? { gp: [n.grp], gpn: [n.grpName] } : { gp: [], gpn: [] };
+  // 요소가 하나뿐인 그룹은 계층에서 뺀다 (노드든 레이어든)
+  function pruneGp(list, isLayer) {
+    for (let pass = 0; pass < 8; pass++) {
+      const cnt = {}; list.forEach(x => (isLayer ? gpOf(x) : x.gp || []).forEach(g => { cnt[g] = (cnt[g] || 0) + 1; }));
+      let changed = false;
+      list.forEach(x => {
+        const g0 = isLayer ? gpOf(x) : x.gp || [], n0 = isLayer ? gpnOf(x) : x.gpn || [];
+        const keep = g0.map((g, i) => cnt[g] >= 2 ? i : -1).filter(i => i >= 0);
+        if (keep.length === g0.length) return;
+        changed = true; const gp = keep.map(i => g0[i]), gpn = keep.map(i => n0[i]);
+        if (isLayer) setGp(x, gp, gpn); else if (gp.length) { x.gp = gp; x.gpn = gpn; } else { delete x.gp; delete x.gpn; }
+      });
+      if (!changed) break;
+    }
+    return list;
+  }
+  // 레이어 패널 줄 — layers 는 뒤→앞 순서(그리는 순서). 반환은 앞→뒤(패널 위→아래)
+  function layerRows(layers, collapsed) {
+    const rows = [], open = [];
+    for (const l of layers.slice().reverse()) {
+      const gp = gpOf(l), gn = gpnOf(l);
+      let k = 0; while (k < open.length && k < gp.length && open[k] === gp[k]) k++;
+      open.length = k;
+      for (let i = k; i < gp.length; i++) {
+        const hidden = open.some(g => collapsed && collapsed.has(g));
+        if (!hidden) rows.push({ g: gp[i], name: gn[i], depth: i, path: gp.slice(0, i + 1) });
+        open.push(gp[i]);
+      }
+      if (!open.some(g => collapsed && collapsed.has(g))) rows.push({ l, depth: gp.length });
+    }
+    return rows;
+  }
+  const groupMembers = (layers, g) => layers.filter(l => gpOf(l).includes(g));
+  // 끌어다 놓기 — dr = { ids, group(옮기는 그룹 id|null) }, target = { l } | { g, path }, mode = before|after|in. 새 배열을 돌려준다
+  function moveInTree(layers, dr, target, mode) {
+    const moving = layers.filter(x => dr.ids.includes(x.id));
+    if (!moving.length) return null;
+    if (target.l && dr.ids.includes(target.l.id)) return null;
+    if (target.g != null && moving.some(x => gpOf(x).includes(target.g)) && dr.group != null && gpOf(moving[0]).indexOf(dr.group) <= gpOf(moving[0]).indexOf(target.g)) return null;
+    const rest = layers.filter(x => !dr.ids.includes(x.id));
+    let at, parent;                           // parent = 놓인 자리의 그룹 경로
+    if (target.g != null) {
+      const mem = rest.filter(x => gpOf(x).includes(target.g)); if (!mem.length) return null;
+      const top = rest.indexOf(mem[mem.length - 1]), bottom = rest.indexOf(mem[0]);
+      const path = gpOf(mem[0]).slice(0, gpOf(mem[0]).indexOf(target.g) + 1);
+      if (mode === 'in') { at = top + 1; parent = path; } else { at = mode === 'before' ? top + 1 : bottom; parent = path.slice(0, -1); }
+    } else {
+      const ti = rest.indexOf(target.l); at = mode === 'before' ? ti + 1 : ti; parent = gpOf(target.l).slice();
+    }
+    const pn = (() => { const ref = rest.find(x => { const g = gpOf(x); return parent.every((p, i) => g[i] === p); }); return ref ? gpnOf(ref).slice(0, parent.length) : parent.map(() => '그룹'); })();
+    for (const x of moving) {
+      const g = gpOf(x), n = gpnOf(x);
+      if (dr.group != null) { const i = g.indexOf(dr.group); setGp(x, parent.concat(g.slice(i)), pn.concat(n.slice(i))); }   // 그룹째 — 그 그룹부터 아래는 유지
+      else setGp(x, parent, pn);
+    }
+    rest.splice(at, 0, ...moving);
+    pruneGp(rest, true);
+    return rest;
+  }
+  // Ctrl+G — 고른 레이어들의 공통 그룹 안에 새 그룹을 만든다
+  function groupLayers(layers, ids, gid) {
+    const sel = layers.filter(x => ids.includes(x.id)); if (sel.length < 2) return false;
+    const paths = sel.map(gpOf); let k = 0;
+    while (paths.every(p => p.length > k && p[k] === paths[0][k])) k++;
+    sel.forEach(x => { const g = gpOf(x), n = gpnOf(x); setGp(x, g.slice(0, k).concat([gid], g.slice(k)), n.slice(0, k).concat(['그룹'], n.slice(k))); });
+    // 그룹 레이어가 이어지게 — 가장 앞 레이어 자리로 모은다
+    const top = Math.max(...sel.map(x => layers.indexOf(x)));
+    const rest = layers.filter(x => !ids.includes(x.id)), at = rest.indexOf(layers.slice(0, top + 1).filter(x => !ids.includes(x.id)).pop()) + 1;
+    rest.splice(at, 0, ...sel); layers.length = 0; layers.push(...rest);
+    return true;
+  }
+  // Ctrl+Shift+G — 고른 것이 통째로 든 가장 안쪽 그룹을 푼다
+  function ungroupLayers(layers, ids) {
+    const sel = layers.filter(x => ids.includes(x.id)); if (!sel.length) return false;
+    const g0 = gpOf(sel[0]); let target = null;
+    for (let i = g0.length - 1; i >= 0; i--) { const g = g0[i]; if (groupMembers(layers, g).every(x => ids.includes(x.id)) && sel.every(x => gpOf(x).includes(g))) { target = g; } }
+    // 고른 범위가 정확히 덮는 그룹 중 가장 바깥 = 패널에서 고른 그 그룹
+    if (target == null) return false;
+    groupMembers(layers, target).forEach(x => { const g = gpOf(x), n = gpnOf(x), i = g.indexOf(target); setGp(x, g.filter((_, j) => j !== i), n.filter((_, j) => j !== i)); });
+    return true;
+  }
+  // 그룹 안으로 한 단계 — 지금 고른 묶음 안에서 l 을 품은 다음 단계 그룹(없으면 l 하나)
+  function deeperSelection(layers, curIds, l) {
+    const g = gpOf(l);
+    for (let i = 0; i < g.length; i++) {
+      const mem = groupMembers(layers, g[i]).map(x => x.id);
+      const same = mem.length === curIds.length && mem.every(id => curIds.includes(id));
+      if (same) return i + 1 < g.length ? groupMembers(layers, g[i + 1]).map(x => x.id) : [l.id];
+    }
+    return g.length ? groupMembers(layers, g[0]).map(x => x.id) : [l.id];
+  }
+  // 복사해 붙일 때 그룹 id 를 새로 (map: 옛 id → 새 id)
+  function remapGp(l, map, mkid) { const g = gpOf(l); if (!g.length) return; setGp(l, g.map(x => map[x] || (map[x] = mkid())), gpnOf(l)); }
   // ── 공통 정리 ────────────────────────────────────────────────────────────
   const clone = o => JSON.parse(JSON.stringify(o));
   // 도형 안에 들어 있는 텍스트를 도형의 '라벨'로 묶고 지금 여백을 패딩으로 잡는다 (= 오토 레이아웃 켜기)
@@ -246,7 +349,7 @@
         const b = l.type === 'f' ? { w: Math.max(l.w, l.topW || 0), h: l.h } : { w: l.w, h: l.h };
         nodes.push({ t: 'raw', x: l.x, y: l.y, w: b.w, h: b.h, native });
       }
-      if (l.gid) for (const x of nodes.slice(from0)) { x.grp = 'g' + l.gid; if (l.gname) x.grpName = l.gname; }   // 레이어 그룹 → 저장
+      { const gp = gpOf(l); if (gp.length) { const gn = gpnOf(l); for (const x of nodes.slice(from0)) { x.gp = gp.map(g => 'g' + g); x.gpn = gn.slice(); } } }   // 그룹 계층 → 저장
     }
     return { ...normalize(autoNest(nodes)), origin: 'blog' };
   }
@@ -256,7 +359,7 @@
     const base = (n, extra) => n.native && n.native.app === 'blog' ? Object.assign(clone(n.native.layer), extra) : (n.name ? Object.assign({ name: n.name }, extra) : extra);   // 피그마 레이어 이름 유지
     const font = f => (!f || f === 'Pretendard') ? '' : (f === 'System' || libOf(f)) ? cssFamily(f) : f;
     const gmap = {};                      // 피그마 그룹(n.grp) → 레이어 그룹(gid)
-    const regroup = (from, n) => { if (!n.grp) return; const g = gmap[n.grp] || (gmap[n.grp] = mk.nid()); for (const l of out.slice(from)) { l.gid = g; if (n.grpName) l.gname = n.grpName; } };
+    const regroup = (from, n) => { const p = nodeGp(n); if (!p.gp.length) return; const gp = p.gp.map(g => gmap[g] || (gmap[g] = mk.nid())); for (const l of out.slice(from)) setGp(l, gp, p.gpn); };
     for (const n of scaled(comp, k)) {
       const from0 = out.length;
       const x = at.x + n.x, y = at.y + n.y;
@@ -363,7 +466,7 @@
       } else if (l.kind === 'image') {
         nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: l.h, src: l.src, opacity: l.opacity == null ? 1 : l.opacity, radius: l.radius || 0, native, fromFigma: l.figPic ? 'pic' : undefined, name: l.name });
       }
-      if (l.gid) for (const x of nodes.slice(from0)) { x.grp = 'g' + l.gid; if (l.gname) x.grpName = l.gname; }   // 레이어 그룹 → 저장
+      { const gp = gpOf(l); if (gp.length) { const gn = gpnOf(l); for (const x of nodes.slice(from0)) { x.gp = gp.map(g => 'g' + g); x.gpn = gn.slice(); } } }   // 그룹 계층 → 저장
     }
     if (frame) {
       // 피그마 프레임은 레이어 구조를 그대로 둔다 — 화면 배경 같은 큰 도형에 글자를 라벨로 합치면 글자가 사라진다
@@ -381,7 +484,7 @@
       return Object.assign(b, extra, { id: uid() });
     };
     const gmap = {};                      // 피그마 그룹(n.grp) → 레이어 그룹(gid)
-    const regroup = (from, n) => { if (!n.grp) return; const g = gmap[n.grp] || (gmap[n.grp] = uid()); for (const l of out.slice(from)) { l.gid = g; if (n.grpName) l.gname = n.grpName; } };
+    const regroup = (from, n) => { const p = nodeGp(n); if (!p.gp.length) return; const gp = p.gp.map(g => gmap[g] || (gmap[g] = uid())); for (const l of out.slice(from)) setGp(l, gp, p.gpn); };
     for (const n of scaled(comp, k)) {
       const from0 = out.length;
       const x = at.x + n.x, y = at.y + n.y;
@@ -746,16 +849,16 @@
     let clip = null;
     const inter = (a, c) => { const x = Math.max(a.x, c.x), y = Math.max(a.y, c.y), x2 = Math.min(a.x + a.w, c.x + c.w), y2 = Math.min(a.y + a.h, c.y + c.h);
       return x2 > x && y2 > y ? { x, y, w: x2 - x, h: y2 - y } : null; };
-    let curGrp = null;                    // 피그마 레이어 묶음(루트 바로 아래 프레임·그룹) — 편집기에서 그룹으로 잡힌다
+    const gstack = [];                    // 피그마 레이어 묶음(프레임·그룹·인스턴스) 계층 — 편집기에서 그룹 안 그룹으로 잡힌다
     function push(node) {
-      if (curGrp) { node.grp = curGrp.id; node.grpName = curGrp.name; }
+      if (gstack.length) { node.gp = gstack.map(g => g.id); node.gpn = gstack.map(g => g.name); }
       if (clip) {
         const r = { x: node.x, y: node.y, w: node.w, h: node.h }, i = inter(r, clip);
         if (!i) return;                                                // 완전히 잘려 안 보이는 것
         const inside = i.w >= r.w - .5 && i.h >= r.h - .5;
         if (!inside && node.bake) {                                      // 피그마 그림을 경계에서 잘라 쓴다 (100% 같게)
           const b = node.bake;
-          for (const k of Object.keys(node)) if (!['name', 'fromFigma', 'grp', 'grpName'].includes(k)) delete node[k];
+          for (const k of Object.keys(node)) if (!['name', 'fromFigma', 'gp', 'gpn'].includes(k)) delete node[k];
           Object.assign(node, { t: 'image', x: b.x, y: b.y, w: b.w, h: b.h, src: b.src, opacity: b.alpha == null ? 1 : b.alpha, radius: 0, clip: { ...clip } });
         } else if (!inside) {
           // 모서리 없는 단색 사각형만 크기를 줄이고, 나머지(그림·글자·배지·둥근 도형·효과)는 경계에서 픽셀로 잘라 그림으로 바꾼다 (applyClips)
@@ -880,17 +983,19 @@
       }
       // 마스크 — 마스크 도형 자체는 그리지 않고, 뒤따르는 형제들을 그 영역으로 자른다 (사각·둥근 마스크는 정확, 그 밖의 모양은 영역 근사)
       const pre = clip;
+      const asGroup = n !== root && kids.length > 0;
+      if (asGroup) gstack.push({ id: n.id, name: n.name });
       for (const c of kids) {
         if (c.isMask) { const mb = bb(c); const ci = clip ? inter(mb, clip) : mb; clip = ci ? { ...ci, r: c.rectangleCornerRadii || [c.cornerRadius || 0, c.cornerRadius || 0, c.cornerRadius || 0, c.cornerRadius || 0] } : { x: 0, y: 0, w: 0, h: 0 }; continue; }
-        if (n === root && (c.children || []).some(visible)) { curGrp = { id: c.id, name: c.name }; walk(c, op); curGrp = null; }   // 루트 바로 아래 묶음 = 그룹
-        else walk(c, op);
+        walk(c, op);
       }
+      if (asGroup) gstack.pop();
       clip = pre;
       clip = prev;
     }
     walk(root, 1);
     if (!nodes.length) throw new Error('가져올 수 있는 요소가 없습니다');
-    { const cnt = {}; nodes.forEach(n => { if (n.grp) cnt[n.grp] = (cnt[n.grp] || 0) + 1; }); nodes.forEach(n => { if (n.grp && cnt[n.grp] < 2) { delete n.grp; delete n.grpName; } }); }
+    pruneGp(nodes);                        // 요소가 하나뿐인 묶음은 그룹으로 만들지 않는다
     // 루트 기준 좌표 → 정규화 (효과는 도형 밖으로 번져도 좌표에는 넣지 않는다)
     // 내용을 자르는 프레임이면 크기 = 피그마 프레임 크기 그대로 (넘친 요소 때문에 여백이 생기지 않게)
     if (root.clipsContent) {
@@ -994,7 +1099,7 @@
   }
 
   // 지금 열린 화면의 버전 — 화면 왼쪽 아래에 작게 보인다 (예전 주소·캐시로 열었는지 바로 알 수 있게)
-  const VERSION = '2026-10-25 e';
+  const VERSION = '2026-10-25 f';
   const badge = () => { if (document.getElementById('uikitVer')) return; const b = document.createElement('div'); b.id = 'uikitVer'; b.textContent = '버전 ' + VERSION;
     b.style.cssText = 'position:fixed;left:8px;bottom:6px;z-index:9998;font:11px/1.4 -apple-system,sans-serif;color:#6b7280;background:rgba(255,255,255,.85);padding:2px 7px;border-radius:6px;pointer-events:none';
     document.body.appendChild(b); };
@@ -1002,6 +1107,6 @@
   window.UIKit = { VERSION, list, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, png, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
     exportJSON, importJSON, parseFont, fontName, fromFigma, figmaNeeds, parseFigmaLink, applyClips,
     paintBox, paintURL, outset, hasFx, textShadowCSS, img, set onImage(fn) { onImage = fn; },
-    bakeOk, bakeSig, labelSig, cropDest, destCrop, modeCrop, textPaint, gradCSS,
+    bakeOk, bakeSig, labelSig, gpOf, gpnOf, setGp, pruneGp, layerRows, groupMembers, moveInTree, groupLayers, ungroupLayers, deeperSelection, remapGp, cropDest, destCrop, modeCrop, textPaint, gradCSS,
     fonts: FONT_LIB.map(x => ({ family: x[0], weights: x[2] })), ensureFont, loadFonts, cssFamily, familyOf, set onFont(fn) { onFont = fn; } };
 })();
