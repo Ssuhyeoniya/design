@@ -61,7 +61,7 @@ function ser(n, isRoot) {
   if (n.absoluteRenderBounds) o.absoluteRenderBounds = n.absoluteRenderBounds;
   for (const k of ['opacity', 'blendMode', 'isMask', 'clipsContent', 'layoutMode', 'primaryAxisSizingMode', 'counterAxisSizingMode', 'layoutSizingHorizontal',
     'layoutSizingVertical', 'paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom', 'itemSpacing', 'primaryAxisAlignItems', 'counterAxisAlignItems',
-    'strokeAlign', 'rotation', 'relativeTransform', 'arcData', 'textAutoResize']) if (k in n && ok(n[k])) o[k] = n[k];
+    'strokeAlign', 'rotation', 'relativeTransform', 'arcData', 'textAutoResize', 'layoutPositioning', 'layoutWrap', 'layoutGrow', 'layoutAlign', 'counterAxisSpacing']) if (k in n && ok(n[k])) o[k] = n[k];
   if ('fills' in n) o.fills = paints(n.fills);
   if ('strokes' in n) o.strokes = paints(n.strokes);
   if ('strokeWeight' in n && ok(n.strokeWeight)) o.strokeWeight = n.strokeWeight;

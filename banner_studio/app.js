@@ -434,8 +434,15 @@ function fontOptions(base, cur) {
   return h;
 }
 
+// 오토 레이아웃(피그마) — 요소가 실제로 차지하는 상자. 글자는 지금 글꼴로 잰다
+function layoutExt(l) {
+  if (l.kind === 'text') { const m = textMetrics(l); return { x: m.left, y: l.y, w: m.maxW, h: Math.max(m.h, 1) }; }
+  return { x: l.x, y: l.y, w: l.w, h: l.h };
+}
+if (document.fonts) document.fonts.addEventListener('loadingdone', () => { if (S && window.UIKit && UIKit.relayoutChanged(S.layers)) render(); });
 function renderArt() {
   syncAuto(); needFonts();
+  if (window.UIKit && UIKit.reflow(S.layers, layoutExt)) syncAuto();   // 안의 요소가 바뀐 오토 레이아웃 프레임을 다시 배치
   art.width = S.w; art.height = S.h;
   actx.clearRect(0, 0, S.w, S.h);
   drawBg(actx, S);
@@ -1067,7 +1074,7 @@ function layerAct(a, l) {
   if (a === 'del') { S.layers.splice(i, 1); sel = null; }
   if (a === 'dup') {
     const c = Object.assign(JSON.parse(JSON.stringify(l)), { id: uid(), x: l.x + 20, y: l.y + 20, name: l.name + ' 사본' });
-    UIKit.setGp(c, null); S.layers.splice(i + 1, 0, c); sel = c.id;
+    UIKit.setGp(c, null); delete c.al; S.layers.splice(i + 1, 0, c); sel = c.id;
   }
   if (a === 'ungroup') UIKit.ungroupLayers(S.layers, selIds());
   if (a === 'up' && i < S.layers.length - 1) S.layers.splice(i + 1, 0, S.layers.splice(i, 1)[0]);

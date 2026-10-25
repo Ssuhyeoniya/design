@@ -541,7 +541,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="exportZone"></div>
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
-<script src="shared/ui-kit.js?v=20261025-11"></script>
+<script src="shared/ui-kit.js?v=20261025-12"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -1363,8 +1363,22 @@ function bindLayerRows(s){
 function lname(l){if(l.name&&l.type!=='t')return l.name;return l.type==='t'?(l.text.split('\n')[0]||'(빈 텍스트)'):l.type==='i'?'이미지':l.type==='f'?'스포트라이트':'박스';}
 function lico(l){return l.type==='t'?'𝐓':l.type==='i'?'🖼':l.type==='f'?'◢':'▭';}
 
+// 오토 레이아웃(피그마) — 요소가 실제로 차지하는 상자. 글자는 지금 글꼴로 잰다 (Hug 글자는 상자 폭도 글자에 맞춘다)
+function layoutExt(l){
+  if(l.type==='t'){
+    const st={text:String(l.text||'').replace(/\[\[|\]\]/g,''),size:l.size,weight:l.weight||400,family:UIKit.familyOf(l.font)||'Pretendard',ls:l.ls||0,lh:l.lh||1.3};
+    const m=UIKit.measure(st);
+    if(l.autoW&&m.w>l.w)l.w=Math.ceil(m.w)+2;
+    const off=l.align==='center'?(l.w-m.w)/2:l.align==='right'?l.w-m.w:0;
+    return {x:l.x+off,y:l.y,w:m.w,h:Math.max(m.h,1)};
+  }
+  if(l.type==='i')return {x:l.x,y:l.y,w:l.w,h:l.w/(l.ar||1)};
+  return {x:l.x,y:l.y,w:l.w||0,h:l.h||0};
+}
+if(document.fonts)document.fonts.addEventListener('loadingdone',()=>{const s=slides[cur];if(s&&window.UIKit&&UIKit.relayoutChanged(LS(s)))renderCanvas();});
 function renderCanvas(){
   const s=slides[cur],P=getP(s);
+  if(window.UIKit&&UIKit.reflow(LS(s),layoutExt))syncFitBoxes(LS(s));   // 안의 요소가 바뀐 오토 레이아웃 프레임을 다시 배치
   const isThumb=s.preset==='thumb';
   if(viewMode==='mo'&&isThumb&&!moLayers(s))ensureMo(s); // 페이지 이동 후에도 MO 초안 보장
   const moL=(viewMode==='mo')?moLayers(s):null;

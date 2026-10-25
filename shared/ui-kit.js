@@ -95,6 +95,15 @@
   const SYSTEM_UI = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Malgun Gothic", sans-serif';   // 피그마의 SF Pro(아이폰 화면) — 맥에서는 같은 글꼴
   const FONT_BASE = (() => { try { return new URL('../fonts/', document.currentScript.src).href; } catch (e) { return 'fonts/'; } })();
   const libOf = f => FONT_LIB.find(x => x[0] === f);
+  // 프리텐다드·에스코어드림 — 배너 스튜디오 동봉본을 모든 화면에서 웹 글꼴로 (컴퓨터에 깔려 있지 않아도 피그마와 같은 글꼴로 그리고 잰다)
+  (() => {
+    if (/\/banner_studio\//.test(location.pathname)) return;             // 배너 스튜디오는 자기가 선언한다
+    let base; try { base = new URL('../banner_studio/fonts/', document.currentScript.src).href; } catch (e) { base = 'banner_studio/fonts/'; }
+    const PW = [['Thin', 100], ['ExtraLight', 200], ['Light', 300], ['Regular', 400], ['Medium', 500], ['SemiBold', 600], ['Bold', 700], ['ExtraBold', 800], ['Black', 900]];
+    let css = PW.map(([n, w]) => `@font-face{font-family:Pretendard;src:url("${base}Pretendard/Pretendard-${n}.otf")format("opentype");font-weight:${w};font-display:swap}`).join('\n');
+    for (let i = 1; i <= 9; i++) css += `\n@font-face{font-family:SCDream;src:url("${base}SCDream/SCDream${i}.otf")format("opentype");font-weight:${i * 100};font-display:swap}`;
+    const st = document.createElement('style'); st.id = 'uikitBaseFonts'; st.textContent = css; (document.head || document.documentElement).appendChild(st);
+  })();
   const FAMILY = { Pretendard: 'Pretendard, sans-serif', SCDream: 'SCDream, Pretendard, sans-serif', System: SYSTEM_UI };
   const cssFamily = f => FAMILY[f || 'Pretendard'] || (libOf(f) ? `'${f}', Pretendard, sans-serif` : f);
   // CSS 글꼴 문자열("'Noto Sans KR',sans-serif") 에서 글꼴 이름만
@@ -263,7 +272,110 @@
     return g.length ? groupMembers(layers, g[0]).map(x => x.id) : [l.id];
   }
   // 복사해 붙일 때 그룹 id 를 새로 (map: 옛 id → 새 id)
-  function remapGp(l, map, mkid) { const g = gpOf(l); if (!g.length) return; setGp(l, g.map(x => map[x] || (map[x] = mkid())), gpnOf(l)); }
+  function remapGp(l, map, mkid) {
+    const g = gpOf(l); if (g.length) setGp(l, g.map(x => map[x] || (map[x] = mkid())), gpnOf(l));
+    if (l.al) l.al = Object.assign({}, l.al, { g: map[l.al.g] || (map[l.al.g] = mkid()) });
+  }
+  // ── 오토 레이아웃 (피그마) ───────────────────────────────────────────────
+  // 프레임 도형 레이어에 al = { g(그룹 id), dir H|V, gap, pl·pr·pt·pb, prim, cross, hugW, hugH }.
+  // 요소마다 fb = 피그마 레이아웃 상자(레이어 기준), lfill = { h, v } (Fill), abs (절대 위치), autoW (글자 폭 Hug).
+  // lsig = 가져온 그대로의 모양 서명 (같으면 fb 를 그대로 쓴다 = 피그마와 똑같은 자리), rsig = 마지막 배치 때 서명 (다르면 다시 배치)
+  const layoutSig = l => JSON.stringify([l.kind || l.type, l.text, l.size, l.font, l.weight, l.ls, l.lh, l.autoW ? 0 : Math.round(l.w || 0), Math.round(l.h || 0), l.ar, !!l.hidden, l.rich || '',
+    l.auto ? 1 : 0]);
+  function attachLayout(out, from, n, at, gmap, newId) {
+    const ls = out.slice(from); if (!ls.length) return;
+    const L = ls[0];
+    if (n.fb) L.fb = { dx: at.x + n.fb.x - L.x, dy: at.y + n.fb.y - L.y, w: n.fb.w, h: n.fb.h };
+    if (n.al) L.al = Object.assign({}, n.al, { g: gmap[n.al.g] || (gmap[n.al.g] = newId()) });
+    if (n.lfill) L.lfill = Object.assign({}, n.lfill);
+    if (n.abs) L.abs = true;
+    if (n.autoW) L.autoW = true;
+    ls.forEach(l => { l.lsig = l.rsig = layoutSig(l); });
+  }
+  function saveLayout(node, l) {
+    if (l.al) node.al = Object.assign({}, l.al, { g: 'g' + l.al.g });
+    if (l.fb && layoutSig(l) === l.lsig) node.fb = { x: l.x + l.fb.dx, y: l.y + l.fb.dy, w: l.fb.w, h: l.fb.h };   // 고친 요소는 다시 잰다
+    if (l.lfill) node.lfill = Object.assign({}, l.lfill);
+    if (l.abs) node.abs = true;
+    if (l.autoW) node.autoW = true;
+  }
+  // 안의 요소가 바뀐 오토 레이아웃 프레임을 다시 배치한다 (안쪽 프레임부터, 바깥 프레임까지 이어서).
+  // ext(l) = 그 레이어가 실제로 차지하는 상자 { x, y, w, h } (화면마다 글자 재는 법이 달라 밖에서 준다). 바뀐 게 있으면 true
+  function reflow(layers, ext) {
+    const frames = layers.filter(l => l.al && l.al.g != null && !l.hidden);
+    if (!frames.length) return false;
+    const byG = new Map(frames.map(f => [f.al.g, f]));
+    const dirty = new Set();
+    for (const l of layers) {
+      const p = gpOf(l); if (!p.some(g => byG.has(g)) && !(l.al && byG.has(l.al.g))) continue;
+      const sg = layoutSig(l);
+      if (l.rsig === undefined) { l.rsig = sg; continue; }
+      if (l.rsig !== sg) { p.forEach(g => { if (byG.has(g)) dirty.add(g); }); if (l.al) dirty.add(l.al.g); }
+    }
+    if (!dirty.size) return false;
+    const depth = g => gpOf(byG.get(g)).indexOf(g);
+    for (const g of [...dirty]) gpOf(byG.get(g)).forEach(a => { if (byG.has(a)) dirty.add(a); });   // 바깥 오토 레이아웃도 따라 다시
+    const box = l => (l.fb && layoutSig(l) === l.lsig) ? { x: l.x + l.fb.dx, y: l.y + l.fb.dy, w: l.fb.w, h: l.fb.h } : ext(l);
+    for (const g of [...dirty].sort((a, b) => depth(b) - depth(a))) layoutGroup(layers, byG.get(g), box);
+    for (const l of layers) if (l.rsig !== undefined) l.rsig = layoutSig(l);
+    return true;
+  }
+  // 글꼴이 늦게 받아지면 글자 폭이 달라진다 — 고친 요소가 든 오토 레이아웃을 다음 그리기 때 다시 잰다
+  function relayoutChanged(layers) { let n = 0; for (const l of layers) if (l.rsig !== undefined && l.lsig !== layoutSig(l)) { l.rsig = ''; n++; } return n; }
+  function layoutGroup(layers, F, box) {
+    const a = F.al, g = a.g, H = a.dir === 'H';
+    const P = H ? 'x' : 'y', PS = H ? 'w' : 'h', C = H ? 'y' : 'x', CS = H ? 'h' : 'w';
+    const items = new Map();
+    for (const l of layers) {
+      if (l === F || l.hidden) continue;
+      const p = gpOf(l), i = p.indexOf(g); if (i < 0) continue;
+      const key = l.fitBox != null ? 'l:' + l.fitBox : i + 1 < p.length ? 'g:' + p[i + 1] : 'l:' + l.id;   // 블로그 버튼 글자는 도형과 한 덩어리
+      if (!items.has(key)) items.set(key, { ls: [], sub: i + 1 < p.length ? p[i + 1] : null });
+      items.get(key).ls.push(l);
+    }
+    const list = [];
+    for (const it of items.values()) {
+      if (it.ls.every(l => l.abs)) continue;
+      const head = it.sub != null ? it.ls.find(l => l.al && l.al.g === it.sub) || it.ls[0] : it.ls.find(l => l.fitBox == null) || it.ls[0];
+      const es = it.ls.filter(l => l.fitBox == null || it.ls.length === 1).map(box);
+      const x = Math.min(...es.map(e => e.x)), y = Math.min(...es.map(e => e.y));
+      list.push(Object.assign(it, { head, x, y, w: Math.max(...es.map(e => e.x + e.w)) - x, h: Math.max(...es.map(e => e.y + e.h)) - y }));
+    }
+    if (!list.length) return;
+    list.sort((p, q) => p[P] - q[P]);
+    const fr = { x: F.x, y: F.y, w: F.w, h: F.h || F.w / (F.ar || 1) };
+    const pS = H ? a.pl : a.pt, pE = H ? a.pr : a.pb, cS = H ? a.pt : a.pl, cE = H ? a.pb : a.pr;
+    const hugP = H ? a.hugW : a.hugH, hugC = H ? a.hugH : a.hugW;
+    const growP = it => !hugP && it.head.lfill && (H ? it.head.lfill.h : it.head.lfill.v) && it.ls.length === 1;
+    const fillC = it => !hugC && it.head.lfill && (H ? it.head.lfill.v : it.head.lfill.h) && it.ls.length === 1;
+    let gap = a.gap;
+    const fixed = list.filter(it => !growP(it)).reduce((s, it) => s + it[PS], 0);
+    const growers = list.filter(growP);
+    const setSize = (it, k, v) => {        // Fill — 낱개 도형·글자만 늘이고 줄인다
+      const l = it.head; v = Math.max(1, v);
+      if (k === 'w') { if (l.kind === 'image' || l.type === 'i') return; l.w = v; } else { if (l.kind === 'text' || l.type === 't' || l.type === 'i') return; l.h = v; }
+      it[k] = v;
+    };
+    if (growers.length) { const each = (fr[PS] - pS - pE - fixed - gap * (list.length - 1)) / growers.length; growers.forEach(it => setSize(it, PS, each)); }
+    const total = list.reduce((s, it) => s + it[PS], 0) + gap * (list.length - 1);
+    if (hugP) fr[PS] = pS + total + pE;
+    let cur = fr[P] + pS;
+    if (!hugP && !growers.length) {
+      const free = fr[PS] - pS - pE - total;
+      if (a.prim === 'CENTER') cur += free / 2; else if (a.prim === 'MAX') cur += free;
+      else if (a.prim === 'SPACE_BETWEEN' && list.length > 1) gap += free / (list.length - 1);
+    }
+    if (hugC) fr[CS] = cS + Math.max(...list.map(it => it[CS])) + cE;
+    const inC = fr[CS] - cS - cE;
+    for (const it of list) {
+      if (fillC(it)) setSize(it, CS, inC);
+      const tc = a.cross === 'CENTER' ? fr[C] + cS + (inC - it[CS]) / 2 : a.cross === 'MAX' ? fr[C] + fr[CS] - cE - it[CS] : fr[C] + cS;
+      const dP = cur - it[P], dC = tc - it[C];
+      it.ls.forEach(l => { l[P] = +(l[P] + dP).toFixed(2); l[C] = +(l[C] + dC).toFixed(2); });
+      cur += it[PS] + gap;
+    }
+    F.w = +fr.w.toFixed(2); if (F.h != null || F.kind === 'rect' || F.type === 'r') F.h = +fr.h.toFixed(2);
+  }
   // ── 공통 정리 ────────────────────────────────────────────────────────────
   const clone = o => JSON.parse(JSON.stringify(o));
   // 도형 안에 들어 있는 텍스트를 도형의 '라벨'로 묶고 지금 여백을 패딩으로 잡는다 (= 오토 레이아웃 켜기)
@@ -287,7 +399,7 @@
   // 왼쪽 위를 (0,0) 으로 옮기고 크기를 잰다
   function normalize(nodes) {
     const x0 = Math.min(...nodes.map(n => n.x)), y0 = Math.min(...nodes.map(n => n.y));
-    nodes.forEach(n => { n.x = Math.round(n.x - x0); n.y = Math.round(n.y - y0); delete n.cx; delete n.cy; delete n.gw; if (n.clip) { n.clip.x -= x0; n.clip.y -= y0; } if (n.bake) { n.bake.x -= x0; n.bake.y -= y0; } });
+    nodes.forEach(n => { n.x = Math.round(n.x - x0); n.y = Math.round(n.y - y0); delete n.cx; delete n.cy; delete n.gw; if (n.clip) { n.clip.x -= x0; n.clip.y -= y0; } if (n.bake) { n.bake.x -= x0; n.bake.y -= y0; } if (n.fb) { n.fb.x -= x0; n.fb.y -= y0; } });
     const w = Math.max(...nodes.map(n => n.x + n.w)), h = Math.max(...nodes.map(n => n.y + n.h));
     return { nodes, w: Math.round(w), h: Math.round(h) };
   }
@@ -303,6 +415,8 @@
       if (n.pad) { n.pad.x = Math.round(n.pad.x * k); if (n.pad.y != null) n.pad.y = Math.round(n.pad.y * k); }
       scaleFx(n.fx, k); scaleSh(n.shadows, k); if (n.label) scaleSh(n.label.shadows, k);
       if (n.bake) for (const p of ['x', 'y', 'w', 'h']) n.bake[p] *= k;
+      if (n.fb) for (const p of ['x', 'y', 'w', 'h']) n.fb[p] *= k;
+      if (n.al) for (const p of ['gap', 'pl', 'pr', 'pt', 'pb']) n.al[p] *= k;
     }
     return nodes;
   }
@@ -350,6 +464,7 @@
         nodes.push({ t: 'raw', x: l.x, y: l.y, w: b.w, h: b.h, native });
       }
       { const gp = gpOf(l); if (gp.length) { const gn = gpnOf(l); for (const x of nodes.slice(from0)) { x.gp = gp.map(g => 'g' + g); x.gpn = gn.slice(); } } }   // 그룹 계층 → 저장
+      if (nodes.length > from0) saveLayout(nodes[from0], l);
     }
     return { ...normalize(autoNest(nodes)), origin: 'blog' };
   }
@@ -359,6 +474,7 @@
     const base = (n, extra) => n.native && n.native.app === 'blog' ? Object.assign(clone(n.native.layer), extra) : (n.name ? Object.assign({ name: n.name }, extra) : extra);   // 피그마 레이어 이름 유지
     const font = f => (!f || f === 'Pretendard') ? '' : (f === 'System' || libOf(f)) ? cssFamily(f) : f;
     const gmap = {};                      // 피그마 그룹(n.grp) → 레이어 그룹(gid)
+    const NEWID = () => mk.nid();
     const regroup = (from, n) => { const p = nodeGp(n); if (!p.gp.length) return; const gp = p.gp.map(g => gmap[g] || (gmap[g] = mk.nid())); for (const l of out.slice(from)) setGp(l, gp, p.gpn); };
     for (const n of scaled(comp, k)) {
       const from0 = out.length;
@@ -408,7 +524,7 @@
         if (k !== 1) for (const p of ['w', 'h', 'topW']) if (l[p] != null) l[p] = Math.round(l[p] * k);
         out.push(l);
       } else skipped.push(n);
-      regroup(from0, n);
+      regroup(from0, n); attachLayout(out, from0, n, at, gmap, NEWID);
     }
     return { layers: out, skipped: skipped.length };
   }
@@ -467,6 +583,7 @@
         nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: l.h, src: l.src, opacity: l.opacity == null ? 1 : l.opacity, radius: l.radius || 0, native, fromFigma: l.figPic ? 'pic' : undefined, name: l.name });
       }
       { const gp = gpOf(l); if (gp.length) { const gn = gpnOf(l); for (const x of nodes.slice(from0)) { x.gp = gp.map(g => 'g' + g); x.gpn = gn.slice(); } } }   // 그룹 계층 → 저장
+      if (nodes.length > from0) saveLayout(nodes[from0], l);
     }
     if (frame) {
       // 피그마 프레임은 레이어 구조를 그대로 둔다 — 화면 배경 같은 큰 도형에 글자를 라벨로 합치면 글자가 사라진다
@@ -484,6 +601,7 @@
       return Object.assign(b, extra, { id: uid() });
     };
     const gmap = {};                      // 피그마 그룹(n.grp) → 레이어 그룹(gid)
+    const NEWID = () => uid();
     const regroup = (from, n) => { const p = nodeGp(n); if (!p.gp.length) return; const gp = p.gp.map(g => gmap[g] || (gmap[g] = uid())); for (const l of out.slice(from)) setGp(l, gp, p.gpn); };
     for (const n of scaled(comp, k)) {
       const from0 = out.length;
@@ -509,7 +627,7 @@
       } else if (n.t === 'image') {
         out.push(base(n, { kind: 'image', role: 'object', figPic: n.fromFigma ? true : undefined, name: n.name || '이미지', x, y, w: n.w, h: n.h, src: n.src, opacity: n.opacity == null ? 1 : n.opacity, radius: n.radius || 0 }));
       } else skipped.push(n);
-      regroup(from0, n);
+      regroup(from0, n); attachLayout(out, from0, n, at, gmap, NEWID);
     }
     return { layers: out, skipped: skipped.length };
   }
@@ -852,6 +970,14 @@
     const gstack = [];                    // 피그마 레이어 묶음(프레임·그룹·인스턴스) 계층 — 편집기에서 그룹 안 그룹으로 잡힌다
     function push(node) {
       if (gstack.length) { node.gp = gstack.map(g => g.id); node.gpn = gstack.map(g => g.name); }
+      if (curEl && !node.fb) {               // 피그마 레이아웃 상자 · 오토 레이아웃 안에서의 크기 방식 (Fill·Hug·절대 위치)
+        node.fb = bb(curEl);
+        const fh = curEl.layoutSizingHorizontal === 'FILL' || curEl.layoutGrow === 1 && curEl.__parentDir === 'H' || curEl.layoutAlign === 'STRETCH' && curEl.__parentDir === 'V';
+        const fv = curEl.layoutSizingVertical === 'FILL' || curEl.layoutGrow === 1 && curEl.__parentDir === 'V' || curEl.layoutAlign === 'STRETCH' && curEl.__parentDir === 'H';
+        if (fh || fv) node.lfill = { h: !!fh, v: !!fv };
+        if (curEl.layoutPositioning === 'ABSOLUTE') node.abs = true;
+        if (curEl.type === 'TEXT' && (curEl.textAutoResize === 'WIDTH_AND_HEIGHT' || curEl.layoutSizingHorizontal === 'HUG')) node.autoW = true;
+      }
       if (clip) {
         const r = { x: node.x, y: node.y, w: node.w, h: node.h }, i = inter(r, clip);
         if (!i) return;                                                // 완전히 잘려 안 보이는 것
@@ -916,8 +1042,15 @@
       const tb = bakeFor(n, op / (n.opacity == null ? 1 : n.opacity)); if (tb) t.bake = tb;
       return t;
     };
+    let curEl = null;                     // 지금 그리는 피그마 요소 — push 가 레이아웃 정보(fb·채우기)를 붙인다
     function walk(n, op) {
       if (!visible(n)) return;
+      const g = n !== root && (n.children || []).some(visible);
+      if (g) gstack.push({ id: n.id, name: n.name });
+      try { walkEl(n, op); } finally { if (g) gstack.pop(); }
+    }
+    function walkEl(n, op) {
+      curEl = n;
       const parentOp = op == null ? 1 : op;
       op = parentOp * (n.opacity == null ? 1 : n.opacity);
       const kids = (n.children || []).filter(visible);
@@ -972,8 +1105,14 @@
             { /* 정렬은 가운데로 맞춘다 — 피그마 그림이 있으면 보이는 모양은 같다 */ }
           push(box); return;
         }
-        if (n.layoutMode && n.layoutMode !== 'NONE' && texts.length && kids.length > 1)
-          { /* 글자 외 요소가 함께 든 오토 레이아웃은 크기 자동 조절을 하지 않는다 (정보성이라 알리지 않는다) */ }
+        // 오토 레이아웃 프레임 — 방향·간격·패딩·정렬·크기 방식을 기억해 두었다가, 안의 요소가 바뀌면 피그마처럼 다시 배치한다 (reflow)
+        if (n !== root && n.layoutMode && n.layoutMode !== 'NONE' && n.layoutWrap !== 'WRAP' && kids.length) {
+          const H = n.layoutMode === 'HORIZONTAL';
+          const hugW = n.layoutSizingHorizontal ? n.layoutSizingHorizontal === 'HUG' : (H ? n.primaryAxisSizingMode : n.counterAxisSizingMode) === 'AUTO';
+          const hugH = n.layoutSizingVertical ? n.layoutSizingVertical === 'HUG' : (H ? n.counterAxisSizingMode : n.primaryAxisSizingMode) === 'AUTO';
+          box.al = { g: n.id, dir: H ? 'H' : 'V', gap: n.itemSpacing || 0, pl: n.paddingLeft || 0, pr: n.paddingRight || 0, pt: n.paddingTop || 0, pb: n.paddingBottom || 0,
+            prim: n.primaryAxisAlignItems || 'MIN', cross: n.counterAxisAlignItems || 'MIN', hugW, hugH };
+        }
         push(box);
       }
       const prev = clip;
@@ -983,13 +1122,11 @@
       }
       // 마스크 — 마스크 도형 자체는 그리지 않고, 뒤따르는 형제들을 그 영역으로 자른다 (사각·둥근 마스크는 정확, 그 밖의 모양은 영역 근사)
       const pre = clip;
-      const asGroup = n !== root && kids.length > 0;
-      if (asGroup) gstack.push({ id: n.id, name: n.name });
       for (const c of kids) {
         if (c.isMask) { const mb = bb(c); const ci = clip ? inter(mb, clip) : mb; clip = ci ? { ...ci, r: c.rectangleCornerRadii || [c.cornerRadius || 0, c.cornerRadius || 0, c.cornerRadius || 0, c.cornerRadius || 0] } : { x: 0, y: 0, w: 0, h: 0 }; continue; }
+        c.__parentDir = n.layoutMode === 'HORIZONTAL' ? 'H' : n.layoutMode === 'VERTICAL' ? 'V' : null;
         walk(c, op);
       }
-      if (asGroup) gstack.pop();
       clip = pre;
       clip = prev;
     }
@@ -1099,7 +1236,7 @@
   }
 
   // 지금 열린 화면의 버전 — 화면 왼쪽 아래에 작게 보인다 (예전 주소·캐시로 열었는지 바로 알 수 있게)
-  const VERSION = '2026-10-25 f';
+  const VERSION = '2026-10-25 g';
   const badge = () => { if (document.getElementById('uikitVer')) return; const b = document.createElement('div'); b.id = 'uikitVer'; b.textContent = '버전 ' + VERSION;
     b.style.cssText = 'position:fixed;left:8px;bottom:6px;z-index:9998;font:11px/1.4 -apple-system,sans-serif;color:#6b7280;background:rgba(255,255,255,.85);padding:2px 7px;border-radius:6px;pointer-events:none';
     document.body.appendChild(b); };
@@ -1107,6 +1244,6 @@
   window.UIKit = { VERSION, list, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, png, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
     exportJSON, importJSON, parseFont, fontName, fromFigma, figmaNeeds, parseFigmaLink, applyClips,
     paintBox, paintURL, outset, hasFx, textShadowCSS, img, set onImage(fn) { onImage = fn; },
-    bakeOk, bakeSig, labelSig, gpOf, gpnOf, setGp, pruneGp, layerRows, groupMembers, moveInTree, groupLayers, ungroupLayers, deeperSelection, remapGp, cropDest, destCrop, modeCrop, textPaint, gradCSS,
+    bakeOk, bakeSig, labelSig, reflow, layoutSig, relayoutChanged, gpOf, gpnOf, setGp, pruneGp, layerRows, groupMembers, moveInTree, groupLayers, ungroupLayers, deeperSelection, remapGp, cropDest, destCrop, modeCrop, textPaint, gradCSS,
     fonts: FONT_LIB.map(x => ({ family: x[0], weights: x[2] })), ensureFont, loadFonts, cssFamily, familyOf, set onFont(fn) { onFont = fn; } };
 })();
