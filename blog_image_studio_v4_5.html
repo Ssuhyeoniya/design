@@ -534,7 +534,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="exportZone"></div>
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
-<script src="shared/ui-kit.js?v=20261025-3"></script>
+<script src="shared/ui-kit.js?v=20261025-4"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -827,7 +827,8 @@ function fxPropsHTML(l){
   if(f)h+=`<div class="row">
       <div class="field"><label>맞춤</label><select id="fxMode">${[['FILL','채우기'],['FIT','맞추기'],['CROP','자르기'],['TILE','바둑판']].map(([v,n])=>`<option value="${v}"${(f.scaleMode||'FILL')===v?' selected':''}>${n}</option>`).join('')}</select></div>
       <div class="field"><label>&nbsp;</label><button class="btn small" id="fxUnimg" style="width:100%">이미지 제거</button></div>
-    </div>`;
+    </div>
+    <div class="row"><div class="field"><button class="btn small" id="fxCrop" style="width:100%" title="캔버스에서 도형을 더블클릭해도 돼">✥ 이미지 위치·크기 조정 (더블클릭)</button></div></div>`;
   if(eff.length)h+=`<div class="field"><label>효과</label>${eff.map((e,i)=>`<div class="row" style="align-items:center;gap:4px;margin-bottom:4px">
       <label class="chkline" style="flex:0 0 auto;white-space:nowrap"><input type="checkbox" data-fxi="${i}" data-fp="visible"${e.visible===false?'':' checked'}> ${FX_NAME[e.type]||e.type}</label>
       ${e.x!=null?`<input type="number" data-fxi="${i}" data-fp="x" value="${e.x}" title="X" style="width:48px"><input type="number" data-fxi="${i}" data-fp="y" value="${e.y}" title="Y" style="width:48px">`:''}
@@ -849,7 +850,8 @@ function ensureFx(l){
 async function setImageFill(l,src){
   src=await stockSrc(src);
   const fx=ensureFx(l), f=imgFillOf(l);
-  if(f)f.src=src; else fx.fills.push({type:'IMAGE',src,scaleMode:'FILL'});
+  if(f){f.src=src;if(f.scaleMode==='CROP'){f.scaleMode='FILL';delete f.crop;}}   // 새 이미지는 채우기(가운데)로 — 더블클릭해서 위치를 옮긴다
+  else fx.fills.push({type:'IMAGE',src,scaleMode:'FILL'});
   UIKit.img(src);
   selLayer=l.id; renderAll(); recordHistory();
   showUiNote('도형에 이미지를 채웠어 — 맞춤 방식(채우기·맞추기·바둑판)은 우측 박스 편집에서 바꿔');
@@ -864,6 +866,7 @@ function bindFxProps(l){
   });
   on('fxStock','onclick',()=>{stockFillTarget=l.id;showUiNote('왼쪽 스톡 이미지를 누르면 이 도형에 채워져 (Esc 취소)');});
   on('fxMode','onchange',e=>{imgFillOf(l).scaleMode=e.target.value;renderAll();});
+  on('fxCrop','onclick',()=>enterCropMode(l));
   on('fxUnimg','onclick',()=>{l.fx.fills=l.fx.fills.filter(p=>p.type!=='IMAGE');renderAll();});
   on('fxShadow','onclick',()=>{const fx=ensureFx(l);fx.effects=[...(fx.effects||[]),{type:'DROP_SHADOW',x:0,y:Math.round(l.h*0.06)||4,blur:Math.round(l.h*0.15)||12,spread:0,color:'rgba(0,0,0,0.25)'}];renderAll();});
   on('fxClear','onclick',()=>{delete l.fx;renderAll();});
@@ -1635,7 +1638,7 @@ function renderProps(){
     <div class="btn-row">
       <button class="btn small" id="centerBtn">가로 중앙 배치</button>
       <button class="btn small" id="imgReplBtn">이미지 교체</button>
-      <button class="btn small" id="cropBtn">자르기</button>
+      <button class="btn small" id="cropBtn" title="캔버스에서 이미지를 더블클릭해도 돼">✥ 자르기·위치 조정</button>
       <button class="btn small" id="cropResetBtn">자르기 해제</button>
       <button class="btn small star-btn" id="imgSaveBtn"><span class="st">☆</span> 저장</button>
     </div>
@@ -2366,7 +2369,10 @@ function layerDblEdit(e){
   if(!im)return;
   let lay=LS(s0).find(x=>x.id==im.dataset.id);
   if(!lay)return;
+  if(cropCtx){applyCrop();return;}
   if(lay.type==='i'){e.preventDefault();enterCropMode(lay);return;}
+  // 글자 없는 이미지 채우기 도형 = 이미지 위치 조정 (피그마와 같다)
+  if(lay.type==='r'&&imgFillOf(lay)&&!lay.guide&&!textOnShape(s0,lay)){e.preventDefault();enterCropMode(lay);return;}
   if(lay.type==='r'&&!lay.guide&&lay.shape!=='arrow'){
     let t=textOnShape(s0,lay);
     if(!t){
@@ -2581,94 +2587,160 @@ function showResearchBrief(){
   m.addEventListener('click',e=>{if(e.target===m)m.remove();});
 }
 
-/* ================= 이미지 자르기 (PPT식) ================= */
+/* ================= 이미지 자르기 (피그마식) =================
+ * 이미지를 더블클릭하면 들어간다 (이미지 레이어 · 글자 없는 이미지 채우기 도형).
+ *   이미지를 끌기 = 틀 안에서 이미지 위치 옮기기 (Shift = 일자)
+ *   흐린 이미지 모서리 끌기 = 비율 유지 확대·축소 (맞은편 모서리 고정)
+ *   틀 가장자리 검은 막대 = 틀 자르기 (이미지 레이어만)
+ *   Enter · 더블클릭 · 바깥 클릭 = 적용,  Esc = 취소
+ * 이미지 레이어: crop {x,y,w,h} = 틀에 보이는 원본 영역(0~1, 밖으로 나가도 된다). 도형: 이미지 채우기 scaleMode 'CROP' + crop */
 let cropCtx=null;
+const cropFillOf=l=>l.type==='r'?imgFillOf(l):null;
+function cropFrame(l){return l.type==='i'?{x:l.x,y:l.y,w:l.w,h:l.w/(l.ar||1)}:{x:l.x,y:l.y,w:l.w,h:l.h};}
+function cropImgRect(l){                    // 원본 이미지 전체가 놓인 자리 (캔버스 좌표)
+  if(l.type==='i'){const c=l.crop||{x:0,y:0,w:1,h:1},fw=l.w/c.w,fh=fw/(l.ar0||l.ar||1);return{x:l.x-fw*c.x,y:l.y-fh*c.y,w:fw,h:fh};}
+  return UIKit.cropDest(cropFillOf(l).crop,cropFrame(l));
+}
+function setCropImgRect(l,r){
+  const f=cropFrame(l), c=UIKit.destCrop(r,f); for(const k in c)c[k]=+c[k].toFixed(5);
+  if(l.type==='i')l.crop=c; else cropFillOf(l).crop=c;
+}
 function enterCropMode(l){
-  exitCropMode();
-  if(!l.ar0)l.ar0=l.ar; // 원본 비율 보관
-  const c=l.crop?{...l.crop}:{x:0,y:0,w:1,h:1};
-  cropCtx={l,c};
-  drawCropUI();
+  if(cropCtx)applyCrop(true);
+  if(l.type==='r'){
+    const f=cropFillOf(l); if(!f||!window.UIKit)return;
+    const im=UIKit.img(f.src);
+    if(!im||!im.naturalWidth)return;   // 아직 불러오는 중 — 잠시 뒤 다시 더블클릭
+    const orig=JSON.stringify(l.fx);
+    if(f.scaleMode!=='CROP'||!f.crop){f.crop=UIKit.modeCrop(f.scaleMode,im.naturalWidth,im.naturalHeight,l.w,l.h);f.scaleMode='CROP';}
+    delete l.bake;
+    cropCtx={l,orig:{fx:orig}};
+  }else{
+    if(!l.ar0)l.ar0=l.ar; // 원본 비율 보관
+    cropCtx={l,orig:{x:l.x,y:l.y,w:l.w,ar:l.ar,crop:l.crop?{...l.crop}:null}};
+    if(!l.crop)l.crop={x:0,y:0,w:1,h:1};
+  }
+  selLayer=l.id;selSet=[l.id];renderAll();drawCropUI();
 }
 function exitCropMode(){
-  canvas.querySelectorAll('.crop-ov,.crop-dim,.crop-frame,.crop-h,.crop-bar').forEach(e=>e.remove());
+  canvas.querySelectorAll('.crop-ov,.crop-dim,.crop-frame,.crop-h,.crop-bar,.crop-mv').forEach(e=>e.remove());
   cropCtx=null;
+}
+function cropRefresh(){
+  const l=cropCtx.l;
+  if(l.type==='r'){                          // 도형 이미지 채우기는 공용 페인터로 다시 굽는다 — 그 레이어만 바꿔 끼운다
+    const el=canvas.querySelector(`.layer[data-id="${l.id}"] img`);
+    if(el&&window.UIKit){const pu=UIKit.paintURL(l,1);el.src=pu.url;}else renderCanvas();
+  }else renderCanvas();
+  drawCropUI();
 }
 function drawCropUI(){
   if(!cropCtx)return;
-  canvas.querySelectorAll('.crop-ov,.crop-dim,.crop-frame,.crop-h,.crop-bar').forEach(e=>e.remove());
-  const {l,c}=cropCtx;
-  const s=slides[cur],offX=curOffX(s);
-  // 전체 이미지가 펼쳐진 영역 (원본 프레임)
-  const fw=l.w/c.w, fh=fw/(l.ar0||l.ar||1);
-  const fx=l.x-fw*c.x+offX, fy=l.y-fh*c.y;
-  // 크롭 프레임 (현재 보이는 영역)
-  const cx=l.x+offX, cy=l.y, cw=l.w, chh=l.w/(l.ar||1);
+  canvas.querySelectorAll('.crop-ov,.crop-dim,.crop-frame,.crop-h,.crop-bar,.crop-mv').forEach(e=>e.remove());
+  const {l}=cropCtx;
+  const s=slides[cur],offX=curOffX(s),z=canvas._z||1;
+  const r=cropImgRect(l), F=cropFrame(l);
+  const fx=r.x+offX, fy=r.y, fw=r.w, fh=r.h;          // 원본 이미지 전체
+  const cx=F.x+offX, cy=F.y, cw=F.w, chh=F.h;          // 틀 (보이는 영역)
   const mk=(cls,st)=>{const d=document.createElement('div');d.className=cls;d.style.cssText=st;canvas.appendChild(d);return d;};
-  // 원본 미리보기 (반투명)
-  const ghost=mk('crop-ov',`left:${fx}px;top:${fy}px;width:${fw}px;height:${fh}px;opacity:.35;`);
-  ghost.innerHTML=`<img src="${l.src}" style="width:100%;height:100%;display:block">`;
-  // 딤 처리 (4방향)
-  mk('crop-dim',`left:${fx}px;top:${fy}px;width:${fw}px;height:${cy-fy}px;`);
-  mk('crop-dim',`left:${fx}px;top:${cy+chh}px;width:${fw}px;height:${fy+fh-(cy+chh)}px;`);
-  mk('crop-dim',`left:${fx}px;top:${cy}px;width:${cx-fx}px;height:${chh}px;`);
-  mk('crop-dim',`left:${cx+cw}px;top:${cy}px;width:${fx+fw-(cx+cw)}px;height:${chh}px;`);
+  const src=l.type==='i'?l.src:cropFillOf(l).src;
+  const ghost=mk('crop-ov',`left:${fx}px;top:${fy}px;width:${fw}px;height:${fh}px;opacity:.35;outline:${1/z}px solid #3d7eff;`);
+  ghost.innerHTML=`<img src="${src}" style="width:100%;height:100%;display:block;max-width:none">`;
   mk('crop-frame',`left:${cx}px;top:${cy}px;width:${cw}px;height:${chh}px;`);
-  // 핸들 8개 (PPT식 검은 막대)
-  const T=Math.max(3,Math.round(4/(canvas._z||1))), L=Math.max(14,Math.round(20/(canvas._z||1)));
-  const H=[
-    ['nw',cx-T,cy-T,L,T],['nw2',cx-T,cy-T,T,L],
-    ['ne',cx+cw-L+T,cy-T,L,T],['ne2',cx+cw,cy-T,T,L],
-    ['sw',cx-T,cy+chh,L,T],['sw2',cx-T,cy+chh-L+T,T,L],
-    ['se',cx+cw-L+T,cy+chh,L,T],['se2',cx+cw,cy+chh-L+T,T,L],
-    ['n',cx+cw/2-L/2,cy-T,L,T],['s',cx+cw/2-L/2,cy+chh,L,T],
-    ['w',cx-T,cy+chh/2-L/2,T,L],['e',cx+cw,cy+chh/2-L/2,T,L]
-  ];
-  H.forEach(([k,x,y,w,hh])=>{
-    const d=mk('crop-h',`left:${x}px;top:${y}px;width:${w}px;height:${hh}px;cursor:${/n|s/.test(k[0])&&k.length<2?'ns-resize':'nwse-resize'};`);
-    d.dataset.ck=k.replace('2','');
-    d.addEventListener('mousedown',ev=>{ev.preventDefault();ev.stopPropagation();startCropDrag(ev,d.dataset.ck);});
+  // 이미지 끌기 — 흐린 이미지와 틀 전체에서 잡힌다
+  const L0=Math.min(fx,cx),T0=Math.min(fy,cy),R0=Math.max(fx+fw,cx+cw),B0=Math.max(fy+fh,cy+chh);
+  const mv=mk('crop-mv',`position:absolute;z-index:40;left:${L0}px;top:${T0}px;width:${R0-L0}px;height:${B0-T0}px;cursor:move;`);
+  mv.addEventListener('mousedown',ev=>{ev.preventDefault();ev.stopPropagation();startCropPan(ev);});
+  mv.addEventListener('dblclick',ev=>{ev.preventDefault();ev.stopPropagation();applyCrop();});
+  // 흐린 이미지 모서리 — 비율 유지 확대·축소
+  const Q=Math.max(8,Math.round(10/z));
+  [[fx,fy],[fx+fw,fy],[fx+fw,fy+fh],[fx,fy+fh]].forEach(([x,y],i)=>{
+    const d=mk('crop-h c',`left:${x-Q/2}px;top:${y-Q/2}px;width:${Q}px;height:${Q}px;background:#fff;border:${Math.max(1,1.5/z)}px solid #3d7eff;border-radius:2px;cursor:${i%2?'nesw':'nwse'}-resize;z-index:43;`);
+    d.addEventListener('mousedown',ev=>{ev.preventDefault();ev.stopPropagation();startCropScale(ev,i);});
   });
-  // 확정/취소 바
-  const bar=mk('crop-bar',`left:${cx}px;top:${cy+chh+14}px;`);
-  bar.innerHTML='<button data-a="ok">자르기 적용</button><button class="sec" data-a="cancel">취소</button>';
-  bar.querySelector('[data-a=ok]').onclick=()=>{applyCrop();};
-  bar.querySelector('[data-a=cancel]').onclick=()=>{exitCropMode();renderAll();};
+  // 틀 자르기 막대 — 이미지 레이어만 (도형은 도형 크기가 틀이다)
+  if(l.type==='i'){
+    const T=Math.max(3,Math.round(4/z)), L=Math.max(14,Math.round(20/z));
+    const H=[
+      ['nw',cx-T,cy-T,L,T],['nw2',cx-T,cy-T,T,L],
+      ['ne',cx+cw-L+T,cy-T,L,T],['ne2',cx+cw,cy-T,T,L],
+      ['sw',cx-T,cy+chh,L,T],['sw2',cx-T,cy+chh-L+T,T,L],
+      ['se',cx+cw-L+T,cy+chh,L,T],['se2',cx+cw,cy+chh-L+T,T,L],
+      ['n',cx+cw/2-L/2,cy-T,L,T],['s',cx+cw/2-L/2,cy+chh,L,T],
+      ['w',cx-T,cy+chh/2-L/2,T,L],['e',cx+cw,cy+chh/2-L/2,T,L]
+    ];
+    H.forEach(([k,x,y,w,hh])=>{
+      const d=mk('crop-h',`left:${x}px;top:${y}px;width:${w}px;height:${hh}px;cursor:${/^[ns]$/.test(k)?'ns-resize':/^[ew]$/.test(k)?'ew-resize':'nwse-resize'};z-index:42;`);
+      d.dataset.ck=k.replace('2','');
+      d.addEventListener('mousedown',ev=>{ev.preventDefault();ev.stopPropagation();startCropDrag(ev,d.dataset.ck);});
+    });
+  }
+  const bar=mk('crop-bar',`left:${cx}px;top:${Math.max(cy+chh,fy+fh)+14}px;`);
+  bar.innerHTML='<button data-a="ok">완료</button><button class="sec" data-a="cancel">취소</button>';
+  bar.addEventListener('mousedown',ev=>ev.stopPropagation());
+  bar.querySelector('[data-a=ok]').onclick=()=>applyCrop();
+  bar.querySelector('[data-a=cancel]').onclick=()=>cancelCrop();
 }
-function startCropDrag(e,k){
-  const {l,c}=cropCtx;
-  const z=canvas._z||1;
-  const fw=l.w/c.w, fh=fw/(l.ar0||l.ar||1);
-  const st={sx:e.clientX,sy:e.clientY,c:{...c},x:l.x,y:l.y,w:l.w};
-  const move=ev=>{
-    const dx=(ev.clientX-st.sx)/z/fw, dy=(ev.clientY-st.sy)/z/fh;
-    const n={...st.c};
-    if(k.includes('w')){const nx=Math.min(st.c.x+st.c.w-0.05,Math.max(0,st.c.x+dx));n.w=st.c.w-(nx-st.c.x);n.x=nx;}
-    if(k.includes('e')){n.w=Math.min(1-st.c.x,Math.max(0.05,st.c.w+dx));}
-    if(k.includes('n')){const ny=Math.min(st.c.y+st.c.h-0.05,Math.max(0,st.c.y+dy));n.h=st.c.h-(ny-st.c.y);n.y=ny;}
-    if(k.includes('s')){n.h=Math.min(1-st.c.y,Math.max(0.05,st.c.h+dy));}
-    cropCtx.c=n;
-    // 표시 좌표/크기 갱신
-    l.x=st.x+(n.x-st.c.x)*fw; l.y=st.y+(n.y-st.c.y)*fh;
-    l.w=fw*n.w; l.ar=(fw*n.w)/(fh*n.h);
-    l.crop=n;
-    renderCanvas();drawCropUI();
-  };
+function cropDragLoop(move){
   const up=()=>{document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);};
   document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);
 }
-function applyCrop(){
+function startCropPan(e){
+  const l=cropCtx.l, z=canvas._z||1, r0=cropImgRect(l), sx=e.clientX, sy=e.clientY;
+  cropDragLoop(ev=>{
+    let dx=(ev.clientX-sx)/z, dy=(ev.clientY-sy)/z;
+    if(ev.shiftKey){if(Math.abs(dx)>=Math.abs(dy))dy=0;else dx=0;}
+    setCropImgRect(l,{x:r0.x+dx,y:r0.y+dy,w:r0.w,h:r0.h});cropRefresh();
+  });
+}
+function startCropScale(e,i){
+  const l=cropCtx.l, z=canvas._z||1, r0=cropImgRect(l), sx=e.clientX, sy=e.clientY;
+  const pts=[[r0.x,r0.y],[r0.x+r0.w,r0.y],[r0.x+r0.w,r0.y+r0.h],[r0.x,r0.y+r0.h]];
+  const [ax,ay]=pts[(i+2)%4], [px0,py0]=pts[i];
+  cropDragLoop(ev=>{
+    const px=px0+(ev.clientX-sx)/z, py=py0+(ev.clientY-sy)/z;
+    const k=Math.max(8/r0.w,Math.abs(px-ax)/r0.w,Math.abs(py-ay)/r0.h), w=r0.w*k, h=r0.h*k;
+    setCropImgRect(l,{x:px<ax?ax-w:ax,y:py<ay?ay-h:ay,w,h});cropRefresh();
+  });
+}
+function startCropDrag(e,k){                  // 틀 자르기 (이미지 레이어) — 이미지는 제자리, 틀만 줄이고 늘린다
+  const l=cropCtx.l, z=canvas._z||1;
+  const r=cropImgRect(l), F0=cropFrame(l), sx=e.clientX, sy=e.clientY;
+  cropDragLoop(ev=>{
+    const dx=(ev.clientX-sx)/z, dy=(ev.clientY-sy)/z;
+    let {x,y,w,h}=F0;
+    if(k.includes('w')){const nx=Math.min(F0.x+F0.w-8,F0.x+dx);w=F0.w-(nx-F0.x);x=nx;}
+    if(k.includes('e'))w=Math.max(8,F0.w+dx);
+    if(k.includes('n')){const ny=Math.min(F0.y+F0.h-8,F0.y+dy);h=F0.h-(ny-F0.y);y=ny;}
+    if(k.includes('s'))h=Math.max(8,F0.h+dy);
+    l.x=x;l.y=y;l.w=w;l.ar=w/h;
+    setCropImgRect(l,r);cropRefresh();
+  });
+}
+function applyCrop(silent){
   if(!cropCtx)return;
-  const {l,c}=cropCtx;
-  l.crop=(c.x<=0.001&&c.y<=0.001&&c.w>=0.999&&c.h>=0.999)?null:c;
-  if(!l.crop)delete l.crop;
+  const {l}=cropCtx;
+  if(l.type==='i'){const c=l.crop;if(c&&Math.abs(c.x)<=0.001&&Math.abs(c.y)<=0.001&&Math.abs(c.w-1)<=0.001&&Math.abs(c.h-1)<=0.001)delete l.crop;}
+  exitCropMode();if(!silent)renderAll();
+}
+function cancelCrop(){
+  if(!cropCtx)return;
+  const {l,orig}=cropCtx;
+  if(l.type==='r')l.fx=JSON.parse(orig.fx);
+  else{Object.assign(l,{x:orig.x,y:orig.y,w:orig.w,ar:orig.ar});if(orig.crop)l.crop=orig.crop;else delete l.crop;}
   exitCropMode();renderAll();
 }
 window.addEventListener('keydown',e=>{
   if(!cropCtx)return;
   if(e.key==='Enter'){e.preventDefault();applyCrop();}
-  if(e.key==='Escape'){e.preventDefault();exitCropMode();renderAll();}
+  if(e.key==='Escape'){e.preventDefault();cancelCrop();}
 });
+// 바깥 클릭 = 적용 (피그마와 같다). 자르기 화면 요소 위 클릭은 각자 처리한다
+document.addEventListener('mousedown',e=>{
+  if(!cropCtx)return;
+  if(e.target.closest&&e.target.closest('.crop-mv,.crop-h,.crop-bar,#props,.props,#rightPanel'))return;
+  applyCrop();
+},true);
 
 /* ================= 슬롯 사진 삽입 ================= */
 function insertIntoSlot(s,rect){
