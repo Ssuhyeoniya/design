@@ -159,6 +159,8 @@
   }
   const bakeOf = (l, extra) => l.bake && bakeOk(l, extra) ? { src: l.bake.src, x: l.x + l.bake.dx, y: l.y + l.bake.dy, w: l.bake.w, h: l.bake.h, alpha: l.bake.alpha } : undefined;
 
+  // 한 줄 글자인가 — 피그마에서 온 표시(nowrap), 없으면(예전 저장본) 피그마 그림 높이가 한 줄인지로 본다
+  const oneLineText = n => !!(n.nowrap || (n.bake && !String(n.text || '').includes('\n') && n.bake.h < (n.size || 16) * (n.lh || 1.3) * 1.6));
   // ── 공통 정리 ────────────────────────────────────────────────────────────
   const clone = o => JSON.parse(JSON.stringify(o));
   // 도형 안에 들어 있는 텍스트를 도형의 '라벨'로 묶고 지금 여백을 패딩으로 잡는다 (= 오토 레이아웃 켜기)
@@ -236,10 +238,10 @@
         const st = { text: l.text, size: l.size, weight: l.weight, family: fam(l), ls: l.ls, lh: l.lh };
         const m = measure(st);
         const off = l.align === 'center' ? (l.w - m.w) / 2 : l.align === 'right' ? l.w - m.w : 0;
-        nodes.push({ t: 'text', x: l.x, y: l.y, w: l.w, h: Math.round(m.h), ...st, color: l.color, align: l.align || 'left', tfill: l.tfill,
+        nodes.push({ t: 'text', x: l.x, y: l.y, w: l.w, h: Math.round(m.h), ...st, color: l.color, align: l.align || 'left', tfill: l.tfill, nowrap: l.nowrap,
           rich: l.rich || null, shadows: l.shadows, native, bake: bakeOf(l, ''), cx: l.x + off + m.w / 2, cy: l.y + m.h / 2, gw: m.w });
       } else if (l.type === 'i') {
-        nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: Math.round(l.w / (l.ar || 1)), src: l.src, opacity: 1, radius: 0, native });
+        nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: Math.round(l.w / (l.ar || 1)), src: l.src, opacity: 1, radius: 0, native, fromFigma: l.figPic ? 'pic' : undefined });
       } else {
         const b = l.type === 'f' ? { w: Math.max(l.w, l.topW || 0), h: l.h } : { w: l.w, h: l.h };
         nodes.push({ t: 'raw', x: l.x, y: l.y, w: b.w, h: b.h, native });
@@ -286,6 +288,7 @@
           font: font(n.family), x, y, w: n.w }));
         if (n.rich) t.rich = n.rich;
         if (n.tfill) t.tfill = clone(n.tfill); else delete t.tfill;
+        if (oneLineText(n)) t.nowrap = true; else delete t.nowrap;
         if (n.shadows && n.shadows.length) t.shadows = n.shadows; else delete t.shadows;
         if (n.opacity != null && n.opacity < 1) t.opacity = n.opacity;
         delete t.fitBox; delete t.gid; t.id = mk.nid();
@@ -293,6 +296,7 @@
         out.push(t);
       } else if (n.t === 'image') {
         const i = mk.iLayer(base(n, { src: n.src, x, y, w: n.w, ar: n.w / Math.max(1, n.h) }));
+        if (n.fromFigma) i.figPic = true;        // 피그마가 그린 요소 그림 — 자르기 모드 대상이 아니다
         delete i.gid; i.id = mk.nid();
         out.push(i);
       } else if (n.native && n.native.app === 'blog') {
@@ -351,13 +355,13 @@
       } else if (l.kind === 'text') {
         const f = parseFont(l.font), m = tm(l);
         nodes.push({ t: 'text', x: l.x, y: l.y, w: l.w, h: Math.round(Math.max(m.h, l.size)), text: l.text, size: l.size,
-          weight: f.weight, family: f.family, color: l.color, tfill: l.tfill, align: l.align, lh: l.lh, ls: l.ls, shadows: l.shadows, opacity: l.opacity, native, bake: bakeOf(l),
+          weight: f.weight, family: f.family, color: l.color, tfill: l.tfill, nowrap: l.nowrap, align: l.align, lh: l.lh, ls: l.ls, shadows: l.shadows, opacity: l.opacity, native, bake: bakeOf(l),
           cx: m.left + m.maxW / 2, cy: l.y + m.h / 2, gw: m.maxW });
       } else if (l.kind === 'image' && l.crop && !l.flip && !l.white) {   // 위치를 옮긴(자른) 이미지 = 이미지 채우기(자르기) 도형
         nodes.push({ t: 'box', x: l.x, y: l.y, w: l.w, h: l.h, fill: 'transparent', radius: l.radius || 0, opacity: l.opacity == null ? 1 : l.opacity,
           fx: { fills: [{ type: 'IMAGE', src: l.src, scaleMode: 'CROP', crop: { ...l.crop } }] }, native, noNest: true });
       } else if (l.kind === 'image') {
-        nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: l.h, src: l.src, opacity: l.opacity == null ? 1 : l.opacity, radius: l.radius || 0, native });
+        nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: l.h, src: l.src, opacity: l.opacity == null ? 1 : l.opacity, radius: l.radius || 0, native, fromFigma: l.figPic ? 'pic' : undefined, name: l.name });
       }
       if (l.gid) for (const x of nodes.slice(from0)) { x.grp = 'g' + l.gid; if (l.gname) x.grpName = l.gname; }   // 레이어 그룹 → 저장
     }
@@ -397,10 +401,10 @@
         out.push(base(n, { kind: 'text', role: 'free', name: (n.text || '텍스트').split('\n')[0].slice(0, 20), x, y, w: n.w,
           text: String(n.text || '').replace(/\[\[|\]\]/g, ''), size: n.size, lh: n.lh || 1.3, ls: n.ls || 0, color: n.color, align: n.align || 'left',
           font: fontName(n.family, n.weight), shadows: n.shadows && n.shadows.length ? n.shadows : undefined, opacity: n.opacity == null ? 1 : n.opacity,
-          tfill: n.tfill ? clone(n.tfill) : undefined }));
+          tfill: n.tfill ? clone(n.tfill) : undefined, nowrap: oneLineText(n) || undefined }));
         attachBake(out[out.length - 1], n.bake);
       } else if (n.t === 'image') {
-        out.push(base(n, { kind: 'image', role: 'object', name: n.name || '이미지', x, y, w: n.w, h: n.h, src: n.src, opacity: n.opacity == null ? 1 : n.opacity, radius: n.radius || 0 }));
+        out.push(base(n, { kind: 'image', role: 'object', figPic: n.fromFigma ? true : undefined, name: n.name || '이미지', x, y, w: n.w, h: n.h, src: n.src, opacity: n.opacity == null ? 1 : n.opacity, radius: n.radius || 0 }));
       } else skipped.push(n);
       regroup(from0, n);
     }
@@ -766,7 +770,12 @@
     const bb = n => { const b = n.absoluteBoundingBox || { x: 0, y: 0, width: 0, height: 0 }; return { x: b.x - ox, y: b.y - oy, w: b.width, h: b.height }; };
     const raster = (n, op) => {
       const src = rasters[n.id];
-      if (!src) { warn(`'${n.name}' 을(를) 그림으로 받지 못해 빠졌습니다`); return; }
+      if (!src) {
+        // 프레임 밖(가로 스크롤로 넘친 카드 등)이라 어차피 안 보이는 요소는 알리지 않는다
+        const b = bb(n), outside = clip && !inter(b, clip);
+        if (!outside && b.w >= 0.5 && b.h >= 0.5) warn(`'${n.name}' 을(를) 그림으로 받지 못해 빠졌습니다`);
+        return;
+      }
       const r = n.absoluteRenderBounds || n.absoluteBoundingBox;
       push({ t: 'image', x: r.x - ox, y: r.y - oy, w: r.width, h: r.height, src, opacity: 1, radius: 0, name: n.name, fromFigma: n.id });
     };
@@ -776,7 +785,7 @@
       const size = st.fontSize || 16;
       let text = n.characters || '';
       if (st.textCase === 'UPPER') text = text.toUpperCase(); else if (st.textCase === 'LOWER') text = text.toLowerCase();
-      if (n.characterStyleOverrides && n.characterStyleOverrides.some(Boolean)) warn(`'${n.name}' 의 글자별 서식(일부 색·굵기)은 첫 서식으로 통일했습니다`);
+      if (n.characterStyleOverrides && n.characterStyleOverrides.some(Boolean) && !bakes[n.id]) warn(`'${n.name}' 의 글자별 서식(일부 색·굵기)은 첫 서식으로 통일했습니다`);
       const t = { t: 'text', x: b.x, y: b.y, w: b.w, text, size, weight: st.fontWeight || 400, family: figFont(st.fontFamily, warn, st.fontWeight),
         color: fill && fill.type === 'SOLID' ? frgba(fill.color, (fill.opacity == null ? 1 : fill.opacity)) : '#000000',
         align: { CENTER: 'center', RIGHT: 'right', JUSTIFIED: 'left' }[st.textAlignHorizontal] || 'left',
@@ -790,6 +799,7 @@
       const m = measure(t);
       // 피그마에서 한 줄(또는 자동 폭)이던 글자는 브라우저 글꼴이 조금만 넓어도 줄바꿈된다 — 폭에 여유를 주고 정렬 기준점은 지킨다
       const L1 = st.lineHeightPx || size * 1.3, oneLine = b.h < L1 * (text.split('\n').length + 0.5);
+      if (oneLine) t.nowrap = true;          // 피그마에서 한 줄이던 글자는 저절로 줄바꿈하지 않는다 (글꼴 폭이 조금 달라도 '60,000' 이 '0' 만 남지 않게)
       if (n.textAutoResize === 'WIDTH_AND_HEIGHT' || oneLine) {
         const need = Math.ceil(m.w * 1.06 + size * 0.3);
         if (need > t.w) { const d = need - t.w; if (t.align === 'center') t.x -= d / 2; else if (t.align === 'right') t.x -= d; t.w = need; }
@@ -982,7 +992,7 @@
   }
 
   // 지금 열린 화면의 버전 — 화면 왼쪽 아래에 작게 보인다 (예전 주소·캐시로 열었는지 바로 알 수 있게)
-  const VERSION = '2026-10-25 c';
+  const VERSION = '2026-10-25 d';
   const badge = () => { if (document.getElementById('uikitVer')) return; const b = document.createElement('div'); b.id = 'uikitVer'; b.textContent = '버전 ' + VERSION;
     b.style.cssText = 'position:fixed;left:8px;bottom:6px;z-index:9998;font:11px/1.4 -apple-system,sans-serif;color:#6b7280;background:rgba(255,255,255,.85);padding:2px 7px;border-radius:6px;pointer-events:none';
     document.body.appendChild(b); };

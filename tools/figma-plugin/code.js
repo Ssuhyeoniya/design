@@ -98,8 +98,16 @@ const EXPORT = { format: 'PNG', constraint: { type: 'SCALE', value: 2 } };
 async function bake(job) {
   const n = job.node;
   if (job.mode === 'full') {
-    const rb = n.absoluteRenderBounds; if (!rb || rb.width < 0.5 || rb.height < 0.5) return null;
-    return { src: b64(await n.exportAsync(EXPORT)), x: rb.x, y: rb.y, w: rb.width, h: rb.height };
+    // 그림 범위가 없다고 나오는 요소(마스크 안·인스턴스 안 벡터 등)도 상자 크기로 내보내 본다
+    const rb = n.absoluteRenderBounds || n.absoluteBoundingBox;
+    if (!rb || rb.width < 0.5 || rb.height < 0.5) return { empty: true };   // 크기 0 — 그릴 것이 없다 (알리지 않는다)
+    const bytes = await n.exportAsync(EXPORT);
+    if (!n.absoluteRenderBounds) {             // 실제 그림 크기(PNG 가로·세로 ÷ 2배)에 맞추고 상자 가운데에 둔다 (테두리가 넘치는 만큼 넓다)
+      const pw = bytes[0] === 0x89 ? ((bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19]) / 2 : rb.width;
+      const ph = bytes[0] === 0x89 ? ((bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23]) / 2 : rb.height;
+      return { src: b64(bytes), x: rb.x - (pw - rb.width) / 2, y: rb.y - (ph - rb.height) / 2, w: pw, h: ph, approx: true };
+    }
+    return { src: b64(bytes), x: rb.x, y: rb.y, w: rb.width, h: rb.height };
   }
   let c = n.clone();
   try {
@@ -134,7 +142,12 @@ figma.ui.onmessage = async msg => {
   }
   const bakes = {}, errors = [];
   for (const [i, job] of bakeJobs.entries()) {
-    try { const b = await bake(job); if (b) { bakes[job.node.id] = b; if (job.mode === 'full' && rasterIds.has(job.node.id)) rasters[job.node.id] = b.src; } }
+    try {
+      const b = await bake(job);
+      if (b && b.empty) { /* 크기 0 */ }
+      else if (b) { bakes[job.node.id] = b; if (job.mode === 'full' && rasterIds.has(job.node.id)) rasters[job.node.id] = b.src; }
+      else if (job.mode === 'full') errors.push(`${job.node.name}: 그림을 받지 못함`);
+    }
     catch (e) { errors.push(`${job.node.name}: ${e && e.message || e}`); }
     if (i % 20 === 19) figma.ui.postMessage({ type: 'progress', text: `요소 그림 ${i + 1}/${bakeJobs.length}…` });
   }

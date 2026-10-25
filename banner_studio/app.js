@@ -291,7 +291,7 @@ function setTextFont(ctx, l) {
 // 텍스트 레이어의 실제 렌더 정보 (검수·핸들에서 공용)
 function textMetrics(l) {
   setTextFont(actx, l);
-  const lines = wrapText(actx, l.text, l.w);
+  const lines = l.nowrap ? String(l.text).split('\n') : wrapText(actx, l.text, l.w);   // 피그마에서 한 줄이던 글자는 저절로 줄바꿈하지 않는다
   const lh = l.size * l.lh;
   const widths = lines.map(s => actx.measureText(s).width);
   const maxW = Math.max(0, ...widths);
@@ -806,27 +806,104 @@ function paintSpecInfo() {
     </div>`).join('') || '<span class="hint">좌표 데이터 없음</span>';
 }
 
+// ── 레이어 패널 (피그마식) ──
+// 위가 앞(맨 위에 그려지는 것). 그룹은 ▾/▸ 로 접고 펼치고, 하위 요소는 들여 쓴다.
+// 목록에서 고르면 캔버스도 같이 고른다 (Shift = 여러 개). 끌어다 놓아 순서를 바꾸고, 그룹 안팎으로 옮긴다.
+const collapsed = new Set();                 // 접힌 그룹 gid
+let layerDrag = null;                        // { ids: [...] } 끌고 있는 레이어들
 function paintLayers() {
   const box = $('#layers'); box.innerHTML = '';
+  const ids = selIds();
+  const rows = [];                           // 패널 위→아래 = 앞→뒤
   let prevG = null;
   [...S.layers].reverse().forEach(l => {
-    // 그룹(피그마 묶음·Ctrl+G) — 머리줄을 누르면 그룹 전체 선택, 안의 레이어는 들여 쓴다
-    if (l.gid && l.gid !== prevG) {
-      const mem = S.layers.filter(x => x.gid === l.gid), on = mem.every(x => selIds().includes(x.id));
-      const g = el('div', 'layer grp' + (on ? ' sel' : ''));
-      g.innerHTML = `<span class="ic">📁</span><span class="nm"><b>${esc(l.gname || '그룹')}</b></span><span class="lk">${mem.length}개</span>`;
-      g.onclick = () => { selectGroup(mem[mem.length - 1]); paintLayers(); paintProps(); renderOverlay(); };
-      box.appendChild(g);
-    }
+    if (l.gid && l.gid !== prevG) rows.push({ g: l.gid, name: l.gname });
     prevG = l.gid || null;
-    const d = el('div', 'layer' + (l.id === sel ? ' sel' : selIds().includes(l.id) ? ' sel multi' : '') + (l.lockSize ? ' locked' : ''));
-    if (l.gid) d.style.paddingLeft = '22px';
-    const ic = l.kind === 'text' ? 'T' : l.kind === 'rect' ? '▭' : '▣';
-    d.innerHTML = `<span class="ic">${ic}</span><span class="nm">${esc(l.name || l.kind)}</span>` +
-      `<span class="lk">${l.hidden ? '숨김' : ''}${l.lockSize ? ' 고정' : ''}</span>`;
-    d.onclick = e => { if (e.shiftKey) toggleSel(l.id); else sel = l.id; paintLayers(); paintProps(); renderOverlay(); };
-    box.appendChild(d);
+    rows.push({ l });
   });
+  const pick = (e, list) => {                // 목록 선택 → 캔버스 선택
+    if (editing) commitEdit();
+    if (e.shiftKey) list.forEach(x => toggleSel(x.id));
+    else { sel = list[list.length - 1].id; multi.clear(); multiFor = sel; list.slice(0, -1).forEach(x => multi.add(x.id)); }
+    paintLayers(); paintProps(); renderOverlay();
+  };
+  for (const r of rows) {
+    let d;
+    if (r.g) {
+      const mem = S.layers.filter(x => x.gid === r.g), on = mem.length && mem.every(x => ids.includes(x.id)), shut = collapsed.has(r.g);
+      d = el('div', 'layer grp' + (on ? ' sel' : ''));
+      d.innerHTML = `<span class="tw">${shut ? '▸' : '▾'}</span><span class="ic">▦</span><span class="nm"><b>${esc(r.name || '그룹')}</b></span><span class="lk">${mem.length}</span>`;
+      d.querySelector('.tw').onclick = e => { e.stopPropagation(); if (shut) collapsed.delete(r.g); else collapsed.add(r.g); paintLayers(); };
+      d.onclick = e => pick(e, mem);
+      d.ondblclick = () => { const v = prompt('그룹 이름', r.name || '그룹'); if (v == null) return; mem.forEach(x => { x.gname = v.trim() || '그룹'; }); push(); paintLayers(); };
+      d.dataset.g = r.g;
+    } else {
+      const l = r.l;
+      if (l.gid && collapsed.has(l.gid)) continue;
+      d = el('div', 'layer' + (l.id === sel ? ' sel' : ids.includes(l.id) ? ' sel multi' : '') + (l.lockSize ? ' locked' : '') + (l.hidden ? ' off' : '') + (l.gid ? ' child' : ''));
+      const ic = l.kind === 'text' ? 'T' : l.kind === 'rect' ? '▭' : '▣';
+      d.innerHTML = `<span class="tw"></span><span class="ic">${ic}</span><span class="nm">${esc(l.name || l.kind)}</span>` +
+        `<span class="lk">${l.hidden ? '숨김' : ''}${l.lockSize ? ' 고정' : ''}</span>`;
+      d.onclick = e => pick(e, [l]);
+      d.dataset.id = l.id;
+    }
+    // 끌어다 놓기 — 위/아래 절반 = 그 앞/뒤, 그룹 머리줄 가운데 = 그 그룹 안 맨 앞
+    d.draggable = true;
+    d.addEventListener('dragstart', e => {
+      const own = r.g ? S.layers.filter(x => x.gid === r.g).map(x => x.id)
+        : ids.includes(r.l.id) ? ids : [r.l.id];
+      layerDrag = { ids: own, group: r.g || null };
+      e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', 'layer'); } catch { /* 무시 */ }
+    });
+    d.addEventListener('dragover', e => {
+      if (!layerDrag) return; e.preventDefault();
+      const rc = d.getBoundingClientRect(), y = (e.clientY - rc.top) / rc.height;
+      box.querySelectorAll('.dropB,.dropA,.dropIn').forEach(x => x.classList.remove('dropB', 'dropA', 'dropIn'));
+      d.classList.add(r.g && !layerDrag.group && y > .3 && y < .7 ? 'dropIn' : y < .5 ? 'dropB' : 'dropA');
+    });
+    d.addEventListener('dragleave', () => d.classList.remove('dropB', 'dropA', 'dropIn'));
+    d.addEventListener('drop', e => {
+      e.preventDefault(); if (!layerDrag) return;
+      const mode = d.classList.contains('dropIn') ? 'in' : d.classList.contains('dropB') ? 'before' : 'after';
+      d.classList.remove('dropB', 'dropA', 'dropIn');
+      moveLayers(layerDrag, r, mode); layerDrag = null;
+    });
+    d.addEventListener('dragend', () => { layerDrag = null; box.querySelectorAll('.dropB,.dropA,.dropIn').forEach(x => x.classList.remove('dropB', 'dropA', 'dropIn')); });
+    box.appendChild(d);
+  }
+  const cur = box.querySelector('.layer.sel:not(.grp)'); if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+}
+// 끌어 놓은 레이어를 옮긴다. 패널의 '앞(before)' = 배열에서 뒤쪽(더 위에 그려짐)
+function moveLayers(dr, target, mode) {
+  const moving = S.layers.filter(x => dr.ids.includes(x.id));
+  if (!moving.length) return;
+  if (target.l && dr.ids.includes(target.l.id)) return;
+  if (target.g && dr.group === target.g) return;
+  const rest = S.layers.filter(x => !dr.ids.includes(x.id));
+  let at, gid;
+  if (target.g) {
+    const mem = rest.filter(x => x.gid === target.g);
+    if (!mem.length) return;
+    const top = rest.indexOf(mem[mem.length - 1]), bottom = rest.indexOf(mem[0]);
+    if (mode === 'in') { at = top + 1; gid = target.g; }               // 그룹 안 맨 앞
+    else { at = mode === 'before' ? top + 1 : bottom; gid = null; }    // 그룹 바깥 위·아래
+  } else {
+    const ti = rest.indexOf(target.l);
+    at = mode === 'before' ? ti + 1 : ti;
+    gid = target.l.gid || null;
+    // 그룹 사이에 낀 자리로 그룹 머리째 옮길 때는 대상 그룹 바깥으로
+    if (dr.group && gid) {
+      const mem = rest.filter(x => x.gid === gid);
+      at = mode === 'before' ? rest.indexOf(mem[mem.length - 1]) + 1 : rest.indexOf(mem[0]); gid = null;
+    }
+  }
+  if (!dr.group) moving.forEach(x => { if (gid) { x.gid = gid; x.gname = (rest.find(y => y.gid === gid) || {}).gname; } else { delete x.gid; delete x.gname; } });
+  rest.splice(at, 0, ...moving);
+  S.layers = rest;
+  // 한 명만 남은 그룹은 푼다
+  const cnt = {}; S.layers.forEach(x => { if (x.gid) cnt[x.gid] = (cnt[x.gid] || 0) + 1; });
+  S.layers.forEach(x => { if (x.gid && cnt[x.gid] < 2) { delete x.gid; delete x.gname; } });
+  push(); render(); paintLayers(); paintProps();
 }
 
 function paintProps() {
@@ -857,7 +934,7 @@ function paintProps() {
     h += `<div class="row"><label>옵션</label><label class="hint"><input type="checkbox" data-k="flip" ${l.flip ? 'checked' : ''}> 좌우반전</label>`;
     if (l.role === 'bi') h += `<label class="hint"><input type="checkbox" data-k="white" ${l.white ? 'checked' : ''}> 화이트</label>`;
     h += `</div>`;
-    if (l.role !== 'bi') h += `<div class="row"><button class="btn sm grow" data-act="imgPick">이미지 바꾸기</button><button class="btn sm grow" data-act="imgCrop" title="캔버스에서 이미지를 더블클릭해도 됩니다">✥ 위치·크기 조정</button></div>`;
+    if (l.role !== 'bi') h += `<div class="row"><button class="btn sm grow" data-act="imgPick">이미지 바꾸기</button>${l.figPic ? '' : '<button class="btn sm grow" data-act="imgCrop" title="캔버스에서 이미지를 더블클릭해도 됩니다">✥ 위치·크기 조정</button>'}</div>`;
     if (l.role !== 'bi') h += `<div class="row"><button class="btn sm grow" data-act="fitZone">${isFree(SPECS[S.type]) ? '캔버스에 맞추기' : '권장 영역에 맞추기'}</button><button class="btn sm grow" data-act="fitRatio">원본 비율</button></div>`;
     if (l.assetId) h += `<p class="hint">라이브러리 에셋 <b class="mono">${esc(l.assetId)}</b>${l.slot ? ' · 슬롯 ' + esc(l.slot) : ''}${l.crop ? ' · 크롭 적용' : ''}</p>`;
     else if (l.role !== 'bi') h += `<p class="hint">브라우저 보관함 이미지 — 라이브러리에 등록되지 않아 기획안에는 저장되지 않습니다.</p>`;
@@ -868,7 +945,8 @@ function paintProps() {
     h += `<div class="row"><label>모서리</label><input type="number" data-k="radius" value="${l.radius || 0}" class="grow"></div>`;
     h += fxPropsHTML(l);
     const au = l.auto;
-    h += `<div class="row"><label>오토</label><label class="hint"><input type="checkbox" data-auto="on" ${au ? 'checked' : ''}> 글자에 맞춰 크기 자동 (오토 레이아웃)</label></div>`;
+    // 오토 = 도형 안 '자기 글자'에 맞춰 크기 자동(피그마 Hug). 자기 글자가 없는 도형(카드·배경)에는 보이지 않는다 — 켜면 도형이 쪼그라든다
+    if (au || (l.text && l.text.trim())) h += `<div class="row"><label>오토</label><label class="hint"><input type="checkbox" data-auto="on" ${au ? 'checked' : ''}> 글자에 맞춰 크기 자동 (피그마 Hug)</label></div>`;
     if (au) h += `<div class="row"><label>패딩 좌우</label><input type="number" min="0" data-auto="padX" value="${au.padX}" class="grow">
           <label style="flex:0 0 34px">상하</label><input type="number" min="0" data-auto="padY" value="${au.padY == null ? '' : au.padY}" placeholder="고정" class="grow"></div>
           <p class="hint">글자를 고치면 도형이 늘고 줄어듭니다. 글자를 모두 지우면 도형도 함께 삭제됩니다. 모서리 핸들을 끌면 패딩이 바뀝니다.</p>`;
@@ -1000,7 +1078,7 @@ function bindFxProps(box, l) {
 function layerAct(a, l) {
   const i = S.layers.indexOf(l);
   if (a === 'edit') { startEdit(l); return; }
-  if (a === 'imgCrop') { enterCrop(l); return; }
+  if (a === 'imgCrop') { if (canCrop(l)) enterCrop(l); return; }
   if (a === 'imgPick') {                    // 이미지 바꾸기 — 상자 크기는 그대로, 새 이미지는 가운데 채우기. 더블클릭해서 위치를 옮긴다
     const inp = el('input'); inp.type = 'file'; inp.accept = 'image/*';
     inp.onchange = async () => {
@@ -1009,7 +1087,7 @@ function layerAct(a, l) {
       if (!im) return toast('이미지를 열지 못했습니다', true);
       imgCache.set(src, im);
       Object.assign(l, { src, crop: UIKit.modeCrop('FILL', im.width, im.height, l.w, l.h) });
-      delete l.assetId; delete l.bake;
+      delete l.assetId; delete l.bake; delete l.figPic;
       push(); render(); paintProps(); measureKB();
       toast('이미지를 바꿨습니다 — 더블클릭하면 위치·크기를 옮길 수 있습니다');
     };
@@ -1055,7 +1133,8 @@ function toCanvas(e) {
 // Enter·Esc·더블클릭·바깥 클릭으로 끝낸다. 이미지 레이어는 l.crop, 도형 이미지 채우기는 scaleMode 'CROP' + crop 으로 남는다
 let cropEdit = null;                         // { l }
 const cropFill = l => l.kind === 'rect' ? imgFillOf(l) : null;
-const canCrop = l => !!l && !l.hidden && window.UIKit && ((l.kind === 'image' && l.role !== 'bi' && !l.white) || (l.kind === 'rect' && !!imgFillOf(l)));
+// 피그마가 그린 요소 그림(figPic — 아이콘·버튼·카드를 통째로 그린 것)은 자르기 대상이 아니다: 더블클릭해도 그냥 선택·이동
+const canCrop = l => !!l && !l.hidden && window.UIKit && ((l.kind === 'image' && l.role !== 'bi' && !l.white && !l.figPic) || (l.kind === 'rect' && !!imgFillOf(l)));
 const cropImg = l => l.kind === 'image' ? imgCache.get(l.src) : UIKit.img(cropFill(l).src);
 const cropOf = l => l.kind === 'image' ? l.crop : cropFill(l).crop;
 const cropRect = l => UIKit.cropDest(cropOf(l), l);
