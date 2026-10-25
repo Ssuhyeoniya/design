@@ -218,7 +218,8 @@ select option { background: var(--panel2); color: var(--fg); }
 #zoomLbl { color: var(--fg2); min-width: 42px; text-align: center; font-size: 11px; }
 
 /* ---------- 레이어 목록 ---------- */
-#layers { display: flex; flex-direction: column; gap: 3px; }
+#layers { display: flex; flex-direction: column; gap: 3px; overflow-x: auto; max-height: 60vh; overflow-y: auto; }
+#layers .layer { flex: none; }
 .layer {
   display: flex; align-items: center; gap: 6px; padding: 5px 7px; border-radius: 6px;
   background: var(--panel2); border: 1px solid transparent; cursor: pointer; font-size: 11px;

@@ -271,7 +271,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .layer-item .lname{flex:1;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .layer-item .ldel{border:none;background:none;color:var(--text-faint);cursor:pointer;font-size:13px;}
   .layer-item .ldel:hover{color:var(--danger);}
-  .layer-list{max-height:360px;}
+  .layer-list{max-height:420px;overflow-x:auto;}
+  .layer-list .layer-item{flex:none;}
   .layer-item .tw{width:10px;flex:none;font-size:10px;color:var(--text-faint);cursor:pointer;text-align:center;}
   .layer-item.grp{background:transparent;}
   .layer-item .lcnt{font-size:11px;color:var(--text-faint);}
@@ -541,7 +542,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="exportZone"></div>
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
-<script src="shared/ui-kit.js?v=20261025-12"></script>
+<script src="shared/ui-kit.js?v=20261025-14"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -1293,7 +1294,7 @@ function layerHTML(l){
 /* ===== 레이어 패널 (피그마식) =====
  * 위가 앞. 그룹은 ▾/▸ 로 접고 펼치고 하위 요소는 들여 쓴다. 목록에서 고르면 캔버스도 같이 고른다(Shift = 여러 개).
  * 끌어다 놓아 순서 변경 · 그룹 머리줄 가운데 = 그 그룹 안 맨 앞 · 그룹 밖 위아래 = 그룹에서 빠짐 · 그룹 머리줄을 끌면 그룹째 */
-const layerCollapsed=new Set();
+const layerTree=window.UIKit?UIKit.treeState():null;   // 접기 상태 (처음엔 접힘, 고른 것의 경로는 열림)
 let layerDragIds=null;
 function selIdsNow(){const ids=new Set(selSet||[]);if(selLayer!=null)ids.add(selLayer);return [...ids];}
 // 캔버스 클릭 — 아무것도 안 고른 상태면 맨 바깥 그룹, 그룹 안을 고르고 있으면 같은 단계의 형제
@@ -1305,10 +1306,11 @@ function blogClickTarget(arr,l,cur){
 }
 function layerRowsHTML(s){
   const ids=selIdsNow();let h='';
-  for(const r of UIKit.layerRows(LS(s),layerCollapsed)){
-    const pad=`style="margin-left:${r.depth*14}px"`;
+  layerTree.setSelection(LS(s),ids);
+  for(const r of UIKit.layerRows(LS(s),layerTree.shut)){
+    const pad=`style="padding-left:${9+r.depth*12}px;min-width:${150+r.depth*12}px"`;
     if(r.g!=null){
-      const mem=UIKit.groupMembers(LS(s),r.g),on=mem.length&&mem.every(y=>ids.includes(y.id)),shut=layerCollapsed.has(r.g);
+      const mem=UIKit.groupMembers(LS(s),r.g),on=mem.length&&mem.every(y=>ids.includes(y.id)),shut=layerTree.shut(r.g);
       h+=`<div class="layer-item grp${on?' on':''}" data-gid="${esc(String(r.g))}" draggable="true" ${pad}><span class="tw" data-tw="1">${shut?'▸':'▾'}</span><span class="ico">▦</span><span class="lname">${esc(r.name||'그룹')}</span><span class="lcnt">${mem.length}</span></div>`;
     }else{
       const x=r.l;
@@ -1325,7 +1327,7 @@ function bindLayerRows(s){
     const gid=it.dataset.gid!=null?realG(it.dataset.gid):null, lid=it.dataset.lid?+it.dataset.lid:null;
     const members=()=>UIKit.groupMembers(LS(s),gid);
     it.onclick=e=>{
-      if(e.target.dataset.tw!=null&&gid!=null){if(layerCollapsed.has(gid))layerCollapsed.delete(gid);else layerCollapsed.add(gid);renderAll();return;}
+      if(e.target.dataset.tw!=null&&gid!=null){layerTree.toggle(gid);renderAll();return;}
       if(e.target.dataset.ldel){
         const gone=withFitPartners(LS(s),[+e.target.dataset.ldel]);
         setLS(s,LS(s).filter(x=>!gone.includes(x.id)));UIKit.pruneGp(LS(s),true);

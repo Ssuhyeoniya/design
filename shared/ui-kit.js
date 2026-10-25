@@ -197,22 +197,34 @@
     return list;
   }
   // 레이어 패널 줄 — layers 는 뒤→앞 순서(그리는 순서). 반환은 앞→뒤(패널 위→아래)
+  // collapsed = 접힌 그룹 Set 또는 shut(g) 함수
   function layerRows(layers, collapsed) {
     const rows = [], open = [];
+    const isShut = typeof collapsed === 'function' ? collapsed : g => !!(collapsed && collapsed.has(g));
     for (const l of layers.slice().reverse()) {
       const gp = gpOf(l), gn = gpnOf(l);
       let k = 0; while (k < open.length && k < gp.length && open[k] === gp[k]) k++;
       open.length = k;
       for (let i = k; i < gp.length; i++) {
-        const hidden = open.some(g => collapsed && collapsed.has(g));
+        const hidden = open.some(isShut);
         if (!hidden) rows.push({ g: gp[i], name: gn[i], depth: i, path: gp.slice(0, i + 1) });
         open.push(gp[i]);
       }
-      if (!open.some(g => collapsed && collapsed.has(g))) rows.push({ l, depth: gp.length });
+      if (!open.some(isShut)) rows.push({ l, depth: gp.length });
     }
     return rows;
   }
   const groupMembers = (layers, g) => layers.filter(l => gpOf(l).includes(g));
+  // 레이어 패널 접기 상태 — 피그마처럼 그룹은 처음엔 접혀 있고, 고른 레이어가 든 그룹 경로만 저절로 열린다
+  function treeState() {
+    const opened = new Set(), closed = new Set();
+    let anc = new Set();
+    return {
+      setSelection(layers, ids) { anc = new Set(); layers.forEach(l => { if (ids.includes(l.id)) gpOf(l).forEach(g => anc.add(g)); }); },
+      shut: g => closed.has(g) || (!opened.has(g) && !anc.has(g)),
+      toggle(g) { if (closed.has(g) || (!opened.has(g) && !anc.has(g))) { closed.delete(g); opened.add(g); } else { opened.delete(g); closed.add(g); } },
+    };
+  }
   // 끌어다 놓기 — dr = { ids, group(옮기는 그룹 id|null) }, target = { l } | { g, path }, mode = before|after|in. 새 배열을 돌려준다
   function moveInTree(layers, dr, target, mode) {
     const moving = layers.filter(x => dr.ids.includes(x.id));
@@ -981,19 +993,27 @@
       if (clip) {
         const r = { x: node.x, y: node.y, w: node.w, h: node.h }, i = inter(r, clip);
         if (!i) return;                                                // 완전히 잘려 안 보이는 것
-        const inside = i.w >= r.w - .5 && i.h >= r.h - .5;
+        let inside = i.w >= r.w - .5 && i.h >= r.h - .5;
+        // 둥근 모서리로 자르는 프레임 — 안에 다 들어와 있어도 모서리에 닿는 그림·도형은 둥글게 잘라야 한다 (배너·카드 사진)
+        const cr = clip.r || [0, 0, 0, 0];
+        if (inside && node.t !== 'text' && cr.some(v => v > 0)) {
+          const L = r.x < clip.x + Math.max(cr[0], cr[3]), T = r.y < clip.y + Math.max(cr[0], cr[1]);
+          const R = r.x + r.w > clip.x + clip.w - Math.max(cr[1], cr[2]), B = r.y + r.h > clip.y + clip.h - Math.max(cr[2], cr[3]);
+          if ((cr[0] > 0 && L && T) || (cr[1] > 0 && R && T) || (cr[2] > 0 && R && B) || (cr[3] > 0 && L && B)) { inside = false; node.__corner = true; }
+        }
         if (!inside && node.bake) {                                      // 피그마 그림을 경계에서 잘라 쓴다 (100% 같게)
           const b = node.bake;
-          for (const k of Object.keys(node)) if (!['name', 'fromFigma', 'gp', 'gpn'].includes(k)) delete node[k];
+          for (const k of Object.keys(node)) if (!['name', 'fromFigma', 'gp', 'gpn', 'fb', 'lfill', 'abs'].includes(k)) delete node[k];
           Object.assign(node, { t: 'image', x: b.x, y: b.y, w: b.w, h: b.h, src: b.src, opacity: b.alpha == null ? 1 : b.alpha, radius: 0, clip: { ...clip } });
         } else if (!inside) {
           // 모서리 없는 단색 사각형만 크기를 줄이고, 나머지(그림·글자·배지·둥근 도형·효과)는 경계에서 픽셀로 잘라 그림으로 바꾼다 (applyClips)
           const fx = node.fx || {}, plain = node.t === 'box' && !node.label && !node.radius && !fx.radii && !fx.effects && !fx.stroke && fx.shape !== 'ellipse' &&
             (fx.fills || []).every(p => p.type === 'SOLID');
-          if (plain) Object.assign(node, i);
+          if (plain && !node.__corner) Object.assign(node, i);
           else node.clip = { ...clip };
         }
       }
+      delete node.__corner;
       nodes.push(node);
     }
     const bb = n => { const b = n.absoluteBoundingBox || { x: 0, y: 0, width: 0, height: 0 }; return { x: b.x - ox, y: b.y - oy, w: b.width, h: b.height }; };
@@ -1236,7 +1256,7 @@
   }
 
   // 지금 열린 화면의 버전 — 화면 왼쪽 아래에 작게 보인다 (예전 주소·캐시로 열었는지 바로 알 수 있게)
-  const VERSION = '2026-10-25 g';
+  const VERSION = '2026-10-25 i';
   const badge = () => { if (document.getElementById('uikitVer')) return; const b = document.createElement('div'); b.id = 'uikitVer'; b.textContent = '버전 ' + VERSION;
     b.style.cssText = 'position:fixed;left:8px;bottom:6px;z-index:9998;font:11px/1.4 -apple-system,sans-serif;color:#6b7280;background:rgba(255,255,255,.85);padding:2px 7px;border-radius:6px;pointer-events:none';
     document.body.appendChild(b); };
@@ -1244,6 +1264,6 @@
   window.UIKit = { VERSION, list, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, png, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
     exportJSON, importJSON, parseFont, fontName, fromFigma, figmaNeeds, parseFigmaLink, applyClips,
     paintBox, paintURL, outset, hasFx, textShadowCSS, img, set onImage(fn) { onImage = fn; },
-    bakeOk, bakeSig, labelSig, reflow, layoutSig, relayoutChanged, gpOf, gpnOf, setGp, pruneGp, layerRows, groupMembers, moveInTree, groupLayers, ungroupLayers, deeperSelection, remapGp, cropDest, destCrop, modeCrop, textPaint, gradCSS,
+    bakeOk, bakeSig, labelSig, reflow, layoutSig, relayoutChanged, gpOf, gpnOf, setGp, pruneGp, layerRows, treeState, groupMembers, moveInTree, groupLayers, ungroupLayers, deeperSelection, remapGp, cropDest, destCrop, modeCrop, textPaint, gradCSS,
     fonts: FONT_LIB.map(x => ({ family: x[0], weights: x[2] })), ensureFont, loadFonts, cssFamily, familyOf, set onFont(fn) { onFont = fn; } };
 })();

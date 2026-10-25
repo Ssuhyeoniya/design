@@ -826,19 +826,20 @@ function paintSpecInfo() {
 // ── 레이어 패널 (피그마식) ──
 // 위가 앞(맨 위에 그려지는 것). 그룹은 ▾/▸ 로 접고 펼치고, 하위 요소는 들여 쓴다.
 // 목록에서 고르면 캔버스도 같이 고른다 (Shift = 여러 개). 끌어다 놓아 순서를 바꾸고, 그룹 안팎으로 옮긴다.
-const collapsed = new Set();                 // 접힌 그룹 gid
+const tree = window.UIKit ? UIKit.treeState() : null;   // 접기 상태 (처음엔 접힘, 고른 것의 경로는 열림)
 let layerDrag = null;                        // { ids: [...] } 끌고 있는 레이어들
 function paintLayers() {
   const box = $('#layers'); box.innerHTML = '';
   const ids = selIds();
-  const rows = UIKit.layerRows(S.layers, collapsed);
+  tree.setSelection(S.layers, ids);
+  const rows = UIKit.layerRows(S.layers, tree.shut);
   for (const r of rows) {
     let d;
     if (r.g != null) {
-      const mem = UIKit.groupMembers(S.layers, r.g), on = mem.length && mem.every(x => ids.includes(x.id)), shut = collapsed.has(r.g);
+      const mem = UIKit.groupMembers(S.layers, r.g), on = mem.length && mem.every(x => ids.includes(x.id)), shut = tree.shut(r.g);
       d = el('div', 'layer grp' + (on ? ' sel' : ''));
       d.innerHTML = `<span class="tw">${shut ? '▸' : '▾'}</span><span class="ic">▦</span><span class="nm"><b>${esc(r.name || '그룹')}</b></span><span class="lk">${mem.length}</span>`;
-      d.querySelector('.tw').onclick = e => { e.stopPropagation(); if (shut) collapsed.delete(r.g); else collapsed.add(r.g); paintLayers(); };
+      d.querySelector('.tw').onclick = e => { e.stopPropagation(); tree.toggle(r.g); paintLayers(); };
       d.onclick = e => pickRows(e, mem.map(x => x.id));
       d.ondblclick = () => { const v = prompt('그룹 이름', r.name || '그룹'); if (v == null) return; mem.forEach(x => { const g = UIKit.gpOf(x), n = UIKit.gpnOf(x); n[g.indexOf(r.g)] = v.trim() || '그룹'; UIKit.setGp(x, g, n); }); push(); paintLayers(); };
     } else {
@@ -849,7 +850,7 @@ function paintLayers() {
         `<span class="lk">${l.hidden ? '숨김' : ''}${l.lockSize ? ' 고정' : ''}</span>`;
       d.onclick = e => pickRows(e, [l.id]);
     }
-    d.style.marginLeft = (r.depth * 14) + 'px';
+    d.style.paddingLeft = (7 + r.depth * 12) + 'px'; d.style.minWidth = (150 + r.depth * 12) + 'px';   // 들여쓰기는 줄 안에서 — 깊어도 이름이 안 짤리게 (패널은 가로로 스크롤)
     if (r.g != null) d.dataset.g = r.g; else d.dataset.id = r.l.id;
     // 끌어다 놓기 — 위/아래 절반 = 그 앞/뒤, 그룹 머리줄 가운데 = 그 그룹 안 맨 앞
     d.draggable = true;
