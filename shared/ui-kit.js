@@ -69,6 +69,7 @@
   const FONT_LIB = [
     ['SCDream', 's-core-dream', [100, 200, 300, 400, 500, 600, 700, 800, 900]],   // 배너 스튜디오 동봉본을 가리킨다
     ['Black Han Sans', 'black-han-sans', [400]],
+    ['조선견고딕', 'chosun-bg', [400]],
     ['Do Hyeon', 'do-hyeon', [400]],
     ['Gmarket Sans', 'gmarket-sans', [500]],
     ['Gothic A1', 'gothic-a1', [100, 200, 300, 400, 500, 600, 700, 800, 900]],
@@ -677,7 +678,7 @@
     [/noto\s*sans\s*(kr|korean|cjk\s*kr)|본고딕/i, 'Noto Sans KR'], [/nanum\s*square\s*neo|나눔스퀘어\s*네오/i, 'NanumSquare Neo'],
     [/nanum\s*square|나눔스퀘어/i, 'NanumSquare Neo'], [/nanum\s*gothic|나눔고딕/i, 'Nanum Gothic'], [/nanum\s*myeongjo|나눔명조/i, 'Nanum Myeongjo'],
     [/nanum\s*pen|나눔손글씨\s*펜/i, 'Nanum Pen Script'], [/ibm\s*plex\s*sans\s*kr/i, 'IBM Plex Sans KR'], [/gothic\s*a1/i, 'Gothic A1'],
-    [/black\s*han\s*sans|검은고딕/i, 'Black Han Sans'], [/do\s*hyeon|도현/i, 'Do Hyeon'], [/^jua|주아/i, 'Jua'], [/gowun\s*dodum|고운\s*돋움/i, 'Gowun Dodum'],
+    [/black\s*han\s*sans|검은고딕/i, 'Black Han Sans'], [/chosun\s*bg|조선\s*견고딕/i, '조선견고딕'], [/do\s*hyeon|도현/i, 'Do Hyeon'], [/^jua|주아/i, 'Jua'], [/gowun\s*dodum|고운\s*돋움/i, 'Gowun Dodum'],
     [/gowun\s*batang|고운\s*바탕/i, 'Gowun Batang'], [/song\s*myung|송명/i, 'Song Myung'], [/^suit|수트/i, 'SUIT'], [/spoqa/i, 'Spoqa Han Sans Neo'],
     [/wanted\s*sans|원티드/i, 'Wanted Sans'], [/gmarket|지마켓/i, 'Gmarket Sans'], [/jalnan|잘난/i, 'Jalnan Gothic'],
     [/^inter\b/i, 'Inter'], [/^roboto/i, 'Roboto'], [/^montserrat/i, 'Montserrat'], [/^poppins/i, 'Poppins'], [/^(helvetica|arial)/i, 'Inter']];

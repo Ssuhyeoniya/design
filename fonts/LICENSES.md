@@ -12,6 +12,7 @@
 | NanumSquare Neo | nanum-square-neo | typeface-nanum-square-neo | SIL OFL 1.1 (네이버 나눔글꼴) |
 | Gmarket Sans (Medium) | gmarket-sans | @noonnu/gmarket-sans-medium | G마켓 무료 글꼴 — 상업적 사용 가능, 글꼴 파일 판매 금지 |
 | 잘난체 (Jalnan Gothic) | jalnan-gothic | 기존 블로그 이미지 제작 동봉본 | 여기어때 무료 글꼴 — 상업적 사용 가능, 글꼴 파일 판매 금지 |
+| 조선견고딕 (ChosunBg) | chosun-bg | @noonnu/chosun-bg | 조선일보 무료 글꼴 — 상업적 사용 가능, 글꼴 파일 판매 금지 |
 | 에스코어드림 · 프리텐다드 | banner_studio/fonts | 기존 동봉본 | 에스코어 무료 글꼴 · SIL OFL 1.1 |
 
 피그마의 SF Pro(아이폰 화면 글꼴)는 애플 라이선스상 배포할 수 없어 시스템 글꼴(맥에서는 SF Pro 그대로, 윈도우에서는 Inter)로 그린다.
