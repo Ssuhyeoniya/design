@@ -197,7 +197,7 @@
     <div class="row"><button class="cancel">취소</button><button class="ok">삭제</button></div>
   </div></div>
 
-<script src="shared/ui-kit.js?v=20261025-6"></script>
+<script src="shared/ui-kit.js?v=20261025-7"></script>
 <script>
 const $=s=>document.querySelector(s);
 
@@ -686,7 +686,7 @@ async function figImport(){
 async function figImportExport(data){
   $('#figLog').innerHTML='';
   const group=$('#figGroup').value.trim()||data.file||'피그마';
-  figLog(`플러그인 파일 — ${data.file||''} · 프레임 ${data.frames.length}개${data.bakes?` · 피그마 그림 ${Object.keys(data.bakes).length}개 (고치기 전까지 피그마와 100% 같게 보여)`:' · ⚠ 예전 플러그인 파일이야 — 플러그인을 다시 받아 내보내면 피그마와 100% 같게 나와'}`,data.bakes?'':'warn');
+  figLog(`[버전 ${UIKit.VERSION}] 플러그인 파일 — ${data.file||''} · 프레임 ${data.frames.length}개${data.bakes?` · 피그마 그림 ${Object.keys(data.bakes).length}개 (고치기 전까지 피그마와 100% 같게 보여)`:' · ⚠ 예전 플러그인 파일이야 — 플러그인을 다시 받아 내보내면 피그마와 100% 같게 나와'}`,data.bakes?'':'warn');
   (data.errors||[]).slice(0,10).forEach(e=>figLog('   ⚠ 피그마에서 그림으로 못 뽑음: '+e,'warn'));
   let saved=0;
   for(const f of data.frames){

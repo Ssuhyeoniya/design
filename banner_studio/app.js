@@ -808,8 +808,19 @@ function paintSpecInfo() {
 
 function paintLayers() {
   const box = $('#layers'); box.innerHTML = '';
+  let prevG = null;
   [...S.layers].reverse().forEach(l => {
+    // 그룹(피그마 묶음·Ctrl+G) — 머리줄을 누르면 그룹 전체 선택, 안의 레이어는 들여 쓴다
+    if (l.gid && l.gid !== prevG) {
+      const mem = S.layers.filter(x => x.gid === l.gid), on = mem.every(x => selIds().includes(x.id));
+      const g = el('div', 'layer grp' + (on ? ' sel' : ''));
+      g.innerHTML = `<span class="ic">📁</span><span class="nm"><b>${esc(l.gname || '그룹')}</b></span><span class="lk">${mem.length}개</span>`;
+      g.onclick = () => { selectGroup(mem[mem.length - 1]); paintLayers(); paintProps(); renderOverlay(); };
+      box.appendChild(g);
+    }
+    prevG = l.gid || null;
     const d = el('div', 'layer' + (l.id === sel ? ' sel' : selIds().includes(l.id) ? ' sel multi' : '') + (l.lockSize ? ' locked' : ''));
+    if (l.gid) d.style.paddingLeft = '22px';
     const ic = l.kind === 'text' ? 'T' : l.kind === 'rect' ? '▭' : '▣';
     d.innerHTML = `<span class="ic">${ic}</span><span class="nm">${esc(l.name || l.kind)}</span>` +
       `<span class="lk">${l.hidden ? '숨김' : ''}${l.lockSize ? ' 고정' : ''}</span>`;
@@ -1343,9 +1354,9 @@ document.addEventListener('keydown', e => {
   const group = selLayers();
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
     e.preventDefault();
-    if (e.shiftKey) { const gs = new Set(group.map(x => x.gid).filter(Boolean)); S.layers.forEach(x => { if (gs.has(x.gid)) delete x.gid; }); toast('그룹을 해제했습니다'); }
-    else if (group.length > 1) { const g = uid(); group.forEach(x => { x.gid = g; }); toast(`${group.length}개를 그룹으로 묶었습니다`); }
-    push(); paintProps(); return;
+    if (e.shiftKey) { const gs = new Set(group.map(x => x.gid).filter(Boolean)); S.layers.forEach(x => { if (gs.has(x.gid)) { delete x.gid; delete x.gname; } }); toast('그룹을 해제했습니다'); }
+    else if (group.length > 1) { const g = uid(); group.forEach(x => { x.gid = g; delete x.gname; }); toast(`${group.length}개를 그룹으로 묶었습니다 (Ctrl+Shift+G 해제)`); }
+    push(); paintLayers(); paintProps(); renderOverlay(); return;
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
@@ -1684,7 +1695,7 @@ async function insertUi(c) {
   const at = { x: Math.round((S.w - c.w * k) / 2), y: Math.round((S.h - c.h * k) / 2) };
   const { layers, skipped } = UIKit.toBanner(c, at, k, uid);
   if (!layers.length) return toast('이 UI 에는 배너 스튜디오에서 쓸 수 있는 요소가 없습니다', true);
-  if (layers.length > 1) { const g = uid(); layers.forEach(l => { l.gid = g; }); }
+  if (layers.length > 1) { const g = uid(); layers.forEach(l => { l.gid = g; l.gname = c.name; }); }   // 넣은 컴포넌트는 통째로 한 그룹
   S.layers.push(...layers);
   sel = layers[layers.length - 1].id; multi.clear(); multiFor = sel;
   layers.slice(0, -1).forEach(l => multi.add(l.id));
@@ -1704,7 +1715,8 @@ async function openUiEditor(id) {
   closeEdit();
   // 피그마 프레임은 캔버스 = 프레임 크기 그대로(여백 없음), 배경도 프레임 배경색. 그 밖의 UI 는 그림자가 보이게 약간 띄운다
   // 예전에 저장한 피그마 컴포넌트는 frame 표시가 없다 — 피그마에서 온 것은 모두 프레임으로 본다
-  const isFrame = !!(c.frame || c.origin === 'figma');
+  // 화면 전체를 덮는 배경 도형이 있으면(예전 버전에서 '새로 저장'해 표시가 빠진 화면 포함) 프레임으로 본다
+  const isFrame = !!(c.frame || c.origin === 'figma' || c.nodes.some(n => n.t === 'box' && n.x <= 0 && n.y <= 0 && n.x + n.w >= c.w - 1 && n.y + n.h >= c.h - 1));
   const m = isFrame ? 0 : Math.max(24, ...c.nodes.map(n => n.t === 'box' ? UIKit.outset(n) + 8 : 0));
   S = blankState('free');
   const bgc = c.bg && /^#[0-9a-f]{6}$/i.test(c.bg) ? c.bg : isFrame ? '#ffffff' : '#e9ecf1';
@@ -1716,7 +1728,7 @@ async function openUiEditor(id) {
   await preloadImgs();
   syncCanvasInputs(); paintSpecInfo(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
   history = []; hIdx = -1; push();
-  uiEdit = { comp: c, snap: history[0], frame: isFrame };
+  uiEdit = { comp: c, snap: history[0], frame: isFrame, m };
   await paintUiEditBar();
   toast(`“${c.name}” 편집 — 글자·색·이미지·효과를 고친 뒤 위의 저장을 누르세요 (캔버스 배경은 저장되지 않습니다)`);
 }
@@ -1799,10 +1811,16 @@ async function doExport() {
   const fmt = confirm('PNG 로 내보냅니다.\n\n[확인] PNG   /   [취소] JPG (용량 절감)') ? 'png' : 'jpg';
   sel = null; renderArt();
   const mime = fmt === 'png' ? 'image/png' : 'image/jpeg';
-  let q = 0.92, blob = await new Promise(r => art.toBlob(r, mime, q));
+  // 컴포넌트 편집기의 둘레 여백(보기용)은 내보내지 않는다 — 컴포넌트 크기 그대로
+  let src = art;
+  if (uiEdit && uiEdit.m > 0) {
+    const m = uiEdit.m, cv = el('canvas'); cv.width = Math.max(1, S.w - m * 2); cv.height = Math.max(1, S.h - m * 2);
+    cv.getContext('2d').drawImage(art, m, m, cv.width, cv.height, 0, 0, cv.width, cv.height); src = cv;
+  }
+  let q = 0.92, blob = await new Promise(r => src.toBlob(r, mime, q));
   // JPG 는 상한에 맞을 때까지 품질을 낮춘다
   while (fmt === 'jpg' && sp.max_kb && blob.size / 1024 > sp.max_kb && q > 0.4) {
-    q -= 0.08; blob = await new Promise(r => art.toBlob(r, mime, q));
+    q -= 0.08; blob = await new Promise(r => src.toBlob(r, mime, q));
   }
   const kb = Math.round(blob.size / 1024);
   lastKB = kb; paintChecks(); renderOverlay();

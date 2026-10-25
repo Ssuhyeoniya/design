@@ -219,6 +219,7 @@
     for (const l of layers) if (l.type === 't' && l.fitBox && ids.has(l.fitBox)) label.set(l.fitBox, l);
     const fam = l => { if (!l.font) return 'Pretendard'; const f = familyOf(l.font); return f === 'SCDream' || libOf(f) ? f : /apple-system/.test(l.font) ? 'System' : l.font; };
     for (const l of layers) {
+      const from0 = nodes.length;
       const native = { app: 'blog', layer: clone(l) };
       if (l.type === 'r' && l.shape !== 'arrow') {
         const n = { t: 'box', x: l.x, y: l.y, w: l.w, h: l.h, fill: l.fill, radius: l.radius || 0,
@@ -243,6 +244,7 @@
         const b = l.type === 'f' ? { w: Math.max(l.w, l.topW || 0), h: l.h } : { w: l.w, h: l.h };
         nodes.push({ t: 'raw', x: l.x, y: l.y, w: b.w, h: b.h, native });
       }
+      if (l.gid) for (const x of nodes.slice(from0)) { x.grp = 'g' + l.gid; if (l.gname) x.grpName = l.gname; }   // 레이어 그룹 → 저장
     }
     return { ...normalize(autoNest(nodes)), origin: 'blog' };
   }
@@ -251,7 +253,10 @@
     const out = [], skipped = [];
     const base = (n, extra) => n.native && n.native.app === 'blog' ? Object.assign(clone(n.native.layer), extra) : extra;
     const font = f => (!f || f === 'Pretendard') ? '' : (f === 'System' || libOf(f)) ? cssFamily(f) : f;
+    const gmap = {};                      // 피그마 그룹(n.grp) → 레이어 그룹(gid)
+    const regroup = (from, n) => { if (!n.grp) return; const g = gmap[n.grp] || (gmap[n.grp] = mk.nid()); for (const l of out.slice(from)) { l.gid = g; if (n.grpName) l.gname = n.grpName; } };
     for (const n of scaled(comp, k)) {
+      const from0 = out.length;
       const x = at.x + n.x, y = at.y + n.y;
       if (n.t === 'box') {
         const r = mk.rLayer(base(n, { x, y, w: n.w, h: n.h, fill: n.fill, radius: n.radius }));
@@ -296,6 +301,7 @@
         if (k !== 1) for (const p of ['w', 'h', 'topW']) if (l[p] != null) l[p] = Math.round(l[p] * k);
         out.push(l);
       } else skipped.push(n);
+      regroup(from0, n);
     }
     return { layers: out, skipped: skipped.length };
   }
@@ -332,6 +338,7 @@
   function fromBanner(layers, tm, frame) {
     const nodes = [];
     for (const l of layers) {
+      const from0 = nodes.length;
       const native = { app: 'banner', layer: clone(l) };
       if (l.kind === 'rect') {
         const n = { t: 'box', x: l.x, y: l.y, w: l.w, h: l.h, fill: l.fill, radius: l.radius || 0, opacity: l.opacity == null ? 1 : l.opacity, native, fx: l.fx ? clone(l.fx) : undefined, bake: bakeOf(l), noNest: !!l.bake };
@@ -352,6 +359,7 @@
       } else if (l.kind === 'image') {
         nodes.push({ t: 'image', x: l.x, y: l.y, w: l.w, h: l.h, src: l.src, opacity: l.opacity == null ? 1 : l.opacity, radius: l.radius || 0, native });
       }
+      if (l.gid) for (const x of nodes.slice(from0)) { x.grp = 'g' + l.gid; if (l.gname) x.grpName = l.gname; }   // 레이어 그룹 → 저장
     }
     if (frame) {
       // 피그마 프레임은 레이어 구조를 그대로 둔다 — 화면 배경 같은 큰 도형에 글자를 라벨로 합치면 글자가 사라진다
@@ -368,7 +376,10 @@
       if (b.role === 'bi' || b.role === 'button' || b.role === 'buttonText' || b.role === 'main' || b.role === 'sub' || b.role === 'logo') b.role = 'free';
       return Object.assign(b, extra, { id: uid() });
     };
+    const gmap = {};                      // 피그마 그룹(n.grp) → 레이어 그룹(gid)
+    const regroup = (from, n) => { if (!n.grp) return; const g = gmap[n.grp] || (gmap[n.grp] = uid()); for (const l of out.slice(from)) { l.gid = g; if (n.grpName) l.gname = n.grpName; } };
     for (const n of scaled(comp, k)) {
+      const from0 = out.length;
       const x = at.x + n.x, y = at.y + n.y;
       if (n.t === 'box') {
         const L = n.label;
@@ -389,8 +400,9 @@
           tfill: n.tfill ? clone(n.tfill) : undefined }));
         attachBake(out[out.length - 1], n.bake);
       } else if (n.t === 'image') {
-        out.push(base(n, { kind: 'image', role: 'object', name: '이미지', x, y, w: n.w, h: n.h, src: n.src, opacity: n.opacity == null ? 1 : n.opacity, radius: n.radius || 0 }));
+        out.push(base(n, { kind: 'image', role: 'object', name: n.name || '이미지', x, y, w: n.w, h: n.h, src: n.src, opacity: n.opacity == null ? 1 : n.opacity, radius: n.radius || 0 }));
       } else skipped.push(n);
+      regroup(from0, n);
     }
     return { layers: out, skipped: skipped.length };
   }
@@ -730,14 +742,16 @@
     let clip = null;
     const inter = (a, c) => { const x = Math.max(a.x, c.x), y = Math.max(a.y, c.y), x2 = Math.min(a.x + a.w, c.x + c.w), y2 = Math.min(a.y + a.h, c.y + c.h);
       return x2 > x && y2 > y ? { x, y, w: x2 - x, h: y2 - y } : null; };
+    let curGrp = null;                    // 피그마 레이어 묶음(루트 바로 아래 프레임·그룹) — 편집기에서 그룹으로 잡힌다
     function push(node) {
+      if (curGrp) { node.grp = curGrp.id; node.grpName = curGrp.name; }
       if (clip) {
         const r = { x: node.x, y: node.y, w: node.w, h: node.h }, i = inter(r, clip);
         if (!i) return;                                                // 완전히 잘려 안 보이는 것
         const inside = i.w >= r.w - .5 && i.h >= r.h - .5;
         if (!inside && node.bake) {                                      // 피그마 그림을 경계에서 잘라 쓴다 (100% 같게)
           const b = node.bake;
-          for (const k of Object.keys(node)) if (!['name', 'fromFigma'].includes(k)) delete node[k];
+          for (const k of Object.keys(node)) if (!['name', 'fromFigma', 'grp', 'grpName'].includes(k)) delete node[k];
           Object.assign(node, { t: 'image', x: b.x, y: b.y, w: b.w, h: b.h, src: b.src, opacity: b.alpha == null ? 1 : b.alpha, radius: 0, clip: { ...clip } });
         } else if (!inside) {
           // 모서리 없는 단색 사각형만 크기를 줄이고, 나머지(그림·글자·배지·둥근 도형·효과)는 경계에서 픽셀로 잘라 그림으로 바꾼다 (applyClips)
@@ -856,13 +870,15 @@
       const pre = clip;
       for (const c of kids) {
         if (c.isMask) { const mb = bb(c); const ci = clip ? inter(mb, clip) : mb; clip = ci ? { ...ci, r: c.rectangleCornerRadii || [c.cornerRadius || 0, c.cornerRadius || 0, c.cornerRadius || 0, c.cornerRadius || 0] } : { x: 0, y: 0, w: 0, h: 0 }; continue; }
-        walk(c, op);
+        if (n === root && (c.children || []).some(visible)) { curGrp = { id: c.id, name: c.name }; walk(c, op); curGrp = null; }   // 루트 바로 아래 묶음 = 그룹
+        else walk(c, op);
       }
       clip = pre;
       clip = prev;
     }
     walk(root, 1);
     if (!nodes.length) throw new Error('가져올 수 있는 요소가 없습니다');
+    { const cnt = {}; nodes.forEach(n => { if (n.grp) cnt[n.grp] = (cnt[n.grp] || 0) + 1; }); nodes.forEach(n => { if (n.grp && cnt[n.grp] < 2) { delete n.grp; delete n.grpName; } }); }
     // 루트 기준 좌표 → 정규화 (효과는 도형 밖으로 번져도 좌표에는 넣지 않는다)
     // 내용을 자르는 프레임이면 크기 = 피그마 프레임 크기 그대로 (넘친 요소 때문에 여백이 생기지 않게)
     if (root.clipsContent) {
@@ -965,7 +981,13 @@
     return n;
   }
 
-  window.UIKit = { list, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, png, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
+  // 지금 열린 화면의 버전 — 화면 왼쪽 아래에 작게 보인다 (예전 주소·캐시로 열었는지 바로 알 수 있게)
+  const VERSION = '2026-10-25 c';
+  const badge = () => { if (document.getElementById('uikitVer')) return; const b = document.createElement('div'); b.id = 'uikitVer'; b.textContent = '버전 ' + VERSION;
+    b.style.cssText = 'position:fixed;left:8px;bottom:6px;z-index:9998;font:11px/1.4 -apple-system,sans-serif;color:#6b7280;background:rgba(255,255,255,.85);padding:2px 7px;border-radius:6px;pointer-events:none';
+    document.body.appendChild(b); };
+  if (document.body) badge(); else document.addEventListener('DOMContentLoaded', badge);
+  window.UIKit = { VERSION, list, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, png, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
     exportJSON, importJSON, parseFont, fontName, fromFigma, figmaNeeds, parseFigmaLink, applyClips,
     paintBox, paintURL, outset, hasFx, textShadowCSS, img, set onImage(fn) { onImage = fn; },
     bakeOk, bakeSig, labelSig, cropDest, destCrop, modeCrop, textPaint, gradCSS,
