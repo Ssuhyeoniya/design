@@ -40,7 +40,9 @@
       t.onabort = () => rej(t.error || new Error('저장 중단 (용량 부족일 수 있습니다)'));
     });
   }
-  const list = () => tx('readonly', os => os.getAll()).then(a => a.sort((x, y) => y.ts - x.ts));
+  // 순서 — 직접 정한 순서(order)가 있으면 그 순서, 없으면 최근 저장이 앞
+  const byOrder = (x, y) => (x.order != null && y.order != null) ? x.order - y.order : x.order != null ? -1 : y.order != null ? 1 : y.ts - x.ts;
+  const list = () => tx('readonly', os => os.getAll()).then(a => a.sort(byOrder));
   const get = id => tx('readonly', os => os.get(id));
   const put = c => tx('readwrite', os => os.put(c));
   const del = id => tx('readwrite', os => os.delete(id));
@@ -52,9 +54,20 @@
   async function setGroup(ids, group) {
     for (const id of [].concat(ids)) { const c = await get(id); if (c) { c.group = group || ''; await put(c); } }
   }
+  // 그룹은 '상위/하위/…' 경로 — 이름을 바꾸거나 옮기면 하위 그룹도 같이
   async function renameGroup(from, to) {
-    for (const c of await list()) if ((c.group || '') === from) { c.group = to || ''; await put(c); }
+    for (const c of await list()) { const g = c.group || ''; if (g === from || g.startsWith(from + '/')) { c.group = (to || '') + g.slice(from.length); if (c.group.startsWith('/')) c.group = c.group.slice(1); await put(c); } }
   }
+  // 모든 그룹 경로 (상위 경로 포함, 빈 그룹 extra 포함) — 이름순
+  function groupPaths(items, extra) {
+    const set = new Set();
+    for (const g of [...items.map(c => c.group || ''), ...(extra || [])]) { if (!g) continue; const p = g.split('/'); for (let i = 1; i <= p.length; i++) set.add(p.slice(0, i).join('/')); }
+    return [...set].sort((a, b) => a.localeCompare(b, 'ko'));
+  }
+  // 그룹(하위 포함)에 드는가
+  const inGroup = (c, g) => g === '*' || (g === '' ? !(c.group || '') : ((c.group || '') === g || (c.group || '').startsWith(g + '/')));
+  // 순서 저장 — ids 순서대로 order 를 매긴다
+  async function setOrder(ids) { let i = 0; for (const id of ids) { const c = await get(id); if (c) { c.order = i++; await put(c); } } }
   async function groups() {
     const g = new Map();
     for (const c of await list()) g.set(c.group || '', (g.get(c.group || '') || 0) + 1);
@@ -1259,12 +1272,12 @@
   }
 
   // 지금 열린 화면의 버전 — 화면 왼쪽 아래에 작게 보인다 (예전 주소·캐시로 열었는지 바로 알 수 있게)
-  const VERSION = '2026-10-25 j';
+  const VERSION = '2026-10-25 k';
   const badge = () => { if (document.getElementById('uikitVer')) return; const b = document.createElement('div'); b.id = 'uikitVer'; b.textContent = '버전 ' + VERSION;
     b.style.cssText = 'position:fixed;left:8px;bottom:6px;z-index:9998;font:11px/1.4 -apple-system,sans-serif;color:#6b7280;background:rgba(255,255,255,.85);padding:2px 7px;border-radius:6px;pointer-events:none';
     document.body.appendChild(b); };
   if (document.body) badge(); else document.addEventListener('DOMContentLoaded', badge);
-  window.UIKit = { VERSION, list, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, png, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
+  window.UIKit = { VERSION, list, groupPaths, inGroup, setOrder, get, put, del, rename, setGroup, renameGroup, groups, save, thumb, png, measure, fit, fromBlog, toBlog, fromBanner, toBanner, placeScale,
     exportJSON, importJSON, parseFont, fontName, fromFigma, figmaNeeds, parseFigmaLink, applyClips,
     paintBox, paintURL, outset, hasFx, textShadowCSS, img, set onImage(fn) { onImage = fn; },
     bakeOk, bakeSig, labelSig, reflow, layoutSig, relayoutChanged, gpOf, gpnOf, setGp, pruneGp, layerRows, treeState, groupMembers, moveInTree, groupLayers, ungroupLayers, deeperSelection, remapGp, cropDest, destCrop, modeCrop, textPaint, gradCSS,

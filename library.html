@@ -89,6 +89,30 @@
   .gchip b{color:var(--text-faint);font-weight:600;margin-left:3px;}
   .gchip.on{background:var(--text);border-color:var(--text);color:#fff;}
   .gchip.on b{color:#c9ced6;}
+  /* UI 컴포넌트 — 왼쪽 그룹 목록(그룹 안 그룹) + 오른쪽 카드 */
+  .ui-wrap{display:flex;gap:18px;align-items:flex-start;}
+  #gtree{flex:0 0 230px;position:sticky;top:70px;max-height:calc(100vh - 90px);overflow:auto;background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px;}
+  .ui-main{flex:1;min-width:0;}
+  .gt-row{display:flex;align-items:center;gap:5px;padding:6px 8px;border-radius:7px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text-sub);user-select:none;}
+  .gt-row:hover{background:#f3f5f8;}
+  .gt-row.on{background:#eef4ff;color:var(--accent);}
+  .gt-row.drop{outline:2px solid var(--accent);background:#e3edff;}
+  .gt-tw{width:12px;flex:none;font-size:10px;color:var(--text-faint);text-align:center;}
+  .gt-ic{flex:none;font-size:12px;}
+  .gt-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .gt-n{flex:none;font-size:11px;color:var(--text-faint);font-weight:600;}
+  .gt-act{display:none;gap:2px;flex:none;}
+  .gt-row:hover .gt-act{display:flex;}
+  .gt-row:hover .gt-n{display:none;}
+  .gt-act button{border:none;background:none;cursor:pointer;font-size:11px;padding:1px 3px;border-radius:4px;color:var(--text-sub);}
+  .gt-act button:hover{background:#e3e7ee;}
+  .gt-hint{font-size:11px;color:var(--text-faint);line-height:1.5;margin-top:8px;}
+  .ui-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+  .ui-path{font-size:14px;}
+  .ui-card.dragging{opacity:.45;}
+  .ui-card.dropL{box-shadow:-4px 0 0 var(--accent);}
+  .ui-card.dropR{box-shadow:4px 0 0 var(--accent);}
+  @media (max-width:760px){.ui-wrap{flex-direction:column;}#gtree{position:static;width:100%;flex:none;max-height:none;}}
   #selAllLbl{display:inline-flex;align-items:center;gap:5px;}
   #selAllLbl input{margin:0;cursor:pointer;}
   .gacts{display:flex;gap:6px;margin-left:auto;}
@@ -197,7 +221,7 @@
     <div class="row"><button class="cancel">취소</button><button class="ok">삭제</button></div>
   </div></div>
 
-<script src="shared/ui-kit.js?v=20261025-15"></script>
+<script src="shared/ui-kit.js?v=20261025-16"></script>
 <script>
 const $=s=>document.querySelector(s);
 
@@ -422,24 +446,40 @@ async function renderUi(){
     '저장: 스튜디오에서 도형·텍스트를 Shift+클릭으로 함께 고른 뒤 <b>🧩 선택을 UI로 저장</b>. 도형 안의 글자는 <b>오토 레이아웃</b>으로 묶여서, 넣은 뒤 글자를 고치면 도형이 패딩에 맞춰 늘고 줄고, 글자를 다 지우면 도형도 사라져.<br>'+
     '넣을 때는 복사본이라 여기서 이름을 바꾸거나 지워도 이미 만든 시안은 그대로야. 다른 PC·팀원과는 <b>⤓ 내보내기 / ⤒ 가져오기</b>(.json)로 나눠.</div>';
   if(!list.length){body.innerHTML=tip+'<div class="empty">저장된 UI 컴포넌트가 없어.<br><b>🎨 피그마에서 가져오기</b> 로 피그마 프레임을 바로 가져올 수도 있어.</div>';return;}
-  // 그룹(폴더) — 칩으로 골라 보고, 카드마다 그룹을 바꾸거나 여러 개를 골라 한 번에 옮긴다
-  const gnames=[...new Set(list.map(c=>c.group||''))].sort((a,b)=>a===''?1:b===''?-1:a.localeCompare(b,'ko'));
-  if(curGroup!=='*'&&!gnames.includes(curGroup)&&!newGroups.includes(curGroup))curGroup='*';
-  const allG=[...new Set([...gnames.filter(Boolean),...newGroups])].sort((a,b)=>a.localeCompare(b,'ko'));
-  const shown=list.filter(c=>curGroup==='*'||(c.group||'')===curGroup);
-  const chip=(v,label,n)=>`<button class="gchip${curGroup===v?' on':''}" data-g="${esc(v)}">${esc(label)}<b>${n}</b></button>`;
+  // 그룹(폴더) — 왼쪽 목록(그룹 안 그룹). 그룹은 '상위/하위' 경로로 저장한다
+  const allG=UIKit.groupPaths(list,folders);
+  if(curGroup!=='*'&&curGroup!==''&&!allG.includes(curGroup))curGroup='*';
+  if(curGroup===''&&!list.some(c=>!c.group))curGroup='*';
+  const shown=list.filter(c=>UIKit.inGroup(c,curGroup));
   const allPicked=shown.length>0&&shown.every(c=>picked.has(c.id));
-  const gbar=`<div id="gbar"><label class="gchip" id="selAllLbl" title="지금 보이는 컴포넌트를 모두 선택 / 해제"><input type="checkbox" id="selAll"${allPicked?' checked':''}${shown.length?'':' disabled'}> 전체 선택<b>${shown.length}</b></label>
-    ${chip('*','전체',list.length)}${allG.map(g=>chip(g,'📁 '+g,list.filter(c=>c.group===g).length)).join('')}${gnames.includes('')?chip('','그룹 없음',list.filter(c=>!c.group).length):''}
-    <button class="gchip" id="gNew">＋ 새 그룹</button>
-    ${curGroup!=='*'&&curGroup!==''?`<span class="gacts"><button class="btn small" id="gRen">그룹 이름 바꾸기</button><button class="btn small" id="gExp">그룹 내보내기</button><button class="btn small danger" id="gDel">그룹 삭제</button></span>`:''}</div>
-    <div id="selbar"><span id="selN"></span><select id="selTo">${allG.map(g=>`<option value="${esc(g)}">📁 ${esc(g)}</option>`).join('')}<option value="">그룹 없음</option></select><button class="btn small pri" id="selMove">로 옮기기</button><button class="btn small" id="selExp">내보내기</button><button class="btn small danger" id="selDel">삭제</button><button class="btn small" id="selClear">선택 해제</button></div>`;
-  const gopts=c=>allG.map(g=>`<option value="${esc(g)}"${c.group===g?' selected':''}>📁 ${esc(g)}</option>`).join('')+`<option value=""${!c.group?' selected':''}>그룹 없음</option><option value="__new">＋ 새 그룹…</option>`;
-  body.innerHTML=tip+gbar+(shown.length?'':'<div class="empty">이 그룹에는 아직 컴포넌트가 없어. 다른 그룹에서 카드를 골라 이 그룹으로 옮겨 봐.</div>')+'<div class="src-grid">'+shown.map(c=>{
+  const deepN=g=>list.filter(c=>UIKit.inGroup(c,g)).length;
+  const kids=g=>allG.filter(x=>x.lastIndexOf('/')===(g?g.length:-1)&&(g?x.startsWith(g+'/'):true)&&(g?true:!x.includes('/')));
+  const row=(g,depth)=>{
+    const ch=kids(g),open=openG.has(g),nm=g.split('/').pop();
+    let h=`<div class="gt-row${curGroup===g?' on':''}" data-g="${esc(g)}" draggable="true" style="padding-left:${8+depth*14}px">
+      <span class="gt-tw" data-tw="1">${ch.length?(open?'▾':'▸'):''}</span><span class="gt-ic">📁</span><span class="gt-nm">${esc(nm)}</span><span class="gt-n">${deepN(g)}</span>
+      <span class="gt-act"><button data-a="sub" title="하위 그룹 만들기">＋</button><button data-a="ren" title="이름 바꾸기">✎</button><button data-a="del" title="그룹 삭제">🗑</button></span></div>`;
+    if(open)ch.forEach(c=>{h+=row(c,depth+1);});
+    return h;
+  };
+  const tree=`<aside id="gtree">
+    <div class="gt-row${curGroup==='*'?' on':''}" data-g="*" style="padding-left:8px"><span class="gt-tw"></span><span class="gt-ic">🗂</span><span class="gt-nm">전체</span><span class="gt-n">${list.length}</span></div>
+    ${kids('').map(g=>row(g,0)).join('')}
+    ${list.some(c=>!c.group)?`<div class="gt-row${curGroup===''?' on':''}" data-g="" style="padding-left:8px"><span class="gt-tw"></span><span class="gt-ic">▫</span><span class="gt-nm">그룹 없음</span><span class="gt-n">${list.filter(c=>!c.group).length}</span></div>`:''}
+    <button class="btn small" id="gNew" style="margin-top:8px;width:100%">＋ 새 그룹</button>
+    <div class="gt-hint">카드를 그룹 위로 끌면 옮겨지고, 그룹을 다른 그룹 위로 끌면 그 안으로 들어가. 카드끼리 끌어 순서를 바꿔.</div>
+  </aside>`;
+  const optName=g=>'　'.repeat(g.split('/').length-1)+'📁 '+g.split('/').pop();
+  const gbar=`<div class="ui-head"><label class="gchip" id="selAllLbl" title="지금 보이는 컴포넌트를 모두 선택 / 해제"><input type="checkbox" id="selAll"${allPicked?' checked':''}${shown.length?'':' disabled'}> 전체 선택<b>${shown.length}</b></label>
+    <b class="ui-path">${curGroup==='*'?'전체':curGroup===''?'그룹 없음':'📁 '+esc(curGroup.split('/').join(' › '))}</b>
+    ${curGroup!=='*'&&curGroup!==''?`<span class="gacts"><button class="btn small" id="gExp">그룹 내보내기</button></span>`:''}</div>
+    <div id="selbar"><span id="selN"></span><select id="selTo">${allG.map(g=>`<option value="${esc(g)}">${esc(optName(g))}</option>`).join('')}<option value="">그룹 없음</option></select><button class="btn small pri" id="selMove">로 옮기기</button><button class="btn small" id="selExp">내보내기</button><button class="btn small danger" id="selDel">삭제</button><button class="btn small" id="selClear">선택 해제</button></div>`;
+  const gopts=c=>allG.map(g=>`<option value="${esc(g)}"${c.group===g?' selected':''}>${esc(optName(g))}</option>`).join('')+`<option value=""${!c.group?' selected':''}>그룹 없음</option><option value="__new">＋ 새 그룹…</option>`;
+  body.innerHTML=tip+'<div class="ui-wrap">'+tree+'<section class="ui-main">'+gbar+(shown.length?'':'<div class="empty">이 그룹에는 아직 컴포넌트가 없어. 카드를 왼쪽 그룹 위로 끌어 옮겨 봐.</div>')+'<div class="src-grid">'+shown.map(c=>{
     const auto=c.nodes.filter(n=>n.pad).length;
     const fxn=c.nodes.filter(n=>n.fx&&((n.fx.effects||[]).length||(n.fx.fills||[]).some(p=>p.type!=='SOLID'))).length;
     const wn=(c.warnings||[]).length;
-    return `<div class="src-card ui-card" data-cid="${c.id}">
+    return `<div class="src-card ui-card" data-cid="${c.id}" draggable="true">
       <input type="checkbox" class="pick" title="여러 개 골라 한 번에 옮기기"${picked.has(c.id)?' checked':''}>
       <div class="sc-th"><img src="${c.thumb}" loading="lazy" alt=""></div>
       <div class="sc-meta">
@@ -456,8 +496,8 @@ async function renderUi(){
         <button class="sc-del">삭제</button>
       </div>
     </div>`;
-  }).join('')+'</div>';
-  bindGroups(list,shown);
+  }).join('')+'</div></section></div>';
+  bindGroups(list,shown,allG);
   body.querySelectorAll('.ui-card').forEach(card=>{
     const c=list.find(x=>x.id===+card.dataset.cid);if(!c)return;
     card.querySelector('.pick').onchange=e=>{
@@ -496,7 +536,10 @@ async function renderUi(){
 }
 /* ===== UI 그룹 ===== */
 let curGroup='*';
-const newGroups=[];          // 아직 컴포넌트가 없는 새 그룹 (옮기면 실제 그룹이 된다)
+// 빈 그룹(아직 컴포넌트가 없는 그룹)과 펼친 그룹은 이 브라우저에 기억한다
+let folders=[];try{folders=JSON.parse(localStorage.getItem('libFolders')||'[]');}catch(e){}
+const openG=new Set();try{JSON.parse(localStorage.getItem('libOpen')||'[]').forEach(g=>openG.add(g));}catch(e){}
+const saveTreeState=()=>{try{localStorage.setItem('libFolders',JSON.stringify(folders));localStorage.setItem('libOpen',JSON.stringify([...openG]));}catch(e){}};
 const picked=new Set();
 try{curGroup=localStorage.getItem('libGroup')||'*';}catch(e){}
 function syncSel(){
@@ -505,36 +548,96 @@ function syncSel(){
   $('#selN').textContent=`${picked.size}개 선택 →`;
 }
 function safeName(n){return String(n).replace(/[\\/:*?"<>|]/g,'_');}
-function bindGroups(list,shown){
-  document.querySelectorAll('#gbar .gchip[data-g]').forEach(b=>b.onclick=()=>{curGroup=b.dataset.g;try{localStorage.setItem('libGroup',curGroup);}catch(e){}renderUi();});
+function setCur(g){curGroup=g;try{localStorage.setItem('libGroup',g);}catch(e){}
+  if(g&&g!=='*'){const p=g.split('/');for(let i=1;i<p.length;i++)openG.add(p.slice(0,i).join('/'));saveTreeState();}}
+// 그룹 경로 옮기기·이름 바꾸기 — 컴포넌트와 빈 그룹 기억, 펼침 상태까지 같이
+async function moveFolder(from,to){
+  if(!from||from===to)return;
+  if(to===from||to.startsWith(from+'/'))return toast('그룹을 자기 안으로는 옮길 수 없어',true);
+  await UIKit.renameGroup(from,to);
+  const re=g=>g===from||g.startsWith(from+'/')?to+g.slice(from.length):g;
+  folders=[...new Set(folders.map(re))];
+  const o=[...openG];openG.clear();o.forEach(g=>openG.add(re(g)));
+  if(curGroup===from||curGroup.startsWith(from+'/'))curGroup=re(curGroup);
+  saveTreeState();
+}
+let dragCards=null,dragFolder=null;
+function bindGroups(list,shown,allG){
+  const tree=$('#gtree');
+  // 왼쪽 그룹 목록
+  tree.querySelectorAll('.gt-row').forEach(r=>{
+    const g=r.dataset.g;
+    r.onclick=async e=>{
+      const a=e.target.dataset.a;
+      if(e.target.dataset.tw){if(openG.has(g))openG.delete(g);else openG.add(g);saveTreeState();return renderUi();}
+      if(a==='sub'){const n=(await askText(`'${g.split('/').pop()}' 안에 만들 하위 그룹 이름`)||'').trim().replace(/\//g,'·');if(!n)return;
+        const p=g+'/'+n;if(!folders.includes(p))folders.push(p);openG.add(g);setCur(p);saveTreeState();return renderUi();}
+      if(a==='ren'){const parts=g.split('/'),n=(await askText('그룹 이름 바꾸기',parts.pop())||'').trim().replace(/\//g,'·');if(!n)return;
+        await moveFolder(g,[...parts,n].join('/'));toast('그룹 이름을 바꿨어 — '+n);return renderUi();}
+      if(a==='del'){
+        const items=list.filter(c=>UIKit.inGroup(c,g));
+        const dropF=()=>{folders=folders.filter(f=>!(f===g||f.startsWith(g+'/')));saveTreeState();};
+        if(!items.length){dropF();if(UIKit.inGroup({group:curGroup},g))setCur('*');return renderUi();}
+        const all=await askConfirm(`📁 ${g} (하위 그룹 포함) — 컴포넌트 ${items.length}개\n\n[그룹째 삭제] 컴포넌트까지 모두 삭제\n[취소] 를 누르면 그룹만 풀고 컴포넌트는 남길지 다시 물어봐.`,'그룹째 삭제');
+        if(all){for(const c of items)await UIKit.del(c.id);toast(`${items.length}개를 삭제했어`);}
+        else{
+          const parent=g.includes('/')?g.slice(0,g.lastIndexOf('/')):'';
+          if(!await askConfirm(`그룹만 풀까요?\n컴포넌트 ${items.length}개는 ${parent?'📁 '+parent:"'그룹 없음'"} 으로 옮겨져.`,'그룹만 풀기'))return;
+          await UIKit.setGroup(items.map(c=>c.id),parent);toast('그룹을 풀었어');
+        }
+        dropF();setCur('*');return renderUi();
+      }
+      setCur(g);renderUi();
+    };
+    // 끌어 놓기 — 카드를 그룹 위로 = 옮기기, 그룹을 그룹 위로 = 그 안으로 (전체 위 = 맨 위 단계로)
+    if(r.draggable)r.addEventListener('dragstart',e=>{dragFolder=g;dragCards=null;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','folder');}catch(err){}});
+    r.addEventListener('dragover',e=>{if(!dragCards&&dragFolder==null)return;if(g===''&&dragFolder!=null)return;e.preventDefault();r.classList.add('drop');});
+    r.addEventListener('dragleave',()=>r.classList.remove('drop'));
+    r.addEventListener('drop',async e=>{
+      e.preventDefault();r.classList.remove('drop');
+      if(dragCards){const ids=dragCards;dragCards=null;const to=g==='*'?null:g;if(to==null)return;
+        await UIKit.setGroup(ids,to);toast(`${ids.length}개를 ${to?'📁 '+to+' 로':'그룹 없음으로'} 옮겼어`);picked.clear();return renderUi();}
+      if(dragFolder!=null){const from=dragFolder;dragFolder=null;const base=from.split('/').pop();const to=g==='*'?base:g+'/'+base;
+        if(g!=='*')openG.add(g);await moveFolder(from,to);return renderUi();}
+    });
+    r.addEventListener('dragend',()=>{dragFolder=null;tree.querySelectorAll('.drop').forEach(x=>x.classList.remove('drop'));});
+  });
   $('#gNew').onclick=async()=>{
-    const g=(await askText('새 그룹 이름 (예: 버튼, 배지, 대장마켓)')||'').trim();if(!g)return;
-    if(!newGroups.includes(g))newGroups.push(g);
-    curGroup=g;renderUi();
-    if(picked.size)toast(`선택한 ${picked.size}개를 옮기려면 위 파란 줄에서 '📁 ${g}' 로 옮기기`);
-  };
-  if($('#gRen'))$('#gRen').onclick=async()=>{
-    const to=(await askText('그룹 이름 바꾸기',curGroup)||'').trim();if(!to||to===curGroup)return;
-    await UIKit.renameGroup(curGroup,to);const i=newGroups.indexOf(curGroup);if(i>=0)newGroups[i]=to;
-    curGroup=to;toast('그룹 이름을 바꿨어 — '+to);renderUi();
+    const g=(await askText('새 그룹 이름 (예: 버튼, 배지, 대장마켓)')||'').trim().replace(/\//g,'·');if(!g)return;
+    if(!folders.includes(g))folders.push(g);setCur(g);saveTreeState();renderUi();
+    if(picked.size)toast(`선택한 ${picked.size}개는 위 파란 줄에서 '📁 ${g}' 로 옮기거나, 카드를 왼쪽 그룹 위로 끌어 놔`);
   };
   if($('#gExp'))$('#gExp').onclick=()=>{
-    const items=list.filter(c=>c.group===curGroup);
+    const items=list.filter(c=>UIKit.inGroup(c,curGroup));
     if(!items.length)return toast('내보낼 컴포넌트가 없어',true);
-    saveBlob(new Blob([UIKit.exportJSON(items)],{type:'application/json'}),'UI-'+safeName(curGroup)+'.json');
+    saveBlob(new Blob([UIKit.exportJSON(items)],{type:'application/json'}),'UI-'+safeName(curGroup.replace(/\//g,'-'))+'.json');
   };
-  if($('#gDel'))$('#gDel').onclick=async()=>{
-    const items=list.filter(c=>c.group===curGroup);
-    if(!items.length){newGroups.splice(newGroups.indexOf(curGroup),1);curGroup='*';return renderUi();}
-    const all=await askConfirm(`📁 ${curGroup} — 컴포넌트 ${items.length}개\n\n[그룹째 삭제] 컴포넌트까지 모두 삭제\n[취소] 를 누르면 그룹만 풀고 컴포넌트는 '그룹 없음' 으로 남길지 다시 물어봐.`,'그룹째 삭제');
-    if(all){for(const c of items)await UIKit.del(c.id);toast(`${items.length}개를 삭제했어`);}
-    else{
-      const un=await askConfirm(`그룹만 풀까요?\n컴포넌트 ${items.length}개는 '그룹 없음' 으로 옮겨져.`,'그룹만 풀기');
-      if(!un)return;
-      await UIKit.setGroup(items.map(c=>c.id),'');toast('그룹을 풀었어');
-    }
-    curGroup='*';renderUi();
-  };
+  // 카드 끌기 — 다른 카드 위 = 순서 바꾸기 (왼쪽 절반 = 앞, 오른쪽 절반 = 뒤), 왼쪽 그룹 위 = 옮기기
+  const grid=document.querySelector('.src-grid');
+  document.querySelectorAll('.ui-card').forEach(card=>{
+    const id=+card.dataset.cid;
+    card.addEventListener('dragstart',e=>{
+      if(e.target.closest&&(e.target.closest('[contenteditable]')||e.target.closest('select')))return;
+      dragCards=picked.has(id)&&picked.size>1?[...picked]:[id];dragFolder=null;
+      e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','card');}catch(err){}
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend',()=>{card.classList.remove('dragging');dragCards=null;grid.querySelectorAll('.dropL,.dropR').forEach(x=>x.classList.remove('dropL','dropR'));});
+    card.addEventListener('dragover',e=>{
+      if(!dragCards||dragCards.includes(id))return;e.preventDefault();
+      const rc=card.getBoundingClientRect();grid.querySelectorAll('.dropL,.dropR').forEach(x=>x.classList.remove('dropL','dropR'));
+      card.classList.add(e.clientX<rc.left+rc.width/2?'dropL':'dropR');
+    });
+    card.addEventListener('dragleave',()=>card.classList.remove('dropL','dropR'));
+    card.addEventListener('drop',async e=>{
+      e.preventDefault();if(!dragCards)return;
+      const before=card.classList.contains('dropL');card.classList.remove('dropL','dropR');
+      const moving=dragCards;dragCards=null;
+      const ids=shown.map(c=>c.id).filter(x=>!moving.includes(x));
+      const at=ids.indexOf(id)+(before?0:1);ids.splice(at,0,...moving.filter(x=>shown.some(c=>c.id===x)));
+      await UIKit.setOrder(ids);renderUi();
+    });
+  });
   $('#selMove').onclick=async()=>{const g=$('#selTo').value;await UIKit.setGroup([...picked],g);toast(`${picked.size}개를 ${g?'📁 '+g+' 로':'그룹 없음으로'} 옮겼어`);picked.clear();renderUi();};
   $('#selExp').onclick=()=>{const items=list.filter(c=>picked.has(c.id));saveBlob(new Blob([UIKit.exportJSON(items)],{type:'application/json'}),'UI-선택'+items.length+'개.json');};
   $('#selDel').onclick=async()=>{

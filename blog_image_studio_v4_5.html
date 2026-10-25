@@ -542,7 +542,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div id="exportZone"></div>
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
-<script src="shared/ui-kit.js?v=20261025-15"></script>
+<script src="shared/ui-kit.js?v=20261025-16"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -3656,12 +3656,13 @@ async function loadUi(){
   $('#uiEmpty').style.display=items.length?'none':'';
   // 그룹 필터 — 이미지 소스 페이지에서 정한 그룹(폴더)
   const gs=$('#uiGroup'),curG=gs.value;
-  const names=[...new Set(items.map(c=>c.group||''))].sort((a,b)=>a===''?1:b===''?-1:a.localeCompare(b,'ko'));
-  gs.innerHTML='<option value="*">전체 그룹</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n||'그룹 없음')} (${items.filter(c=>(c.group||'')===n).length})</option>`).join('');
+  // 그룹 안 그룹(상위/하위 경로) — 들여 써서 보이고, 상위 그룹을 고르면 하위 그룹 것까지 보인다
+  const names=UIKit.groupPaths(items).concat(items.some(c=>!c.group)?['']:[]);
+  gs.innerHTML='<option value="*">전체 그룹</option>'+names.map(n=>`<option value="${esc(n)}">${n?'\u3000'.repeat(n.split('/').length-1)+esc(n.split('/').pop()):'그룹 없음'} (${items.filter(c=>UIKit.inGroup(c,n)).length})</option>`).join('');
   gs.value=(names.includes(curG)||curG==='*')?curG:'*';
   gs.style.display=(names.length>1||(names[0]||'')!=='')?'':'none';
   const g=$('#uiGrid');g.innerHTML='';
-  items.filter(c=>gs.value==='*'||(c.group||'')===gs.value).forEach(c=>{
+  items.filter(c=>UIKit.inGroup(c,gs.value)).forEach(c=>{
     const d=document.createElement('div');d.className='uic';
     d.title=`${c.group?'['+c.group+'] ':''}${c.name} · ${c.w}×${c.h}px${c.origin==='banner'?' · 배너 스튜디오에서 저장':c.origin==='figma'?' · 피그마에서 가져옴':''}\n클릭하면 캔버스에 복사해 넣어`;
     d.innerHTML=`<img src="${esc(c.thumb)}" loading="lazy" alt=""><span class="nm">${esc(c.name)}</span><span class="ed" title="이 컴포넌트 편집 (배너 스튜디오 편집기)">✎</span><span class="del" title="UI 컴포넌트 삭제">×</span>`;

@@ -1711,12 +1711,13 @@ async function loadUi() {
   $('#uiEmpty').style.display = items.length ? 'none' : '';
   // 그룹 필터 — 이미지 소스 페이지에서 정한 그룹(폴더)
   const gs = $('#uiGroup'), curG = gs.value;
-  const names = [...new Set(items.map(c => c.group || ''))].sort((a, b) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'ko'));
-  gs.innerHTML = '<option value="*">전체 그룹</option>' + names.map(n => `<option value="${esc(n)}">${esc(n || '그룹 없음')} (${items.filter(c => (c.group || '') === n).length})</option>`).join('');
+  // 그룹 안 그룹(상위/하위 경로) — 들여 써서 보이고, 상위 그룹을 고르면 하위 그룹 것까지 보인다
+  const names = UIKit.groupPaths(items).concat(items.some(c => !c.group) ? [''] : []);
+  gs.innerHTML = '<option value="*">전체 그룹</option>' + names.map(n => `<option value="${esc(n)}">${n ? '\u3000'.repeat(n.split('/').length - 1) + esc(n.split('/').pop()) : '그룹 없음'} (${items.filter(c => UIKit.inGroup(c, n)).length})</option>`).join('');
   gs.value = names.includes(curG) || curG === '*' ? curG : '*';
   gs.style.display = names.length > 1 || (names[0] || '') !== '' ? '' : 'none';
   const g = $('#uiGrid'); g.innerHTML = '';
-  for (const c of items.filter(c => gs.value === '*' || (c.group || '') === gs.value)) {
+  for (const c of items.filter(c => UIKit.inGroup(c, gs.value))) {
     const d = el('div', 'stock');
     d.title = `${c.group ? '[' + c.group + '] ' : ''}${c.name} · ${c.w}×${c.h}px${c.origin === 'blog' ? ' · 블로그 이미지 제작에서 저장' : c.origin === 'figma' ? ' · 피그마에서 가져옴' : ''}\n클릭하면 캔버스에 복사해 넣습니다`;
     d.innerHTML = `<img src="${esc(c.thumb)}" loading="lazy"><span class="nm">${esc(c.name)}</span><span class="ed" title="이 컴포넌트 편집">✎</span><span class="del" title="UI 컴포넌트 삭제">×</span>`;
@@ -1795,10 +1796,10 @@ async function paintUiEditBar() {
   bar.style.display = uiEdit ? '' : 'none';
   if (!uiEdit) return;
   $('#uiEdName').value = uiEdit.comp.name;
-  const gs = (await UIKit.groups().catch(() => [])).map(g => g.name).filter(Boolean);
+  const gs = UIKit.groupPaths(await UIKit.list().catch(() => []));
   const cur = uiEdit.comp.group || '';
   if (cur && !gs.includes(cur)) gs.push(cur);
-  $('#uiEdGroup').innerHTML = gs.map(g => `<option value="${esc(g)}"${g === cur ? ' selected' : ''}>📁 ${esc(g)}</option>`).join('') +
+  $('#uiEdGroup').innerHTML = gs.map(g => `<option value="${esc(g)}"${g === cur ? ' selected' : ''}>${'\u3000'.repeat(g.split('/').length - 1)}📁 ${esc(g.split('/').pop())}</option>`).join('') +
     `<option value=""${!cur ? ' selected' : ''}>그룹 없음</option><option value="__new">＋ 새 그룹…</option>`;
 }
 async function saveUiEdit(asNew) {
