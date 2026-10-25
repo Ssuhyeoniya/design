@@ -1112,9 +1112,12 @@
         if (bk) box.bake = bk;                     // 자기 배경(또는 버튼은 글자까지) — 피그마 그림
         // 오토 레이아웃 — 텍스트 하나만 담은 프레임은 글자 + 패딩으로 크기가 정해지는 박스가 된다
         const texts = kids.filter(c => c.type === 'TEXT');
-        if (n.layoutMode && n.layoutMode !== 'NONE' && texts.length === 1 && kids.length === 1 && !rotated(texts[0])) {
-          const H = n.layoutMode === 'HORIZONTAL';
-          const hugX = n.layoutSizingHorizontal ? n.layoutSizingHorizontal === 'HUG' : (H ? n.primaryAxisSizingMode : n.counterAxisSizingMode) === 'AUTO';
+        const H0 = n.layoutMode === 'HORIZONTAL';
+        const hugX0 = n.layoutSizingHorizontal ? n.layoutSizingHorizontal === 'HUG' : (H0 ? n.primaryAxisSizingMode : n.counterAxisSizingMode) === 'AUTO';
+        // 버튼(폭이 글자에 맞춰지는 Hug)만 '도형 + 라벨' 로 — 폭이 고정·채우기인 줄(공지 제목 등)은 글자를 따로 두어 정렬·서식을 그대로 지킨다
+        if (n.layoutMode && n.layoutMode !== 'NONE' && texts.length === 1 && kids.length === 1 && !rotated(texts[0]) && hugX0) {
+          const H = H0;
+          const hugX = hugX0;
           const hugY = n.layoutSizingVertical ? n.layoutSizingVertical === 'HUG' : (H ? n.counterAxisSizingMode : n.primaryAxisSizingMode) === 'AUTO';
           const t = textNode(texts[0], op, !!bk);
           box.label = { text: t.text, size: t.size, weight: t.weight, family: t.family, color: t.color, tfill: t.tfill, lh: t.lh, ls: t.ls, shadows: t.shadows };
@@ -1256,7 +1259,7 @@
   }
 
   // 지금 열린 화면의 버전 — 화면 왼쪽 아래에 작게 보인다 (예전 주소·캐시로 열었는지 바로 알 수 있게)
-  const VERSION = '2026-10-25 i';
+  const VERSION = '2026-10-25 j';
   const badge = () => { if (document.getElementById('uikitVer')) return; const b = document.createElement('div'); b.id = 'uikitVer'; b.textContent = '버전 ' + VERSION;
     b.style.cssText = 'position:fixed;left:8px;bottom:6px;z-index:9998;font:11px/1.4 -apple-system,sans-serif;color:#6b7280;background:rgba(255,255,255,.85);padding:2px 7px;border-radius:6px;pointer-events:none';
     document.body.appendChild(b); };
