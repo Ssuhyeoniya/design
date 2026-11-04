@@ -83,8 +83,12 @@
     // — 그 사이 올린 이미지가 이 브라우저에만 저장되는 일을 막는다. 처음부터 서버가 없는 환경(404·HTML)은 로컬 모드
     const fail = reason => seen() ? { on: false, error: true, reason } : { on: false, reason };
     try {
-      const q = Date.now() < bustUntil ? '?t=' + Date.now() : '';   // 방금 쓴 뒤에는 CDN 캐시를 건너뛰고 최신 목록
-      const r = await fetch(root + 'api/stock' + q, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+      // 평소에는 서버·CDN 캐시(약 15초)를 그대로 쓴다(cache:'default' — no-store 로 보내면 브라우저가 no-cache 헤더를 붙인다).
+      // 방금 쓴 뒤 60초만 비밀번호 헤더 + ?t= 로 최신 목록을 받는다(서버는 비밀번호가 맞는 ?t= 만 캐시를 건너뛴다)
+      let pw = ''; try { pw = localStorage.getItem(PWKEY) || ''; } catch (e) { }
+      const fresh = Date.now() < bustUntil && pw;
+      let r = await fetch(root + 'api/stock' + (fresh ? '?t=' + Date.now() : ''), { cache: 'default', headers: Object.assign({ 'Accept': 'application/json' }, fresh ? { 'x-stock-password': pw } : {}) });
+      if (fresh && (r.status === 401 || r.status === 429)) { bustUntil = 0; r = await fetch(root + 'api/stock', { cache: 'default', headers: { 'Accept': 'application/json' } }); }   // 최신 받기가 안 되면 평소 목록으로
       const ct = r.headers.get('content-type') || '';
       if (r.status === 404 || (r.ok && !/json/.test(ct))) st = { on: false, reason: '서버(/api) 없음' };
       else if (!r.ok) { let j = {}; try { j = await r.json(); } catch (e) { } st = fail(j.code === 'upstream_auth' ? '서버 설정(토큰) 문제 — 관리자에게 알려 주세요' : '공용 저장에 연결 못 함 (' + r.status + ')'); }
