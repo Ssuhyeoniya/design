@@ -283,6 +283,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .align-group button{flex:1;border:none;background:#fff;padding:6px 0;cursor:pointer;font-size:11.5px;color:var(--text-sub);font-weight:600;}
   .align-group button.on{background:var(--accent-soft);color:var(--accent);}
   .hint{font-size:11px;color:var(--text-faint);line-height:1.5;margin-top:7px;}
+  #geoSec{position:sticky;top:0;z-index:6;background:var(--panel);box-shadow:0 1px 0 var(--border);}
   .empty-note{padding:18px 16px;font-size:12.5px;color:var(--text-faint);text-align:center;line-height:1.6;}
   .btn-row{display:flex;gap:6px;flex-wrap:wrap;}
   .chkline{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;}
@@ -1978,7 +1979,22 @@ function stripRichColor(html){
   t.content.querySelectorAll('font[color]').forEach(n=>n.removeAttribute('color'));
   return t.innerHTML;
 }
+/* 선택이 없을 때 — 같은 높이의 비활성 자리표시(레이아웃 점프 방지) */
+function geomPlaceholder(){
+  const f=(k,lab,u)=>nf(k,lab,0,{dis:true,unit:u,title:'레이어를 선택하면 편집할 수 있어'}).replace('value="0"','value="" placeholder="–"');
+  return `
+  <div class="sec" id="geoSec"><h3>위치 · 크기</h3>
+    <div class="g2">${f('gx','X')}${f('gy','Y')}${f('gw','W')}${f('gh','H')}${f('gr','R','°')}${f('gop','투명','%')}</div>
+    <label class="chkline"><input type="checkbox" id="pLock" disabled> 잠금 — 캔버스에서 이동·크기 조절 안 됨</label>
+    <div class="btn-row" style="margin:6px 0">
+      <button class="btn small" id="dupBtn" disabled>복제</button>
+      <button class="btn small" id="delBtn" disabled>삭제</button>
+    </div>
+    <div class="hint">캔버스나 레이어 목록에서 요소를 고르면 바로 여기서 고칠 수 있어</div>
+  </div>`;
+}
 function geomSection(l){
+  if(!l)return geomPlaceholder();
   const b=layerBBox(l), line=isLine(l), hDis=l.type==='t';
   const hv=(l.type==='t'||l.type==='i')?b.h:l.h;
   return `
@@ -2076,7 +2092,6 @@ function renderProps(){
     <div class="hint" style="margin-top:6px">하나만 고르면 캔버스 기준, Shift+클릭·드래그 박스로 여러 개 고르면 가장 큰 요소 기준으로 맞춰.</div>
   </div>`;
   const brand=SERVICES[s.service]||'#00e31e';
-  if(l) html+=geomSection(l);
   if(l&&l.type==='t'){
     const nT=_selTexts().length;
     html+=`
@@ -2214,8 +2229,10 @@ function renderProps(){
   }else{
     html+=`<div class="empty-note">캔버스에서 요소를 클릭하면<br>세부 편집 옵션이 열려.</div>`;
   }
-  // 섹션 순서는 선택과 관계없이 고정(페이지 설정 → 레이어 → 정렬 → 선택 요소 편집).
-  // 선택할 때마다 순서를 바꾸면 레이어 목록이 밀려 내려가 행 더블클릭(그룹 이름 변경)·연속 클릭이 빗나간다.
+  // 섹션 순서: 위치·크기(맨 위 고정·스크롤해도 붙어 있음) → 레이어 → 정렬 → 선택 요소 속성 → 페이지 설정.
+  // 위치·크기는 선택이 없어도 같은 높이의 자리표시로 그려, 선택 여부로 레이어 목록 위치가 흔들리지 않게 한다
+  // (흔들리면 행 더블클릭(그룹 이름 변경)·연속 클릭이 빗나간다). 높이가 바뀌는 선택 속성은 목록 아래에 둔다.
+  { const i1=html.indexOf('<!--LAYERS-->'); html=geomSection(l||null)+html.slice(i1)+html.slice(0,i1); }
   const keepScroll=props.scrollTop;
   props.innerHTML=html;
   props.scrollTop=keepScroll;
@@ -3184,11 +3201,17 @@ function dupSelection(){
     if(nl.al&&nl.al.g!=null&&whole(nl.al.g)) nl.al=Object.assign({},nl.al,{g:fresh(nl.al.g)});
     else if(nl.al) delete nl.al;               // 오토 레이아웃 프레임은 그룹째 복제할 때만 유지
     delete nl.fitBox;
-    added.push(nl);
+    added.push({nl,src,fresh:g.some(whole)||!!(nl.al)});
   });
-  arr.push(...added);
+  // 끼워 넣을 자리 — 레이어 배열은 뒤→앞 순서. 그룹 일부·그룹 밖 복제는 원본 바로 앞(위)에 끼워 같은 그룹 덩어리를 유지하고,
+  // 그룹째 복제(새 그룹 id)는 고른 것 중 가장 앞 레이어 바로 위에 한 덩어리로 모은다
+  const block=added.filter(a=>a.fresh).map(a=>a.nl);
+  added.filter(a=>!a.fresh).slice().reverse().forEach(a=>{ arr.splice(arr.indexOf(a.src)+1,0,a.nl); });
+  if(block.length){ const anchor=added.reduce((m,a)=>arr.indexOf(a.src)>arr.indexOf(m.src)?a:m).src;
+    let at=arr.indexOf(anchor)+1; while(at<arr.length&&added.some(a=>!a.fresh&&a.nl===arr[at]))at++;   // 바로 위에 끼운 단일 복제본은 건너뛴다
+    arr.splice(at,0,...block); }
   UIKit.pruneGp(arr,true);
-  selSet=added.map(x=>x.id);selLayer=selSet[selSet.length-1];renderAll();recordHistory();
+  selSet=added.map(a=>a.nl.id);selLayer=selSet[selSet.length-1];renderAll();recordHistory();
 }
 function groupSelection(on){
   const s=slides[cur], ids=selIds();
