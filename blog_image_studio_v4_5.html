@@ -838,7 +838,7 @@ function alignSelection(mode){
     let pos=ax?f.x:f.y;
     items.forEach(it=>{
       const d=pos-(ax?it.b.x:it.b.y);
-      if(ax)it.l.x=Math.round(it.l.x+d); else it.l.y=Math.round(it.l.y+d);
+      if(!it.l.locked){ if(ax)it.l.x=Math.round(it.l.x+d); else it.l.y=Math.round(it.l.y+d); }   // 잠긴 레이어는 제자리(간격 계산에는 포함)
       pos+=(ax?it.b.w:it.b.h)+gap;
     });
     renderAll(); recordHistory(); return;
@@ -853,7 +853,7 @@ function alignSelection(mode){
   }else ref={x:0,y:0,w:P.W,h:P.H};
   const cx=ref.x+ref.w/2, cy=ref.y+ref.h/2;
   list.forEach(l=>{
-    if(l===anchor)return;
+    if(l===anchor||l.locked)return;   // 잠긴 레이어는 움직이지 않는다(기준으로는 쓸 수 있다)
     const b=visBox(l); // 텍스트는 라인박스가 아닌 '글자 상자' 기준
     if(mode==='l')       l.x=Math.round(l.x+ref.x-b.x);
     else if(mode==='cx') l.x=Math.round(l.x+cx-b.cx);
@@ -869,8 +869,8 @@ function snapTextToShape(){
   const s=slides[cur]; if(!s)return;
   const arr=LS(s);
   const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer);
-  const texts=arr.filter(x=>x.type==='t'&&ids.has(x.id));
-  if(!texts.length){alert('텍스트 레이어를 먼저 선택해줘.');return;}
+  const texts=arr.filter(x=>x.type==='t'&&ids.has(x.id)&&!x.locked);   // 잠긴 텍스트는 옮기지 않는다
+  if(!texts.length){alert('잠기지 않은 텍스트 레이어를 먼저 선택해줘.');return;}
   let hit=0;
   texts.forEach(t=>{
     const tb=visBox(t);
@@ -1111,11 +1111,20 @@ function shapeIcon(k){
   return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${m[k]||m.rect}</svg>`;
 }
 /* 문서 마이그레이션 — 열기·되돌리기 시 호출. 예전 '✦' 텍스트 레이어 → 반짝이 도형, 삭제된 커버 프리셋 → 기본 */
+/* CSS transform-origin('center center' · 'left top' · '30% 10px' 등) → 박스 기준 px */
+function _parseOrigin(o,W,H){
+  const kw={left:0,center:.5,right:1,top:0,bottom:1};
+  const parts=String(o||'center center').trim().split(/\s+/);
+  if(parts.length===1)parts.push('center');
+  let [a,b]=parts; if(a==='top'||a==='bottom'||(b==='left'||b==='right'))[a,b]=[b,a];
+  const v=(t,L)=>t in kw?kw[t]*L:/%$/.test(t)?parseFloat(t)/100*L:(parseFloat(t)||0);
+  return {x:v(a,W),y:v(b,H)};
+}
 function migrateDoc(list){
   let maxId=0;
   (list||[]).forEach(s=>{
     if(!s)return;
-    if(s.coverPreset&&s.coverPreset!=='default')s.coverPreset='default'; // '사진 카드'·'스토어' 등 삭제된 프리셋
+    if(s.coverPreset==='photo'||s.coverPreset==='store')s.coverPreset='default'; // 삭제된 '사진 카드'·'스토어' → 기본 ('아이콘 타일'은 유지)
     if(s.id>maxId)maxId=s.id;
     [s.layers,s.mo].forEach(arr=>{
       if(!Array.isArray(arr))return;
@@ -1125,7 +1134,16 @@ function migrateDoc(list){
         if(l.type==='t'&&String(l.text||'').trim()==='✦'&&plain==='✦'){
           const sp=sparkleLayer(+l.x||0,+l.y||0,+l.size||20,l.color||'#ffffff',l.lh);
           sp.id=l.id; ['gid','gname','gp','gpn','name','rot','rotOrigin','locked','opacity'].forEach(k=>{if(l[k]!=null)sp[k]=Array.isArray(l[k])?l[k].slice():l[k];});
-          if(sp.rot)sp.rotOrigin='center center';
+          if(sp.rot){
+            // 예전 글자는 '텍스트 박스'의 회전 기준점(기본 박스 중심)으로 돌았다 — 글리프 중심이 박스 중심과 다르면
+            // 회전 뒤 보이는 위치가 달라지므로, 도형 중심을 회전된 글리프 중심으로 옮기고 도형 자신의 중심으로 돌린다
+            const W0=+l.w||0, H0=(+l.size||20)*(l.lh||1)*Math.max(1,String(l.text||'').split('\n').length);
+            const og=_parseOrigin(l.rotOrigin,W0,H0), ox=(+l.x||0)+og.x, oy=(+l.y||0)+og.y;
+            const gx=sp.x+sp.w/2, gy=sp.y+sp.h/2, t=sp.rot*Math.PI/180, c=Math.cos(t), n=Math.sin(t);
+            const nx=ox+(gx-ox)*c-(gy-oy)*n, ny=oy+(gx-ox)*n+(gy-oy)*c;
+            sp.x=Math.round(nx-sp.w/2); sp.y=Math.round(ny-sp.h/2);
+            sp.rotOrigin='center center';
+          }
           arr[i]=sp;
         }
         if(+arr[i].id>maxId)maxId=+arr[i].id;
@@ -1259,7 +1277,19 @@ function guideSlide(preset,service){
   s.layers.push(tLayer({text:'앱 하단 [탭 이름] 선택 ▶ 메뉴 진입 ▶ 매뉴얼 단계 설명 기재',x:panel.x,y:Math.round(cy+(ch-cs*1.35)/2),w:panel.w,size:cs,weight:700,color:'#1f2328',align:'center',lh:1.35,ls:-0.02}));
   return s;
 }
-// (커버 이미지 구성 프리셋 '사진 카드'·'아이콘 타일'·'스토어'와 선택 UI는 2026-11 삭제 — 저장 데이터는 migrateDoc 에서 기본으로 정리)
+// ── 커버 이미지 영역 구성 프리셋 (영역 내 여백 배치 원칙) ──
+// '사진 카드'·'스토어'는 2026-11 삭제(저장 데이터는 migrateDoc 에서 기본으로 정리). '아이콘 타일'만 남긴다.
+function sparkles(s,g,list){
+  list.forEach(([fx,fy,sz])=>{ s.layers.push(sparkleLayer(g.x+Math.round(g.w*fx),g.y+Math.round(g.h*fy),sz,'#ffffff')); });
+}
+// 아이콘 타일형: 화이트 라운드 타일 2개(겹침) + 반짝이(도형)
+function coverPresetTiles(s,g){
+  const t1=Math.round(g.h*0.52), t1x=g.x+Math.round(g.w*0.12), t1y=g.y+Math.round(g.h*0.16);
+  s.layers.push(rLayer({x:t1x,y:t1y,w:t1,h:t1,fill:'#ffffff',radius:Math.round(t1*0.22)}));
+  const t2=Math.round(g.h*0.30), t2x=t1x+t1-Math.round(t2*0.25), t2y=t1y+t1-Math.round(t2*0.55);
+  s.layers.push(rLayer({x:t2x,y:t2y,w:t2,h:t2,fill:'#ffffff',radius:Math.round(t2*0.24)}));
+  sparkles(s,g,[[0.74,0.10,Math.round(g.h*0.10)],[0.05,0.70,Math.round(g.h*0.07)],[0.84,0.60,Math.round(g.h*0.055)]]);
+}
 
 // 비교(듀얼) 매뉴얼 — 완성 시안 실측 규격 (2180×1453 기준 비율)
 // 라벨필 y6.33% h3.65% / 회색패널 x4.22% w45.14% y11.56% h65.79% / 폰슬롯 y16.72% h54.37% w17.06%
@@ -1488,7 +1518,7 @@ function layerRowsHTML(s){
       h+=`<div class="layer-item grp${on?' on':''}" data-gid="${esc(String(r.g))}" draggable="true" ${pad}><span class="tw" data-tw="1">${shut?'▸':'▾'}</span><span class="ico">▦</span><span class="lname">${esc(r.name||'그룹')}</span><span class="lcnt">${mem.length}</span></div>`;
     }else{
       const x=r.l;
-      h+=`<div class="layer-item${ids.includes(x.id)?' on':''}" data-lid="${x.id}" draggable="true" ${pad}><span class="tw"></span><span class="ico">${lico(x)}</span><span class="lname">${esc(lname(x))}</span><button class="ldel llock${x.locked?' on':''}" data-llock="${x.id}" title="${x.locked?'잠금 해제':'잠금'}">${x.locked?'🔒':'🔓'}</button><button class="ldel" data-ldel="${x.id}">✕</button></div>`;
+      h+=`<div class="layer-item${ids.includes(x.id)?' on':''}" data-lid="${x.id}" draggable="true" ${pad}><span class="tw"></span><span class="ico">${lico(x)}</span><span class="lname">${esc(lname(x))}</span><button class="ldel llock${x.locked?' on':''}" data-llock="${x.id}" title="${x.locked?'잠금 해제':'잠금'}">${x.locked?'🔒':'🔓'}</button><button class="ldel" data-ldel="${x.id}"${x.locked?' style="visibility:hidden" title="잠긴 레이어는 삭제 안 됨"':''}>✕</button></div>`;
     }
   }
   return h;
@@ -1508,8 +1538,9 @@ function bindLayerRows(s){
         renderAll();return;
       }
       if(e.target.dataset.ldel){
-        const gone=withFitPartners(LS(s),[+e.target.dataset.ldel]);
-        setLS(s,LS(s).filter(x=>!gone.includes(x.id)));UIKit.pruneGp(LS(s),true);
+        const gone=deletableIds(LS(s),[+e.target.dataset.ldel]);   // 잠긴 레이어는 ✕ 로도 안 지워진다
+        if(!gone.length)return;
+        removeLayers(s,gone);recordHistory();
         if(gone.includes(selLayer))selLayer=null;selSet=(selSet||[]).filter(i=>!gone.includes(i));
         renderAll();return;
       }
@@ -1981,6 +2012,10 @@ function renderProps(){
         <option value="card"${s.preset==='card'?' selected':''}>대형 카드 2180×1453</option>
         <option value="custom"${s.preset==='custom'?' selected':''}>사용자 지정 (px 직접 입력)</option>
       </select></div>
+    ${(!s.kind&&s.guides&&s.guides.length)?`<div class="field"><label>커버 이미지 구성 프리셋</label>
+      <div class="btn-row">
+        <button class="btn small" id="cpTiles">아이콘 타일</button>
+      </div></div>`:''}
     ${s.kind==='guide'?`<div class="field"><label>매뉴얼 이미지 칸 수</label>
       <select id="pSlots">${[2,3,4].map(n=>`<option value="${n}"${(s.slotCount||3)==n?' selected':''}>${n}칸</option>`).join('')}</select></div>`:''}
     <div class="row" id="customSizeRow" style="${s.preset==='custom'?'':'display:none'}">
@@ -2179,10 +2214,8 @@ function renderProps(){
   }else{
     html+=`<div class="empty-note">캔버스에서 요소를 클릭하면<br>세부 편집 옵션이 열려.</div>`;
   }
-  if(l){ // 선택이 있으면 선택 요소 편집을 맨 위로 (피그마식) — 레이어 목록 → 페이지 설정 순
-    const i1=html.indexOf('<!--LAYERS-->'), i2=html.indexOf('<!--ALIGN-->');
-    html=html.slice(i2)+html.slice(i1,i2)+html.slice(0,i1);
-  }
+  // 섹션 순서는 선택과 관계없이 고정(페이지 설정 → 레이어 → 정렬 → 선택 요소 편집).
+  // 선택할 때마다 순서를 바꾸면 레이어 목록이 밀려 내려가 행 더블클릭(그룹 이름 변경)·연속 클릭이 빗나간다.
   const keepScroll=props.scrollTop;
   props.innerHTML=html;
   props.scrollTop=keepScroll;
@@ -2251,6 +2284,10 @@ function bindProps(s,l){
       renderAll();
     };
   });
+  if(document.getElementById('cpTiles'))$('#cpTiles').onclick=()=>{
+    const g=s.guides&&s.guides[0]; if(!g)return;
+    coverPresetTiles(s,g);selLayer=null;renderAll();recordHistory();
+  };
   if(s.kind==='guide'&&document.getElementById('pSlots')){
     $('#pSlots').onchange=e=>{s.slotCount=+e.target.value;layoutGuideSlots(s);renderAll();};
   }
@@ -2647,7 +2684,7 @@ canvas.addEventListener('mousedown',e=>{
     const s0=slides[cur];
     const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer);
     ids.add(+e.target.dataset.eh);
-    const list=LS(s0).filter(x=>x.type==='r'&&ids.has(x.id))
+    const list=LS(s0).filter(x=>x.type==='r'&&ids.has(x.id)&&!x.locked)   // 잠긴 박스는 크기 고정
       .map(L=>({L,ox:L.x,oy:L.y,ow:L.w,oh:L.h}));
     edgeDrag={edge:e.target.dataset.edge,sx:e.clientX,sy:e.clientY,list};
     e.preventDefault();return;
@@ -3070,6 +3107,7 @@ canvas.addEventListener('click',e=>{
 window.addEventListener('keydown',e=>{
   const tg=e.target;
   if(tg&&tg.matches&&(tg.matches('input,textarea,select')||tg.isContentEditable))return;
+  if(cropCtx)return;                        // 자르기 모드 중에는 Del·방향키·Ctrl 단축키를 막는다 (Enter·Esc 는 자르기 핸들러가 처리)
   const s=slides[cur];
   const ids=selSet.length?selSet:(selLayer?[selLayer]:[]);
   // Ctrl+] / Ctrl+[ 앞뒤 순서 이동 (Shift 조합이면 맨 앞/맨 뒤)
@@ -3092,12 +3130,17 @@ window.addEventListener('keydown',e=>{
     e.preventDefault();
     const picked=LS(s).filter(x=>ids.includes(x.id));
     if(k==='d'){ dupSelection(); return; } // 복제: 즉시 오프셋 배치
+    if(k==='x'){ // 잘라내기 = 복사 + Del 과 같은 삭제 경로(잠금 제외·오토 레이아웃 짝·그룹 정리)
+      const gone=deletableIds(LS(s),ids);
+      if(!gone.length)return;
+      CLIP=LS(s).filter(x=>gone.includes(x.id)).map(x=>JSON.parse(JSON.stringify(x)));
+      CLIP_OFF=24;
+      removeLayers(s,gone);
+      selSet=[];selLayer=null;renderAll();recordHistory();
+      return;
+    }
     CLIP=picked.map(x=>JSON.parse(JSON.stringify(x)));
     CLIP_OFF=24;
-    if(k==='x'){
-      setLS(s,LS(s).filter(x=>!ids.includes(x.id)));
-      selSet=[];selLayer=null;renderAll();
-    }
     return;
   }
   // Ctrl+G 그룹화 / Ctrl+Shift+G 해제
@@ -3117,17 +3160,35 @@ window.addEventListener('keydown',e=>{
 });
 /* 선택 편집 명령 — 단축키(Ctrl+D·Ctrl+G·Ctrl+Shift+G·Del)와 패널 버튼이 함께 쓴다 */
 function selIds(){ return selSet.length?selSet:(selLayer?[selLayer]:[]); }
+/* 지울 수 있는 레이어 — 잠긴 것은 빼고, 오토 레이아웃 짝도 잠기지 않은 것만 함께 */
+function deletableIds(arr,ids){
+  const free=id=>{const x=arr.find(y=>y.id===id);return x&&!x.locked;};
+  return withFitPartners(arr,ids.filter(free)).filter(free);
+}
+function removeLayers(s,gone){
+  setLS(s,LS(s).filter(x=>!gone.includes(x.id)));
+  LS(s).forEach(x=>{ if(x.fitBox!=null&&gone.includes(x.fitBox)){delete x.fitBox;delete x.fitPad;delete x.fitPadY;delete x.fitAll;delete x.fitDy;} });  // 짝을 잃은 글자는 오토 레이아웃 해제
+  UIKit.pruneGp(LS(s),true);
+}
 function dupSelection(){
-  const s=slides[cur], ids=selIds(); if(!ids.length)return;
-  const gidMap={},added=[];
-  LS(s).filter(x=>ids.includes(x.id)).forEach(src=>{
+  const s=slides[cur], arr=LS(s), ids=selIds(); if(!ids.length)return;
+  // 그룹을 통째로 고른 경우에만 그 그룹 id 를 새로 만든다. 일부만 복제하면 원본과 같은 그룹에 남는다
+  const whole=g=>UIKit.groupMembers(arr,g).every(x=>ids.includes(x.id));
+  const map={}, fresh=g=>map[g]!=null?map[g]:(map[g]=nid());
+  const added=[];
+  arr.filter(x=>ids.includes(x.id)).forEach(src=>{
     const nl=JSON.parse(JSON.stringify(src));nl.id=nid();
     nl.x=(nl.x||0)+24;nl.y=(nl.y||0)+24; delete nl.locked;
-    UIKit.remapGp(nl,gidMap,nid);                 // 계층 그룹(gp) id 를 새로 — 원본 그룹과 섞이지 않게
+    const g=UIKit.gpOf(src);
+    if(g.length) UIKit.setGp(nl,g.map(x=>whole(x)?fresh(x):x),UIKit.gpnOf(src));
+    if(nl.al&&nl.al.g!=null&&whole(nl.al.g)) nl.al=Object.assign({},nl.al,{g:fresh(nl.al.g)});
+    else if(nl.al) delete nl.al;               // 오토 레이아웃 프레임은 그룹째 복제할 때만 유지
     delete nl.fitBox;
-    LS(s).push(nl);added.push(nl.id);
+    added.push(nl);
   });
-  selSet=added;selLayer=added[added.length-1];renderAll();recordHistory();
+  arr.push(...added);
+  UIKit.pruneGp(arr,true);
+  selSet=added.map(x=>x.id);selLayer=selSet[selSet.length-1];renderAll();recordHistory();
 }
 function groupSelection(on){
   const s=slides[cur], ids=selIds();
@@ -3139,8 +3200,9 @@ function groupSelection(on){
 }
 function delSelection(){
   const s=slides[cur], ids=selIds(); if(!ids.length)return;
-  const gone=withFitPartners(LS(s),ids.filter(id=>{const x=LS(s).find(y=>y.id===id);return x&&!x.locked;}));  // 잠긴 레이어는 남긴다, 오토 레이아웃 짝은 같이
-  setLS(s,LS(s).filter(x=>!gone.includes(x.id))); UIKit.pruneGp(LS(s),true);
+  const gone=deletableIds(LS(s),ids);   // 잠긴 레이어(짝 포함)는 남긴다
+  if(!gone.length)return;
+  removeLayers(s,gone);
   selLayer=null;selSet=[];renderAll();recordHistory();
 }
 $('#viewToggle').addEventListener('click',e=>{
@@ -4368,6 +4430,7 @@ $('#redoBtn').onclick=doRedo;
 window.addEventListener('keydown',e=>{
   const tg=e.target;
   if(tg&&tg.matches&&(tg.matches('input,textarea,select')||tg.isContentEditable))return;
+  if(cropCtx)return;                        // 자르기 모드 중 실행 취소 금지 (자르기 상태가 꼬인다)
   const k=e.key.toLowerCase();
   if((e.ctrlKey||e.metaKey)&&k==='z'&&!e.shiftKey){e.preventDefault();doUndo();}
   else if(((e.ctrlKey||e.metaKey)&&k==='z'&&e.shiftKey)||((e.ctrlKey||e.metaKey)&&k==='y')){e.preventDefault();doRedo();}
