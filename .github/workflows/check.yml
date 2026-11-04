@@ -1,0 +1,22 @@
+# 빌드 번호 일치·단위 테스트 — push·PR 마다 자동 실행
+#  · node tools/check-build.mjs : 세 화면 <meta name="app-build"> 와 version.json 이 같은지 (다르면 node tools/bump-build.mjs)
+#  · node --test tools/*.test.mjs : creative-lib · 공용 스톡 API(GitHub 목 서버) · 빌드 번호 도구
+name: check
+on:
+  push:
+    branches-ignore: [stock-data]   # 공용 스톡 이미지 커밋(데이터 브랜치)마다 돌 필요 없음
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 빌드 번호 일치
+        run: node tools/check-build.mjs
+      - name: 단위 테스트
+        run: node --test tools/*.test.mjs
