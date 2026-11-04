@@ -271,7 +271,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .layer-item .ldel{border:none;background:none;color:var(--text-faint);cursor:pointer;font-size:13px;}
   .layer-item .ldel:hover{color:var(--danger);}
   .layer-item .llock{opacity:0;font-size:11px;} .layer-item:hover .llock,.layer-item .llock.on{opacity:1;}
-  .layer-list{max-height:420px;overflow-x:auto;}
+  .layer-list{max-height:clamp(132px,24vh,260px);overflow-x:auto;}   /* 작은 화면에서 아래 속성까지 덜 내려가게 */
+  .fold-h{cursor:pointer;user-select:none;display:flex;align-items:center;gap:5px;}
+  .fold-h .fold-tw{width:10px;font-size:10px;color:var(--text-faint);}
+  .fold-h .lcnt{font-weight:500;color:var(--text-faint);}
+  .sec.fold .fold-body{display:none;} .sec.fold h3{margin-bottom:0;}
   .layer-list .layer-item{flex:none;}
   .layer-item .tw{width:10px;flex:none;font-size:10px;color:var(--text-faint);cursor:pointer;text-align:center;}
   .layer-item.grp{background:transparent;}
@@ -2015,13 +2019,16 @@ function geomSection(l){
   </div>`;
 }
 function selCount(){ const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer); return ids.size; }
+let _layerFold=false, _pageFold=true;   // 페이지 설정은 기본 접힘(규격·서비스 색은 가끔 바꾼다)
+try{ _layerFold=localStorage.getItem('blogLayerFold')==='1'; const pf=localStorage.getItem('blogPageFold'); if(pf!=null)_pageFold=pf==='1'; }catch(e){}
 function renderProps(){
   _panelIds=null;
   const s=slides[cur];
   const l=LS(s).find(x=>x.id===selLayer);
   let html=`
-  <div class="sec">
-    <h3>페이지 설정</h3>
+  <div class="sec${_pageFold?' fold':''}" id="pageSec">
+    <h3 class="fold-h" id="pageFoldBtn" title="눌러서 접기·펼치기"><span class="fold-tw">${_pageFold?'▸':'▾'}</span>페이지 설정 <span class="lcnt">${esc(getP(s).label||'')}</span></h3>
+    <div class="fold-body">
     <div class="field"><label>문서 규격 (모든 페이지 동일 적용)</label>
       <select id="pPreset">
         <option value="thumb"${s.preset==='thumb'?' selected':''}>기본 966×542 (MO 542 크롭)</option>
@@ -2047,10 +2054,12 @@ function renderProps(){
         <button class="svc-btn${s.bg===c?' on':''}" data-svc="${n}"><span class="dot" style="background:${c}"></span>${n}</button>`).join('')}
     </div>
     <div class="field" style="margin-top:9px"><label>배경 직접 지정</label><input type="color" id="bgPick" value="${toHex6(s.bg)}"></div>
+    </div>
   </div>
   <!--LAYERS-->
-  <div class="sec">
-    <h3>레이어</h3>
+  <div class="sec${_layerFold?' fold':''}" id="layerSec">
+    <h3 class="fold-h" id="layerFoldBtn" title="눌러서 접기·펼치기 · 목록 위쪽일수록 화면 앞(PPT·피그마와 같음), Shift+클릭으로 여러 개"><span class="fold-tw">${_layerFold?'▸':'▾'}</span>레이어 <span class="lcnt">${LS(s).length}</span></h3>
+    <div class="fold-body">
     <div class="layer-list">${layerRowsHTML(s)}</div>
     <div class="btn-row">
       <button class="btn small" id="addTextBtn">＋ 텍스트</button>
@@ -2066,7 +2075,7 @@ function renderProps(){
       <button class="btn small" id="lzDn"  title="한 칸 뒤로 (Ctrl+[)">▼ 뒤로</button>
       <button class="btn small" id="lzBot" title="맨 뒤로 (Ctrl+Shift+[)">⤓ 맨 뒤</button>
     </div>
-    <div class="hint" style="margin-top:6px">목록 <b>위쪽일수록 화면 앞</b>에 그려져 (PPT·피그마와 같음). 이미지·도형·텍스트 모두 되고, Shift+클릭으로 여러 개 골라도 상대 순서를 지킨 채 같이 움직여.</div>
+    </div>
   </div>
   <!--ALIGN-->
   <div class="sec">
@@ -2090,12 +2099,15 @@ function renderProps(){
       <button class="btn small" id="ungrpBtn" title="그룹 해제 (Ctrl+Shift+G)"${LS(s).some(x=>UIKit.gpOf(x).length&&(selSet.includes(x.id)||x.id===selLayer))?'':' disabled'}>그룹 해제</button>
     </div>
     <div class="hint" style="margin-top:6px">하나만 고르면 캔버스 기준, Shift+클릭·드래그 박스로 여러 개 고르면 가장 큰 요소 기준으로 맞춰.</div>
-  </div>`;
+  </div>
+  <!--PROPS-->`;
   const brand=SERVICES[s.service]||'#00e31e';
   if(l&&l.type==='t'){
     const nT=_selTexts().length;
     html+=`
   <div class="sec" id="textSec"><h3>텍스트${nT>1?` <span style="color:#00901a;text-transform:none">· ${nT}개 일괄</span>`:''}</h3>
+    <div class="mini-l">색상</div>
+    ${colorCtl('tcolor',l.color,{id:'pColor',brand})}
     <div class="field"><textarea id="pText" aria-label="내용">${esc(l.text)}</textarea></div>
     ${l.fitBox&&LS(s).some(x=>x.id===l.fitBox)?`<div class="row">
       <div class="field"><label>패딩 좌우 (오토 레이아웃)</label><input type="number" id="pFitPad" min="0" value="${l.fitPad!=null?l.fitPad:Math.round(l.size*0.45)}"></div>
@@ -2110,8 +2122,6 @@ function renderProps(){
       ${nf('tls','자간',l.ls,{title:'자간 (em)',dec:3,unit:'em'})}
     </div>
     <div class="ib-row" role="group" aria-label="텍스트 정렬">${['left','center','right'].map(a=>`<button class="ib${l.align===a?' on':''}" data-align="${a}" title="${a==='left'?'왼쪽':a==='center'?'가운데':'오른쪽'} 정렬">${ICO['ta_'+a[0]]}</button>`).join('')}</div>
-    <div class="mini-l">색상</div>
-    ${colorCtl('tcolor',l.color,{id:'pColor',brand})}
     <div class="hint" style="margin-top:-4px;margin-bottom:8px">패널 색은 레이어 전체에 적용돼(서식 바로 칠한 부분 색도 통일). 일부 글자만 칠하려면 더블클릭 후 위쪽 서식 바를 써.</div>
     <div class="row">
       <div class="field"><label>부분 강조 색 [[ ]]</label><input type="color" id="pAccent" value="${toHex6(l.accent||'#00e31e')}"></div>
@@ -2232,10 +2242,16 @@ function renderProps(){
   // 섹션 순서: 위치·크기(맨 위 고정·스크롤해도 붙어 있음) → 레이어 → 정렬 → 선택 요소 속성 → 페이지 설정.
   // 위치·크기는 선택이 없어도 같은 높이의 자리표시로 그려, 선택 여부로 레이어 목록 위치가 흔들리지 않게 한다
   // (흔들리면 행 더블클릭(그룹 이름 변경)·연속 클릭이 빗나간다). 높이가 바뀌는 선택 속성은 목록 아래에 둔다.
-  { const i1=html.indexOf('<!--LAYERS-->'); html=geomSection(l||null)+html.slice(i1)+html.slice(0,i1); }
+  { const i1=html.indexOf('<!--LAYERS-->'), i2=html.indexOf('<!--ALIGN-->'), i3=html.indexOf('<!--PROPS-->');
+    // 위치·크기 → 페이지 설정(접기) → 레이어(접기) → 선택 요소 속성 → 정렬. 높이가 선택에 따라 바뀌는 것은 레이어 목록보다 아래에만 둔다
+    html=geomSection(l||null)+html.slice(0,i1)+html.slice(i1,i2)+html.slice(i3)+html.slice(i2,i3); }
   const keepScroll=props.scrollTop;
   props.innerHTML=html;
+  // 고른 레이어 행을 scrollIntoView 할 때 위에 붙은 위치·크기 섹션 밑에 가리지 않게
+  { const gs=$('#geoSec'); props.style.scrollPaddingTop=gs?gs.offsetHeight+'px':''; }
   props.scrollTop=keepScroll;
+  if($('#pageFoldBtn'))$('#pageFoldBtn').onclick=()=>{ _pageFold=!_pageFold; try{localStorage.setItem('blogPageFold',_pageFold?'1':'0');}catch(e){} renderProps(); };
+  if($('#layerFoldBtn'))$('#layerFoldBtn').onclick=()=>{ _layerFold=!_layerFold; try{localStorage.setItem('blogLayerFold',_layerFold?'1':'0');}catch(e){} renderProps(); };
   bindProps(s,l);
 }
 
@@ -3201,15 +3217,19 @@ function dupSelection(){
     if(nl.al&&nl.al.g!=null&&whole(nl.al.g)) nl.al=Object.assign({},nl.al,{g:fresh(nl.al.g)});
     else if(nl.al) delete nl.al;               // 오토 레이아웃 프레임은 그룹째 복제할 때만 유지
     delete nl.fitBox;
-    added.push({nl,src,fresh:g.some(whole)||!!(nl.al)});
+    const k=g.findIndex(whole);                 // 통째로 복제되는 첫(가장 바깥) 그룹 — 그 아래는 모두 통째
+    added.push({nl,src,top:k>=0?g[k]:null});
   });
-  // 끼워 넣을 자리 — 레이어 배열은 뒤→앞 순서. 그룹 일부·그룹 밖 복제는 원본 바로 앞(위)에 끼워 같은 그룹 덩어리를 유지하고,
-  // 그룹째 복제(새 그룹 id)는 고른 것 중 가장 앞 레이어 바로 위에 한 덩어리로 모은다
-  const block=added.filter(a=>a.fresh).map(a=>a.nl);
-  added.filter(a=>!a.fresh).slice().reverse().forEach(a=>{ arr.splice(arr.indexOf(a.src)+1,0,a.nl); });
-  if(block.length){ const anchor=added.reduce((m,a)=>arr.indexOf(a.src)>arr.indexOf(m.src)?a:m).src;
-    let at=arr.indexOf(anchor)+1; while(at<arr.length&&added.some(a=>!a.fresh&&a.nl===arr[at]))at++;   // 바로 위에 끼운 단일 복제본은 건너뛴다
-    arr.splice(at,0,...block); }
+  // 끼워 넣을 자리 (레이어 배열은 뒤→앞). 불변식: 어떤 그룹(gp)도 배열에서 끊긴 두 덩어리가 되지 않는다.
+  //  · 그룹 일부·그룹 밖 복제 → 원본 바로 앞(위). 원본과 그룹 경로가 같으니 어떤 덩어리도 끊지 않는다
+  //  · 그룹째 복제 → 원본 그룹 G 덩어리의 맨 앞 멤버 바로 위에 한 묶음으로. G 의 바깥 그룹은 복제본도 같은 경로라 끊기지 않는다
+  added.filter(a=>a.top==null).slice().reverse().forEach(a=>{ arr.splice(arr.indexOf(a.src)+1,0,a.nl); });
+  const tops=[...new Set(added.filter(a=>a.top!=null).map(a=>a.top))];
+  tops.forEach(G=>{
+    const block=added.filter(a=>a.top===G).map(a=>a.nl);
+    let at=-1; arr.forEach((x,i)=>{ if(!block.includes(x)&&UIKit.gpOf(x).includes(G))at=i; });
+    arr.splice(at+1,0,...block);
+  });
   UIKit.pruneGp(arr,true);
   selSet=added.map(a=>a.nl.id);selLayer=selSet[selSet.length-1];renderAll();recordHistory();
 }
