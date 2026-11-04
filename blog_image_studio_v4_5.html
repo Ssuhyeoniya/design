@@ -2819,17 +2819,24 @@ function drawMeasures(m,statics){
     line(x-t/2,y0,t,o.d); lab(x,y0+o.d/2,o.d); });
 }
 function canvasPt(e){ const rc=canvas.getBoundingClientRect(), z=canvas._z||1; return {x:(e.clientX-rc.left)/z-curOffX(slides[cur]), y:(e.clientY-rc.top)/z}; }
+/* R5: 선택된 레이어의 핸들이 뒤에 그려진 레이어(직선 그림 여백 등)에 덮여도 핸들이 먼저 — 그 점 아래 모든 요소에서 찾는다 */
+function handleAt(e){
+  const hs=document.elementsFromPoint(e.clientX,e.clientY).filter(n=>n.dataset&&(n.dataset.ep||n.dataset.rg||n.dataset.eh||n.dataset.cr||n.dataset.radh||n.dataset.rz)&&canvas.contains(n));
+  return hs[0]||null;
+}
 canvas.addEventListener('mousedown',e=>{
-  if(e.target.dataset.ep){
-    const l=LS(slides[cur]).find(x=>x.id==e.target.dataset.ep);
-    if(l){ const en=lineEnds(l); epDrag={l,end:+e.target.dataset.end,a:en.a,b:en.b}; }
+  const t0=e.target, isH=n=>!!(n&&n.dataset&&(n.dataset.ep||n.dataset.rg||n.dataset.eh||n.dataset.cr||n.dataset.radh||n.dataset.rz));
+  const T=isH(t0)?t0:(handleAt(e)||t0);
+  if(T.dataset.ep){
+    const l=LS(slides[cur]).find(x=>x.id==T.dataset.ep);
+    if(l){ const en=lineEnds(l); epDrag={l,end:+T.dataset.end,a:en.a,b:en.b}; }
     e.preventDefault();return;
   }
-  if(e.target.dataset.rg){
-    const l=LS(slides[cur]).find(x=>x.id==e.target.dataset.rg);
+  if(T.dataset.rg){
+    const l=LS(slides[cur]).find(x=>x.id==T.dataset.rg);
     const bw2=l.type==='f'?Math.max(l.w,l.topW||0):l.w;
     // 텍스트/이미지는 l.h 가 없으므로 실제 렌더 높이(offsetHeight, 회전 전 레이아웃값)를 쓴다
-    const host=e.target.parentElement;
+    const host=T.parentElement;
     const bh2=(l.h!=null)?l.h:(host?host.offsetHeight:(l.type==='i'?l.w/(l.ar||1):0));
     const cx0=l.x+bw2/2, cy0=l.y+bh2/2;
     const z0=canvas._z||1;                      // z 는 mousemove 스코프 전용이라 여기선 canvas._z 사용
@@ -2839,28 +2846,28 @@ canvas.addEventListener('mousedown',e=>{
     rotDrag={l,cx:cx0,cy:cy0,a0:Math.atan2(my0-cy0,mx0-cx0)*180/Math.PI,r0:(l.rot||0)};
     e.preventDefault();return;
   }
-  if(e.target.dataset.eh){
+  if(T.dataset.eh){
     const s0=slides[cur];
     const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer);
-    ids.add(+e.target.dataset.eh);
+    ids.add(+T.dataset.eh);
     const list=LS(s0).filter(x=>x.type==='r'&&ids.has(x.id)&&!x.locked)   // 잠긴 박스는 크기 고정
       .map(L=>({L,ox:L.x,oy:L.y,ow:L.w,oh:L.h}));
-    edgeDrag={edge:e.target.dataset.edge,sx:e.clientX,sy:e.clientY,list};
+    edgeDrag={edge:T.dataset.edge,sx:e.clientX,sy:e.clientY,list};
     e.preventDefault();return;
   }
-  if(e.target.dataset.cr){
-    const l=LS(slides[cur]).find(x=>x.id==e.target.dataset.cr);
-    crDrag={l,corner:e.target.dataset.corner,sx:e.clientX,sy:e.clientY,
+  if(T.dataset.cr){
+    const l=LS(slides[cur]).find(x=>x.id==T.dataset.cr);
+    crDrag={l,corner:T.dataset.corner,sx:e.clientX,sy:e.clientY,
       ox:l.x,oy:l.y,ow:l.w,oh:l.h,otw:l.topW||0};
     e.preventDefault();return;
   }
-  if(e.target.dataset.radh){
-    const l=LS(slides[cur]).find(x=>x.id==e.target.dataset.radh);
+  if(T.dataset.radh){
+    const l=LS(slides[cur]).find(x=>x.id==T.dataset.radh);
     radDrag={l,sx:e.clientX,r0:l.radius||0};
     e.preventDefault();return;
   }
-  if(e.target.dataset.rz){
-    const l=LS(slides[cur]).find(x=>x.id==e.target.dataset.rz);
+  if(T.dataset.rz){
+    const l=LS(slides[cur]).find(x=>x.id==T.dataset.rz);
     resz={l,sx:e.clientX,sy:e.clientY,ow:l.w,oh:l.h};e.preventDefault();return;
   }
   if(e.target.isContentEditable)return;
