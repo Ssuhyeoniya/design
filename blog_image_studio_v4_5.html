@@ -2418,7 +2418,7 @@ function geoMakeBase(sl,P){
   geoUnits(sl.layers||[]).forEach(list=>{
     const c=unitCenter(list), x=list[0];
     const bg=list.length===1&&c.w>=P.W*0.95&&c.h>=P.H*0.95&&x.type!=='t'&&x.type!=='i'&&!(x.type==='shape'&&['circle','sparkle'].includes(x.shape));
-    list.forEach(l=>{ B.L[l.id]={g:geoOf(l),a:{x:c.x,y:c.y},m:bg?'s':'u'}; });
+    list.forEach(l=>{ B.L[l.id]={g:geoOf(l),a:{x:c.x,y:c.y},m:bg?'s':'u',u:_unitSig(list)}; });
   });
   return B;
 }
@@ -2442,8 +2442,21 @@ function geoSyncBase(sl,B,P){
       list.forEach(l=>{ const e={a,m:'u'}; B.L[l.id]=Object.assign(e,{g:inv(l,e)}); }); });
   }
 }
+// 묶음 기준점 다시 구하기 — 규격을 바꿀 때마다 '지금 묶음 구성'(맨 바깥 그룹·오토 레이아웃 짝·단독)을 보고,
+// 구성이 바뀐 묶음(묶기·끌어 넣기/빼기·해제·짝 생성/해제)만 멤버의 기준 기하 g 의 bbox 중심으로 a 를 새로 정한다.
+// 구성이 그대로인 묶음은 a 를 그대로 둔다 — 그래야 그 크기에서 편집한 위치가 다시 그 크기로 왔을 때 그대로 나온다.
+const _unitSig=list=>list.map(l=>l.id).sort((a,b)=>a-b).join(',');
+function geoReanchor(sl,B){
+  geoUnits(sl.layers||[]).forEach(list=>{
+    const sig=_unitSig(list), mem=list.filter(l=>B.L[l.id]); if(!mem.length)return;
+    if(mem.every(l=>B.L[l.id].u===sig))return;                       // 구성 그대로
+    const c=unitCenter(mem.map(l=>Object.assign({},l,B.L[l.id].g)));
+    mem.forEach(l=>{ const e=B.L[l.id]; if(list.length>1)e.m='u'; e.a={x:c.x,y:c.y}; e.u=sig; });
+  });
+}
 // 기준 → 새 규격
 function geoApplyBase(sl,B,P){
+  geoReanchor(sl,B);
   const rx=P.W/B.W, ry=P.H/B.H, k=Math.min(rx,ry);
   (sl.layers||[]).forEach(l=>{ const e=B.L[l.id]; if(!e)return;
     let g;
@@ -2456,7 +2469,9 @@ function geoApplyBase(sl,B,P){
   if(sl.layers)syncFitBoxes(sl.layers);
 }
 // 규격 변경 직후(화면 반영 뒤) 레이어별 결과를 기록 — 다음 변경 때 편집 여부 판단
-function stampGeoBase(){ slides.forEach(sl=>{ const B=sl.geoBase; if(!B||B.v!==2)return; B.after={}; (sl.layers||[]).forEach(l=>{ B.after[l.id]=JSON.stringify(geoOf(l)); }); }); }
+// 실제로 변환한 슬라이드만 기록한다 — 크기가 같은 규격 '변경'(같은 값 재선택 등) 뒤에 찍으면 그 사이 편집이 기준에 안 들어간다
+let _geoStampIds=new Set();
+function stampGeoBase(){ slides.forEach(sl=>{ const B=sl.geoBase; if(!B||B.v!==2||!_geoStampIds.has(sl.id))return; B.after={}; (sl.layers||[]).forEach(l=>{ B.after[l.id]=JSON.stringify(geoOf(l)); }); }); _geoStampIds.clear(); }
 // 슬라이드 복제 등으로 레이어 id 가 바뀔 때 기준의 id 도 같이
 function geoRemapIds(sl,map){ const B=sl.geoBase; if(!B||B.v!==2)return;
   const L={},af={}; Object.keys(B.L).forEach(id=>{ const n=map[id]; if(n!=null)L[n]=B.L[id]; }); B.L=L;
@@ -2477,7 +2492,7 @@ function applyDocPreset(v,cwv,chv){
       sl.preset=v; if(v==='custom'){sl.cw=nw.W;sl.ch=nw.H;}else{delete sl.cw;delete sl.ch;} return; }
     if(!sl.geoBase||sl.geoBase.v!==2) sl.geoBase=geoMakeBase(sl,old);   // 예전 저장물·처음 변경: 지금 값이 기준
     else geoSyncBase(sl,sl.geoBase,old);                               // 지난 변경 뒤 편집·추가·삭제 반영
-    geoApplyBase(sl,sl.geoBase,nw);
+    geoApplyBase(sl,sl.geoBase,nw); _geoStampIds.add(sl.id);
     sl.preset=v;
     if(v==='custom'){sl.cw=nw.W;sl.ch=nw.H;}else{delete sl.cw;delete sl.ch;}
     if(sl.kind==='guide')layoutGuideSlots(sl); // 슬롯은 규격 기준 재조판으로 비율 유지
