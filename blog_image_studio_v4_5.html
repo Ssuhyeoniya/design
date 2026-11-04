@@ -1598,6 +1598,7 @@ function bindNums(defs){
     let prev=d.get();
     inp.addEventListener('focus',()=>{prev=d.get();setTimeout(()=>inp.select(),0);});
     const commit=()=>{
+      if(inp.value.trim()===fmtNum(d.get(),d.dec))return;   // 값 변화 없음 → 다시 쓰지 않음
       const v=evalExpr(inp.value);
       if(isNaN(v)){ show(); return; }   // 잘못된 값 → 직전 값 복원
       apply(v,true);
@@ -1649,6 +1650,7 @@ function bindColors(defs){
       const raw=hx.value.trim();
       if(!raw&&d.none){setV(null,true);return;}
       const v=parseHex(raw); if(!v){paint();return;}          // 잘못된 HEX → 이전 값 복원
+      const cv0=d.get(); if(cv0&&toHex6(cv0).toLowerCase()===v)return;   // 변화 없음
       setV(v,true);
     };
     hx.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();commitHex();hx.select();} else if(e.key==='Escape'){e.preventDefault();paint();hx.blur();} });
@@ -1691,11 +1693,16 @@ function geomSection(l){
       ${nf('gop','투명',Math.round((l.opacity!=null?l.opacity:1)*100),{title:'불투명도 (%)',unit:'%'})}
     </div>
     <label class="chkline"><input type="checkbox" id="pLock"${l.locked?' checked':''}> 잠금 — 캔버스에서 이동·크기 조절 안 됨</label>
+    <div class="btn-row" style="margin:6px 0">
+      <button class="btn small" id="dupBtn" title="복제 (Ctrl+D)">복제</button>
+      <button class="btn small" id="delBtn" title="삭제 (Del)"${l.locked?' disabled':''}>삭제</button>
+    </div>
     <div class="hint">라벨(X·Y·W·H)을 좌우로 끌면 값이 바뀌어 · ↑↓ 1, Shift 10 · 수식 입력 가능 (예: 100+20)</div>
   </div>`;
 }
 function selCount(){ const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer); return ids.size; }
 function renderProps(){
+  _panelIds=null;
   const s=slides[cur];
   const l=LS(s).find(x=>x.id===selLayer);
   let html=`
@@ -1764,6 +1771,8 @@ function renderProps(){
     </div>
     <div class="btn-row">
       <button class="btn small" id="snapTxtBtn">텍스트를 도형 중앙에</button>
+      <button class="btn small" id="grpBtn" title="그룹 (Ctrl+G)"${selCount()<2?' disabled':''}>그룹</button>
+      <button class="btn small" id="ungrpBtn" title="그룹 해제 (Ctrl+Shift+G)"${LS(s).some(x=>x.gid&&(selSet.includes(x.id)||x.id===selLayer))?'':' disabled'}>그룹 해제</button>
     </div>
     <div class="hint" style="margin-top:6px">하나만 고르면 캔버스 기준, Shift+클릭·드래그 박스로 여러 개 고르면 가장 큰 요소 기준으로 맞춰.</div>
   </div>`;
@@ -1944,9 +1953,10 @@ function applyDocPreset(v,cwv,chv){
   });
 }
 /* 다중 선택(Shift+클릭) 텍스트 레이어 — 서식 일괄 적용 대상 */
+let _panelIds=null; // 패널을 그린 시점의 선택(bindProps 가 고정) — 재렌더 중 blur 가 다른 레이어에 쓰는 것 방지
 function _selTexts(){
   const s=slides[cur]; if(!s)return [];
-  const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer);
+  let ids=_panelIds; if(!ids){ ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer); }
   return LS(s).filter(x=>x.type==='t'&&ids.has(x.id));
 }
 function _applyText(prop,val,fallbackLayer){
@@ -2022,6 +2032,10 @@ function bindProps(s,l){
   };
   props.querySelectorAll('[data-al]').forEach(b=>b.onclick=()=>alignSelection(b.dataset.al));
   if($('#snapTxtBtn'))$('#snapTxtBtn').onclick=()=>snapTextToShape();
+  if($('#grpBtn'))$('#grpBtn').onclick=()=>groupSelection(true);
+  if($('#ungrpBtn'))$('#ungrpBtn').onclick=()=>groupSelection(false);
+  if($('#dupBtn'))$('#dupBtn').onclick=()=>dupSelection();
+  if($('#delBtn'))$('#delBtn').onclick=()=>delSelection();
   $('#addImgBtn2').onclick=()=>$('#imgInput').click();
   $('#addArrowBtn').onclick=()=>{
     const P=curP(s), brand=SERVICES[s.service]||'#00e31e';
@@ -2032,7 +2046,9 @@ function bindProps(s,l){
   };
   if(!l)return;
   const rc=()=>{renderCanvas();renderSlideList();};
-  const selL=()=>{const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer); return LS(s).filter(x=>ids.has(x.id));};
+  // 패널을 그린 시점의 선택을 고정 — 필드 blur(패널 재렌더 중 발생)가 새로 고른 레이어에 값을 덮어쓰지 않게
+  const _bindIds=new Set(selSet||[]); if(selLayer)_bindIds.add(selLayer); _panelIds=_bindIds;
+  const selL=()=>LS(s).filter(x=>_bindIds.has(x.id));
   const N={}, C={};
   // 위치·크기 (모든 레이어 공통)
   N.gx={get:()=>l.x,set:v=>{l.x=v;}};
@@ -2415,7 +2431,7 @@ window.addEventListener('mousemove',e=>{
       if(nx){p.x+=nx.d;gx=nx.t;} if(ny){p.y+=ny.d;gy=ny.t;}
     }
     if(epDrag.end===1)setLineEnds(L,p,fixed); else setLineEnds(L,fixed,p);
-    renderCanvas(); drawSnapLines(gx,gy);
+    renderCanvas(); drawSnapLines(gx,gy); syncGeomFields();
     const len=Math.hypot(L.w,L.h), deg=Math.round(Math.atan2(p.y-fixed.y,p.x-fixed.x)*180/Math.PI);
     showTip(e,`${Math.round(len)}px · ${deg}°`);
     return;
@@ -2430,7 +2446,7 @@ window.addEventListener('mousemove',e=>{
       else if(ed==='l'){L.w=Math.max(10,Math.round(it.ow-dx)); L.x=it.ox+(it.ow-L.w);}
       if(L.radius) L.radius=Math.min(L.radius,Math.min(L.w,L.h)/2);
     });
-    renderCanvas();
+    renderCanvas(); syncGeomFields();
     if(edgeDrag.list[0])showTip(e,`${Math.round(edgeDrag.list[0].L.w)} × ${Math.round(edgeDrag.list[0].L.h)}`);
     return;
   }
@@ -2451,10 +2467,22 @@ window.addEventListener('mousemove',e=>{
       const hz=cn.includes('l')?'l':cn.includes('r')?'r':null, vt=cn.includes('t')?'t':cn.includes('b')?'b':null;
       const ow=crDrag.ow, oh=crDrag.oh, ox=crDrag.ox, oy=crDrag.oy, ar=ow/Math.max(1,oh);
       const keep=e.shiftKey||L.shape==='circle';
+      const th=(+L.rot||0)*Math.PI/180, cs=Math.cos(th), sn=Math.sin(th);
+      const ldx=dx*cs+dy*sn, ldy=-dx*sn+dy*cs;          // 회전된 도형은 도형 자체 축 기준으로 늘린다
       let nw=ow, nh=oh;
-      if(hz==='r')nw=ow+dx; else if(hz==='l')nw=ow-dx;
-      if(vt==='b')nh=oh+dy; else if(vt==='t')nh=oh-dy;
+      if(hz==='r')nw=ow+ldx; else if(hz==='l')nw=ow-ldx;
+      if(vt==='b')nh=oh+ldy; else if(vt==='t')nh=oh-ldy;
       let gx=null,gy=null;
+      if(th){ // 회전 상태: 스냅 없이 반대쪽 핸들(앵커)을 화면상 제자리에 고정
+        if(keep){ if(hz&&vt){ if(Math.abs(nw/ow)>=Math.abs(nh/oh))nh=nw/ar; else nw=nh*ar; } else if(hz)nh=nw/ar; else if(vt)nw=nh*ar; }
+        L.w=Math.max(4,Math.round(nw)); L.h=Math.max(4,Math.round(nh));
+        const ax=hz==='l'?1:hz==='r'?0:0.5, ay=vt==='t'?1:vt==='b'?0:0.5;
+        const rx=(ax-0.5)*ow, ry=(ay-0.5)*oh, wx=ox+ow/2+rx*cs-ry*sn, wy=oy+oh/2+rx*sn+ry*cs;
+        const rx2=(ax-0.5)*L.w, ry2=(ay-0.5)*L.h;
+        L.x=Math.round(wx-(rx2*cs-ry2*sn)-L.w/2); L.y=Math.round(wy-(rx2*sn+ry2*cs)-L.h/2);
+        renderCanvas(); syncGeomFields(); showTip(e,`${L.w} × ${L.h}`);
+        return;
+      }
       if(keep){
         if(hz&&vt){ if(Math.abs(nw/ow)>=Math.abs(nh/oh))nh=nw/ar; else nw=nh*ar; }
         else if(hz)nh=nw/ar; else if(vt)nw=nh*ar;
@@ -2468,7 +2496,7 @@ window.addEventListener('mousemove',e=>{
       L.w=Math.max(4,Math.round(nw)); L.h=Math.max(4,Math.round(nh));
       L.x=hz==='l'?ox+ow-L.w:hz==='r'?ox:Math.round(ox+(ow-L.w)/2);
       L.y=vt==='t'?oy+oh-L.h:vt==='b'?oy:Math.round(oy+(oh-L.h)/2);
-      renderCanvas(); drawSnapLines(gx,gy);
+      renderCanvas(); drawSnapLines(gx,gy); syncGeomFields();
       showTip(e,`${L.w} × ${L.h}`);
       return;
     }else{ // 박스: 반대 모서리 고정 리사이즈 + 타 오브젝트 크기 일치 스냅
@@ -2484,7 +2512,7 @@ window.addEventListener('mousemove',e=>{
         if(Math.abs(b3.h-L.h)<=TH2)L.h=Math.round(b3.h);
       });
     }
-    renderCanvas();
+    renderCanvas(); syncGeomFields();
     { const bb=layerBBox(L); showTip(e,`${Math.round(bb.w)} × ${Math.round(bb.h)}`); }
     return;
   }
@@ -2500,7 +2528,7 @@ window.addEventListener('mousemove',e=>{
     ang=Math.round(ang);
     if(ang)rotDrag.l.rot=ang;else delete rotDrag.l.rot;
     rotDrag.l.rotOrigin='center center';
-    renderCanvas(); showTip(e,`${ang}°`); return;
+    renderCanvas(); syncGeomFields(); showTip(e,`${ang}°`); return;
   }
   if(radDrag){
     const dr=(e.clientX-radDrag.sx)/z;
@@ -2510,7 +2538,7 @@ window.addEventListener('mousemove',e=>{
   if(resz){
     resz.l.w=Math.max(20,resz.ow+(e.clientX-resz.sx)/z);
     if(resz.l.type==='r')resz.l.h=Math.max(10,resz.oh+(e.clientY-resz.sy)/z);
-    renderCanvas(); showTip(e,`${Math.round(resz.l.w)} × ${Math.round(layerBBox(resz.l).h)}`); return;
+    renderCanvas(); syncGeomFields(); showTip(e,`${Math.round(resz.l.w)} × ${Math.round(layerBBox(resz.l).h)}`); return;
   }
   if(!drag)return;
   const s=slides[cur],P=curP(s),offX=curOffX(s);
@@ -2574,6 +2602,7 @@ window.addEventListener('mousemove',e=>{
   if(adjX!==null)dx+=adjX;
   if(adjY!==null)dy+=adjY;
 
+  dx=Math.round(dx); dy=Math.round(dy);          // 정수 px 로 — 패널 X·Y 와 저장값 일치
   drag.list.forEach(({L,ox,oy})=>{
     L.x=ox+dx;L.y=oy+dy;
     const el=canvas.querySelector(`.layer[data-id="${L.id}"]`);
@@ -2759,17 +2788,7 @@ window.addEventListener('keydown',e=>{
     if(!ids.length)return;
     e.preventDefault();
     const picked=LS(s).filter(x=>ids.includes(x.id));
-    if(k==='d'){ // 복제: 즉시 오프셋 배치
-      const gidMap={},added=[];
-      picked.forEach(src=>{
-        const nl=JSON.parse(JSON.stringify(src));nl.id=nid();
-        nl.x=(nl.x||0)+24;nl.y=(nl.y||0)+24;
-        if(src.gid){if(!gidMap[src.gid])gidMap[src.gid]=nid();nl.gid=gidMap[src.gid];}
-        delete nl.fitBox;
-        LS(s).push(nl);added.push(nl.id);
-      });
-      selSet=added;selLayer=added[added.length-1];renderAll();return;
-    }
+    if(k==='d'){ dupSelection(); return; } // 복제: 즉시 오프셋 배치
     CLIP=picked.map(x=>JSON.parse(JSON.stringify(x)));
     CLIP_OFF=24;
     if(k==='x'){
@@ -2780,15 +2799,7 @@ window.addEventListener('keydown',e=>{
   }
   // Ctrl+G 그룹화 / Ctrl+Shift+G 해제
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='g'){
-    e.preventDefault();
-    if(e.shiftKey){
-      const gids=new Set(LS(s).filter(x=>ids.includes(x.id)&&x.gid).map(x=>x.gid));
-      LS(s).forEach(x=>{if(gids.has(x.gid))delete x.gid;});
-    }else if(ids.length>=2){
-      const gid=nid();
-      LS(s).forEach(x=>{if(ids.includes(x.id))x.gid=gid;});
-    }
-    renderAll();return;
+    e.preventDefault(); groupSelection(!e.shiftKey); return;
   }
   if(!ids.length)return;
   const targets=LS(s).filter(x=>ids.includes(x.id)&&!x.locked);
@@ -2797,11 +2808,40 @@ window.addEventListener('keydown',e=>{
   else if(e.key==='ArrowRight')targets.forEach(t=>t.x+=st);
   else if(e.key==='ArrowUp')targets.forEach(t=>t.y-=st);
   else if(e.key==='ArrowDown')targets.forEach(t=>t.y+=st);
-  else if(e.key==='Delete'||e.key==='Backspace'){
-    setLS(s,LS(s).filter(x=>!ids.includes(x.id)||x.locked));selLayer=null;selSet=[];renderAll();return;
+  else if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); delSelection(); return;
   }else hd=false;
   if(hd){e.preventDefault();renderCanvas();renderProps();}
 });
+/* 선택 편집 명령 — 단축키(Ctrl+D·Ctrl+G·Ctrl+Shift+G·Del)와 패널 버튼이 함께 쓴다 */
+function selIds(){ return selSet.length?selSet:(selLayer?[selLayer]:[]); }
+function dupSelection(){
+  const s=slides[cur], ids=selIds(); if(!ids.length)return;
+  const gidMap={},added=[];
+  LS(s).filter(x=>ids.includes(x.id)).forEach(src=>{
+    const nl=JSON.parse(JSON.stringify(src));nl.id=nid();
+    nl.x=(nl.x||0)+24;nl.y=(nl.y||0)+24; delete nl.locked;
+    if(src.gid){if(!gidMap[src.gid])gidMap[src.gid]=nid();nl.gid=gidMap[src.gid];}
+    delete nl.fitBox;
+    LS(s).push(nl);added.push(nl.id);
+  });
+  selSet=added;selLayer=added[added.length-1];renderAll();recordHistory();
+}
+function groupSelection(on){
+  const s=slides[cur], ids=selIds();
+  if(!on){
+    const gids=new Set(LS(s).filter(x=>ids.includes(x.id)&&x.gid).map(x=>x.gid));
+    LS(s).forEach(x=>{if(gids.has(x.gid))delete x.gid;});
+  }else if(ids.length>=2){
+    const gid=nid();
+    LS(s).forEach(x=>{if(ids.includes(x.id))x.gid=gid;});
+  }else return;
+  renderAll();recordHistory();
+}
+function delSelection(){
+  const s=slides[cur], ids=selIds(); if(!ids.length)return;
+  setLS(s,LS(s).filter(x=>!ids.includes(x.id)||x.locked));  // 잠긴 레이어는 남긴다
+  selLayer=null;selSet=[];renderAll();recordHistory();
+}
 $('#viewToggle').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||b.disabled)return;
   viewMode=b.dataset.v;
