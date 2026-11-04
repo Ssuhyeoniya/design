@@ -370,6 +370,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     #modal,#assetModal{width:96vw;}
     .asset-grid{grid-template-columns:repeat(3,1fr);}
   }
+  /* ===== 도형 레이어 (type:'shape') ===== */
+  .layer.s{overflow:visible;}
+  .layer.s.ln>img{pointer-events:auto;}
+  #shapePop{position:fixed;z-index:202;background:var(--panel);border:1px solid var(--border-strong);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:10px 12px 12px;display:none;width:17.5rem;}
+  #shapePop h4{font-size:.66rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;margin:2px 0 8px;font-weight:700;}
+  #shapePop .sgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;}
+  #shapePop button{display:flex;flex-direction:column;align-items:center;gap:3px;border:1px solid var(--border);background:#fff;border-radius:8px;padding:7px 2px 5px;cursor:pointer;font-family:inherit;font-size:.62rem;color:var(--text-sub);}
+  #shapePop button:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);}
+  #shapePop svg{width:22px;height:22px;display:block;}
+  .layer-item .ico svg{width:13px;height:13px;display:block;}
 </style>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <style>/* 잘난고딕(JalnanGothic) — 원본 OTF 전체 글리프 woff2 변환 후 내장. 외부 네트워크 불필요 */
@@ -394,6 +404,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <div class="divider"></div>
   <button class="btn" id="openPlanBtn">기획안 불러오기</button>
   <button class="btn" id="addImgBtn">이미지 추가</button>
+  <button class="btn" id="shapeBtn" title="도형 추가 (사각형·원·선·화살표·말풍선·반짝이)">◇ 도형</button>
   <button class="btn" id="assetBtn">보관함</button>
   <input type="file" id="imgInput" accept="image/*" multiple style="display:none">
   <input type="file" id="assetUpInput" accept="image/*" multiple style="display:none">
@@ -501,6 +512,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   </div>
 </div>
 
+<div id="shapePop" role="menu" aria-label="도형 추가"></div>
 <div id="busy"><div class="spin"></div><p id="busyMsg">처리 중…</p></div>
 <div id="exportZone"></div>
 
@@ -577,6 +589,13 @@ function makeMoDraft(s){
   return s.layers.map(l=>{
     const nl=JSON.parse(JSON.stringify(l));
     if(l.role&&coverFit(nl,l))return nl;
+    if(l.type==='shape'){ // 도형은 균일 배율(찌그러짐 방지), 중심 기준 재배치
+      const cx2=(l.x+(l.w||0)/2)/P.W;
+      nl.w=Math.round((l.w||0)*sy); nl.h=Math.round((l.h||0)*sy);
+      nl.x=Math.round(cx2*MO_W-nl.w/2); nl.y=Math.round(l.y*sy);
+      if(l.strokeW)nl.strokeW=Math.max(1,Math.round(l.strokeW*sy));
+      return nl;
+    }
     const cx=(l.x+(l.w||0)/2)/P.W, relW=(l.w||0)/P.W;
     let nw=Math.min(0.94, relW*1.18), nx=cx-nw/2;
     nx=Math.max(0.03,Math.min(nx,0.97-nw));
@@ -754,9 +773,10 @@ function snapTextToShape(){
   texts.forEach(t=>{
     const tb=visBox(t);
     // 선택에 포함된 도형 우선, 없으면 텍스트 중심을 덮는 가장 작은 도형
-    let box=arr.filter(x=>x.type==='r'&&ids.has(x.id))[0];
+    const isBox=x=>x.type==='r'||(x.type==='shape'&&!isLine(x));
+    let box=arr.filter(x=>isBox(x)&&ids.has(x.id))[0];
     if(!box){
-      const cand=arr.filter(x=>x.type==='r'&&tb.cx>=x.x&&tb.cx<=x.x+x.w&&tb.cy>=x.y&&tb.cy<=x.y+x.h);
+      const cand=arr.filter(x=>isBox(x)&&tb.cx>=x.x&&tb.cx<=x.x+x.w&&tb.cy>=x.y&&tb.cy<=x.y+x.h);
       box=cand.sort((a,b)=>a.w*a.h-b.w*b.h)[0];
     }
     if(!box)return;
@@ -784,6 +804,135 @@ function iLayer(o){return Object.assign({id:nid(),type:'i',src:'',x:100,y:100,w:
 function rLayer(o){return Object.assign({id:nid(),type:'r',x:100,y:100,w:600,h:120,fill:'#e8f9ec',radius:24},o);}
 function fLayer(o){return Object.assign({id:nid(),type:'f',x:100,y:100,w:600,topW:200,h:400,
   grad:{type:'linear',angle:90,rotateWith:true,stops:[{pos:0,color:'#ffffff',alpha:0,bright:0},{pos:100,color:'#ffffff',alpha:50,bright:0}]}},o);}
+/* ================= 도형 레이어 (type:'shape') =================
+   파워포인트 '삽입 → 도형'과 같은 벡터 도형. 렌더링은 SVG 로 하고(html2canvas 출력 호환을 위해
+   width/height 속성이 있는 SVG data URI), 데이터는 x·y·w·h + fill·stroke·strokeW·opacity·radius·rot.
+   직선·화살표는 박스(x,y,w,h) + 방향 플래그(fx: 시작점이 오른쪽, fy: 시작점이 아래)로 두 끝점을 표현한다. */
+const SHAPE_DEFS=[['rect','사각형'],['roundrect','둥근 사각형'],['circle','원'],['ellipse','타원'],['triangle','삼각형'],
+  ['diamond','마름모'],['line','직선'],['arrow','화살표'],['bubble','말풍선'],['sparkle','반짝이']];
+const SHAPE_NAME=Object.fromEntries(SHAPE_DEFS);
+function isLine(l){ return !!(l&&l.type==='shape'&&(l.shape==='line'||l.shape==='arrow')); }
+function sLayer(o){ return Object.assign({id:nid(),type:'shape',shape:'rect',x:100,y:100,w:160,h:160,fill:'#00e31e',stroke:null,strokeW:0},o); }
+/* 예전 '✦' 텍스트 글리프(행간 1)의 잉크 상자 비율 — 크롬 실측(폰트 크기 대비) */
+const SPARKLE_GLYPH={x:0,y:-0.04,w:0.96,h:0.96};
+function sparkleLayer(x,y,size,color,lh){
+  const k=SPARKLE_GLYPH, dy=((lh||1)-1)*size/2;
+  return sLayer({shape:'sparkle',x:Math.round(x+size*k.x),y:Math.round(y+dy+size*k.y),
+    w:Math.max(2,Math.round(size*k.w)),h:Math.max(2,Math.round(size*k.h)),fill:color||'#ffffff'});
+}
+function linePts(l){ // 박스 기준 상대 좌표
+  return {x1:l.fx?l.w:0, y1:l.fy?l.h:0, x2:l.fx?0:l.w, y2:l.fy?0:l.h};
+}
+function lineEnds(l){ const p=linePts(l); return {a:{x:l.x+p.x1,y:l.y+p.y1}, b:{x:l.x+p.x2,y:l.y+p.y2}}; }
+function setLineEnds(l,a,b){
+  l.x=Math.round(Math.min(a.x,b.x)); l.y=Math.round(Math.min(a.y,b.y));
+  l.w=Math.round(Math.abs(b.x-a.x)); l.h=Math.round(Math.abs(b.y-a.y));
+  if(a.x>b.x)l.fx=true; else delete l.fx;
+  if(a.y>b.y)l.fy=true; else delete l.fy;
+}
+function bubblePath(l,W,H,i){
+  const Hb=Math.max(i*2+4,H*0.78);
+  const r=Math.max(0,Math.min(l.radius!=null?l.radius:Math.min(W,Hb)*0.2,(W-2*i)/2,(Hb-2*i)/2));
+  const L=i,T=i,R=W-i,B=Hb;
+  const tx1=Math.max(L+r,W*0.22), tx2=Math.min(R-r,Math.max(tx1+1,W*0.40)), ax=Math.max(L,W*0.16), ay=H-i;
+  const f=v=>(+v).toFixed(2);
+  return `M${f(L+r)},${f(T)} H${f(R-r)} A${f(r)},${f(r)} 0 0 1 ${f(R)},${f(T+r)} V${f(B-r)} A${f(r)},${f(r)} 0 0 1 ${f(R-r)},${f(B)}`
+    +` H${f(tx2)} L${f(ax)},${f(ay)} L${f(tx1)},${f(B)} H${f(L+r)} A${f(r)},${f(r)} 0 0 1 ${f(L)},${f(B-r)} V${f(T+r)} A${f(r)},${f(r)} 0 0 1 ${f(L+r)},${f(T)} Z`;
+}
+function _svgURI(svg){ return 'data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(svg))); }
+function shapeSVG(l){
+  const sw=(l.stroke&&+l.strokeW>0)?+l.strokeW:0, i=sw/2;
+  const W=Math.max(1,Math.round(l.w)), H=Math.max(1,Math.round(l.h));
+  const fill=l.fill||'none', st=sw?` stroke="${l.stroke}" stroke-width="${sw}" stroke-linejoin="round"`:'';
+  const f=v=>(+v).toFixed(2);
+  let body='';
+  switch(l.shape){
+    case 'circle': case 'ellipse':
+      body=`<ellipse cx="${f(W/2)}" cy="${f(H/2)}" rx="${f(Math.max(0,W/2-i))}" ry="${f(Math.max(0,H/2-i))}" fill="${fill}"${st}/>`; break;
+    case 'triangle':
+      body=`<polygon points="${f(W/2)},${f(i)} ${f(W-i)},${f(H-i)} ${f(i)},${f(H-i)}" fill="${fill}"${st}/>`; break;
+    case 'diamond':
+      body=`<polygon points="${f(W/2)},${f(i)} ${f(W-i)},${f(H/2)} ${f(W/2)},${f(H-i)} ${f(i)},${f(H/2)}" fill="${fill}"${st}/>`; break;
+    case 'bubble':
+      body=`<path d="${bubblePath(l,W,H,i)}" fill="${fill}"${st}/>`; break;
+    case 'sparkle': {
+      const p=(x,y)=>`${f(i+x*(W-sw)/100)},${f(i+y*(H-sw)/100)}`;
+      body=`<path d="M${p(50,0)} Q${p(56,44)} ${p(100,50)} Q${p(56,56)} ${p(50,100)} Q${p(44,56)} ${p(0,50)} Q${p(44,44)} ${p(50,0)} Z" fill="${fill}"${st}/>`; break;
+    }
+    default: { // rect · roundrect
+      const r=Math.max(0,Math.min(+l.radius||0,(W-sw)/2,(H-sw)/2));
+      body=`<rect x="${f(i)}" y="${f(i)}" width="${f(Math.max(0,W-sw))}" height="${f(Math.max(0,H-sw))}" rx="${f(r)}" ry="${f(r)}" fill="${fill}"${st}/>`;
+    }
+  }
+  return _svgURI(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${body}</svg>`);
+}
+function lineSVG(l){
+  const sw=Math.max(1,+l.strokeW||4), col=l.stroke||'#1f2328', pad=Math.ceil(sw*3+6);
+  const W=Math.max(0,+l.w||0), H=Math.max(0,+l.h||0), p=linePts(l);
+  const X=v=>(v+pad).toFixed(2);
+  let x2=p.x2,y2=p.y2,head='';
+  if(l.shape==='arrow'){
+    const ang=Math.atan2(p.y2-p.y1,p.x2-p.x1), hl=sw*3.2, hw=sw*2.1;
+    const bx=p.x2-Math.cos(ang)*hl, by=p.y2-Math.sin(ang)*hl, nx=-Math.sin(ang)*hw, ny=Math.cos(ang)*hw;
+    head=`<polygon points="${X(p.x2)},${X(p.y2)} ${X(bx+nx)},${X(by+ny)} ${X(bx-nx)},${X(by-ny)}" fill="${col}"/>`;
+    if(Math.hypot(p.x2-p.x1,p.y2-p.y1)>hl){ x2=bx+Math.cos(ang)*sw*0.5; y2=by+Math.sin(ang)*sw*0.5; } else { x2=p.x1; y2=p.y1; }
+  }
+  const TW=Math.ceil(W+pad*2), TH=Math.ceil(H+pad*2);
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${TW}" height="${TH}" viewBox="0 0 ${TW} ${TH}">`
+    +`<line x1="${X(p.x1)}" y1="${X(p.y1)}" x2="${X(x2)}" y2="${X(y2)}" stroke="${col}" stroke-width="${sw}" stroke-linecap="${l.shape==='arrow'?'butt':'round'}"/>${head}</svg>`;
+  return {pad,TW,TH,src:_svgURI(svg)};
+}
+function shapeHTML(l){
+  if(isLine(l)){
+    const g=lineSVG(l);
+    return {cls:'layer s ln',style:`left:${l.x}px;top:${l.y}px;width:${Math.max(1,l.w)}px;height:${Math.max(1,l.h)}px;`,
+      html:`<img src="${g.src}" draggable="false" style="position:absolute;left:${-g.pad}px;top:${-g.pad}px;width:${g.TW}px;height:${g.TH}px;max-width:none">`};
+  }
+  const rot=l.rot?`transform:rotate(${l.rot}deg);transform-origin:center center;`:'';
+  return {cls:'layer s',style:`left:${l.x}px;top:${l.y}px;width:${l.w}px;height:${l.h}px;${rot}`,
+    html:`<img src="${shapeSVG(l)}" draggable="false" style="width:100%;height:100%;display:block">`};
+}
+/* 아이콘 미리보기 (도형 추가 팝오버·레이어 목록) */
+function shapeIcon(k){
+  const m={
+    rect:'<rect x="3" y="5" width="18" height="14"/>',
+    roundrect:'<rect x="3" y="5" width="18" height="14" rx="4"/>',
+    circle:'<circle cx="12" cy="12" r="8.5"/>',
+    ellipse:'<ellipse cx="12" cy="12" rx="10" ry="6.5"/>',
+    triangle:'<polygon points="12,3.5 21.5,20 2.5,20"/>',
+    diamond:'<polygon points="12,2.5 21.5,12 12,21.5 2.5,12"/>',
+    line:'<line x1="4" y1="20" x2="20" y2="4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    arrow:'<line x1="4" y1="20" x2="16.5" y2="7.5" stroke="currentColor" stroke-width="2"/><polygon points="20,4 19,12 12,5"/>',
+    bubble:'<path d="M5 3.5h14a2.5 2.5 0 0 1 2.5 2.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4H5A2.5 2.5 0 0 1 2.5 14V6A2.5 2.5 0 0 1 5 3.5z"/>',
+    sparkle:'<path d="M12 1.5Q13.4 10.6 22.5 12Q13.4 13.4 12 22.5Q10.6 13.4 1.5 12Q10.6 10.6 12 1.5Z"/>'
+  };
+  return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${m[k]||m.rect}</svg>`;
+}
+/* 문서 마이그레이션 — 열기·되돌리기 시 호출. 예전 '✦' 텍스트 레이어 → 반짝이 도형, 삭제된 커버 프리셋 → 기본 */
+function migrateDoc(list){
+  let maxId=0;
+  (list||[]).forEach(s=>{
+    if(!s)return;
+    if(s.coverPreset&&s.coverPreset!=='default')s.coverPreset='default'; // '사진 카드'·'스토어' 등 삭제된 프리셋
+    if(s.id>maxId)maxId=s.id;
+    [s.layers,s.mo].forEach(arr=>{
+      if(!Array.isArray(arr))return;
+      arr.forEach((l,i)=>{
+        if(!l)return;
+        const plain=String(l.rich?String(l.rich).replace(/<[^>]*>/g,''):(l.text||'')).replace(/&nbsp;/g,' ').trim();
+        if(l.type==='t'&&String(l.text||'').trim()==='✦'&&plain==='✦'){
+          const sp=sparkleLayer(+l.x||0,+l.y||0,+l.size||20,l.color||'#ffffff',l.lh);
+          sp.id=l.id; ['gid','rot','rotOrigin','locked','opacity'].forEach(k=>{if(l[k]!=null)sp[k]=l[k];});
+          if(sp.rot)sp.rotOrigin='center center';
+          arr[i]=sp;
+        }
+        if(+arr[i].id>maxId)maxId=+arr[i].id;
+      });
+    });
+  });
+  if(maxId>=uid)uid=maxId+1;
+  return list;
+}
 function shadeColor(hex,bright){
   let b=(bright==null?0:bright);
   if(b===100)b=0; // 구버전 데이터(100=원색) 호환
@@ -872,7 +1021,7 @@ function coverSlide(preset,service,title,sub){
     grad:{type:'linear',angle:90,rotateWith:true,stops:[{pos:0,color:'#ffffff',alpha:0,bright:0},{pos:100,color:'#ffffff',alpha:50,bright:0}]}
   }));
   [[0.30780,0.73847,0.03716],[0.28394,0.66277,0.03992],[0.33349,0.68479,0.03579]].forEach(([fx,fy,fs])=>{
-    s.layers.push(tLayer({text:'✦',x:Math.round(P.W*fx),y:Math.round(P.H*fy),w:Math.round(P.W*0.05),size:Math.round(P.H*fs*1.4),weight:400,color:'#ffffff',align:'left',lh:1,ls:0}));
+    s.layers.push(sparkleLayer(Math.round(P.W*fx),Math.round(P.H*fy),Math.round(P.H*fs*1.4),'#ffffff'));
   });
   // 3) 이미지 영역 가이드: 966 규격은 542 안전영역 내 배치
   if(isThumb){
@@ -908,44 +1057,7 @@ function guideSlide(preset,service){
   s.layers.push(tLayer({text:'앱 하단 [탭 이름] 선택 ▶ 메뉴 진입 ▶ 매뉴얼 단계 설명 기재',x:panel.x,y:Math.round(cy+(ch-cs*1.35)/2),w:panel.w,size:cs,weight:700,color:'#1f2328',align:'center',lh:1.35,ls:-0.02}));
   return s;
 }
-// ── 커버 이미지 영역 구성 프리셋 (영역 내 여백 배치 원칙) ──
-function sparkles(s,g,list){
-  list.forEach(([fx,fy,sz])=>{
-    s.layers.push(tLayer({text:'✦',x:g.x+Math.round(g.w*fx),y:g.y+Math.round(g.h*fy),w:sz*2,size:sz,weight:400,color:'#ffffff',align:'left',lh:1,ls:0}));
-  });
-}
-// A. 사진 카드형: 라운드 포토카드(하단 블리드) + 쿠폰 티켓 오브젝트
-function coverPresetPhoto(s,g){
-  const cw=Math.round(g.w*0.78), cx=g.x+Math.round(g.w*0.18), cy=g.y+Math.round(g.h*0.18);
-  s.layers.push(rLayer({x:cx,y:cy,w:cw,h:Math.round(g.h*0.9),fill:'#f1f1f1',radius:Math.round(g.w*0.045)})); // 포토카드(이미지 교체용)
-  const tw=Math.round(g.w*0.40), th=Math.round(tw*0.42);
-  const tx=g.x+Math.round(g.w*0.02), ty=cy-Math.round(th*0.35);
-  s.layers.push(rLayer({x:tx,y:ty,w:tw,h:th,fill:'#ffffff',radius:Math.round(th*0.18)})); // 쿠폰 티켓
-  s.layers.push(rLayer({x:tx+Math.round(tw*0.5),y:ty,w:Math.round(tw*0.5),h:th,fill:'#d9fbc9',radius:Math.round(th*0.18)}));
-  s.layers.push(tLayer({text:'쿠폰 문구',x:tx,y:ty+Math.round(th*0.32),w:tw,size:Math.round(th*0.3),weight:800,color:'#1f9b2e',align:'center',lh:1.2,ls:-0.02}));
-  sparkles(s,g,[[0.04,0.55,Math.round(g.w*0.05)],[0.1,0.75,Math.round(g.w*0.035)]]);
-}
-// B. 아이콘 타일형: 화이트 라운드 타일 2개(겹침) + 스파클
-function coverPresetTiles(s,g){
-  const t1=Math.round(g.h*0.52), t1x=g.x+Math.round(g.w*0.12), t1y=g.y+Math.round(g.h*0.16);
-  s.layers.push(rLayer({x:t1x,y:t1y,w:t1,h:t1,fill:'#ffffff',radius:Math.round(t1*0.22)}));
-  const t2=Math.round(g.h*0.30), t2x=t1x+t1-Math.round(t2*0.25), t2y=t1y+t1-Math.round(t2*0.55);
-  s.layers.push(rLayer({x:t2x,y:t2y,w:t2,h:t2,fill:'#ffffff',radius:Math.round(t2*0.24)}));
-  sparkles(s,g,[[0.74,0.10,Math.round(g.h*0.10)],[0.05,0.70,Math.round(g.h*0.07)],[0.84,0.60,Math.round(g.h*0.055)]]);
-}
-// C. 스토어 일러스트형: 간판 + 브랜드컬러 차양 + 바디
-function coverPresetStore(s,g){
-  const brand=SERVICES[s.service]||'#00e31e';
-  const sw=Math.round(g.w*0.62), sx=g.x+Math.round(g.w*0.28), sy=g.y+Math.round(g.h*0.14);
-  const signH=Math.round(g.h*0.20);
-  s.layers.push(rLayer({x:sx+Math.round(sw*0.06),y:sy,w:Math.round(sw*0.88),h:signH,fill:'#3d4450',radius:Math.round(signH*0.2)})); // 간판
-  const awnY=sy+signH+Math.round(g.h*0.02), awnH=Math.round(g.h*0.14), n=6, seg=Math.round(sw/n);
-  for(let i=0;i<n;i++){
-    s.layers.push(rLayer({x:sx+i*seg,y:awnY,w:seg,h:awnH,fill:i%2?'#ffffff':brand,radius:Math.round(awnH*0.3)}));
-  }
-  s.layers.push(rLayer({x:sx+Math.round(sw*0.08),y:awnY+awnH,w:Math.round(sw*0.84),h:Math.round(g.h*0.52),fill:'#ffffff',radius:Math.round(sw*0.03)})); // 바디(하단 블리드)
-  sparkles(s,g,[[0.06,0.30,Math.round(g.h*0.09)],[0.12,0.55,Math.round(g.h*0.06)]]);
-}
+// (커버 이미지 구성 프리셋 '사진 카드'·'아이콘 타일'·'스토어'와 선택 UI는 2026-11 삭제 — 저장 데이터는 migrateDoc 에서 기본으로 정리)
 
 // 비교(듀얼) 매뉴얼 — 완성 시안 실측 규격 (2180×1453 기준 비율)
 // 라벨필 y6.33% h3.65% / 회색패널 x4.22% w45.14% y11.56% h65.79% / 폰슬롯 y16.72% h54.37% w17.06%
@@ -1016,7 +1128,7 @@ function qnaSlide(preset,service,q1,q2,q3,q4){
   }
   // 스파클 (배경 산개, 화이트)
   [[0.205,0.43,0.052],[0.295,0.66,0.036],[0.245,0.75,0.026],[0.665,0.345,0.05],[0.715,0.72,0.04],[0.41,0.335,0.028]].forEach(([fx,fy,fs])=>{
-    s.layers.push(tLayer({text:'✦',x:Math.round(P.W*fx),y:Math.round(P.H*fy),w:Math.round(P.W*0.06),size:Math.round(P.H*fs),weight:400,color:'#ffffff',align:'left',lh:1,ls:0}));
+    s.layers.push(sparkleLayer(Math.round(P.W*fx),Math.round(P.H*fy),Math.round(P.H*fs),'#ffffff'));
   });
   // 중앙 폰 목업: 템플릿 PPT 실측 배치 (35.3%, 45.2%, 폭 29.4% — 하단 블리드)
   s.layers.push(iLayer({src:QNA_MOCKUP.src,x:Math.round(P.W*0.353),y:Math.round(P.H*0.452),w:Math.round(P.W*0.294),ar:QNA_MOCKUP.ar}));
@@ -1072,6 +1184,12 @@ const $=s=>document.querySelector(s);
 const canvas=$('#canvas'),slideList=$('#slideList'),props=$('#props');
 
 function layerHTML(l){
+  const h=layerHTML0(l);
+  if(l.opacity!=null&&+l.opacity<1) h.style+=`opacity:${Math.max(0,+l.opacity)};`;
+  return h;
+}
+function layerHTML0(l){
+  if(l.type==='shape')return shapeHTML(l);
   if(l.type==='t'){
     const colored=l.rich?sanitizeRich(l.rich):esc(l.text).replace(/\[\[([\s\S]+?)\]\]/g,`<span style="color:${l.accent||'#00e31e'}">$1</span>`);
     const inner=l.hl?`<span class="hl-inner" style="background:${l.hlColor};padding:.06em .18em;">${colored}</span>`:colored;
@@ -1117,8 +1235,14 @@ function layerHTML(l){
   }
   return {cls:'layer'+(l.guide?' g':''),style:rstyle,html:rhtml};
 }
-function lname(l){return l.type==='t'?(l.text.split('\n')[0]||'(빈 텍스트)'):l.type==='i'?'이미지':l.type==='f'?'스포트라이트':'박스';}
-function lico(l){return l.type==='t'?'𝐓':l.type==='i'?'🖼':l.type==='f'?'◢':'▭';}
+function lname(l){
+  if(l.type==='shape')return SHAPE_NAME[l.shape]||'도형';
+  return l.type==='t'?(String(l.text||'').split('\n')[0]||'(빈 텍스트)'):l.type==='i'?'이미지':l.type==='f'?'스포트라이트':(l.shape==='arrow'?'블록 화살표':'박스');
+}
+function lico(l){
+  if(l.type==='shape')return shapeIcon(l.shape);
+  return l.type==='t'?'𝐓':l.type==='i'?'🖼':l.type==='f'?'◢':'▭';
+}
 
 function renderCanvas(){
   const s=slides[cur],P=getP(s);
@@ -1348,12 +1472,6 @@ function renderProps(){
         <option value="card"${s.preset==='card'?' selected':''}>대형 카드 2180×1453</option>
         <option value="custom"${s.preset==='custom'?' selected':''}>사용자 지정 (px 직접 입력)</option>
       </select></div>
-    ${(!s.kind&&s.guides&&s.guides.length)?`<div class="field"><label>커버 이미지 구성 프리셋</label>
-      <div class="btn-row">
-        <button class="btn small" id="cpPhoto">사진 카드</button>
-        <button class="btn small" id="cpTiles">아이콘 타일</button>
-        <button class="btn small" id="cpStore">스토어</button>
-      </div></div>`:''}
     ${s.kind==='guide'?`<div class="field"><label>매뉴얼 이미지 칸 수</label>
       <select id="pSlots">${[2,3,4].map(n=>`<option value="${n}"${(s.slotCount||3)==n?' selected':''}>${n}칸</option>`).join('')}</select></div>`:''}
     <div class="row" id="customSizeRow" style="${s.preset==='custom'?'':'display:none'}">
@@ -1587,6 +1705,11 @@ function rescaleSlide(s,old,nw){
     if(x.type==='t')x.size=Math.max(8,Math.round(x.size*rx));
     if(x.type==='r'){x.h*=ry;x.radius=Math.round(x.radius*rx);}
     if(x.type==='f'){x.h*=ry;x.topW*=rx;}
+    if(x.type==='shape'){
+      x.h*=((x.shape==='sparkle'||x.shape==='circle')?rx:ry);   // 반짝이·원은 비율 유지
+      if(x.strokeW)x.strokeW=Math.max(1,Math.round(x.strokeW*rx));
+      if(x.radius)x.radius=Math.round(x.radius*rx);
+    }
   });
   (s.guides||[]).forEach(g=>{g.x*=rx;g.y*=ry;g.w*=rx;g.h*=ry;});
 }
@@ -1633,15 +1756,6 @@ function bindProps(s,l){
       const old=getP(s);
       applyDocPreset('custom',Math.max(100,+$('#pCW').value||old.W),Math.max(100,+$('#pCH').value||old.H));
       renderAll();
-    };
-  });
-  [['cpPhoto',coverPresetPhoto],['cpTiles',coverPresetTiles],['cpStore',coverPresetStore]].forEach(([id,fn])=>{
-    const el=document.getElementById(id);
-    if(!el)return;
-    el.onclick=()=>{
-      const g=s.guides&&s.guides[0];
-      if(!g)return;
-      fn(s,g);selLayer=null;renderAll();
     };
   });
   if(s.kind==='guide'&&document.getElementById('pSlots')){
@@ -1886,6 +2000,7 @@ function bindProps(s,l){
     $('#pRot').onchange=e=>setRot(+e.target.value||0);
     $('#pRotReset').onclick=()=>setRot(0);
   }
+  if(!$('#pX'))return;
   $('#pX').onchange=e=>{l.x=+e.target.value;rc();};
   $('#pY').onchange=e=>{l.y=+e.target.value;rc();};
   $('#pW').onchange=e=>{l.w=+e.target.value;rc();};
@@ -2473,6 +2588,44 @@ function insertIntoSlot(s,rect){
   };
   inp.click();
 }
+
+/* ================= 도형 추가 (파워포인트 '삽입 → 도형') ================= */
+function addShape(kind){
+  const s=slides[cur]; if(!s)return;
+  const P=curP(s), brand=SERVICES[s.service]||'#00e31e';
+  const m=Math.round(Math.min(P.W,P.H)*0.22);
+  let w=m,h=m; const o={shape:kind,fill:brand};
+  if(kind==='rect'){w=Math.round(m*1.4);}
+  if(kind==='roundrect'){w=Math.round(m*1.4);o.radius=Math.round(m*0.18);}
+  if(kind==='ellipse'){w=Math.round(m*1.5);h=Math.round(m*0.9);}
+  if(kind==='bubble'){w=Math.round(m*1.5);h=Math.round(m*1.05);o.fill='#ffffff';o.stroke=brand;o.strokeW=Math.max(2,Math.round(m*0.03));o.radius=Math.round(m*0.2);}
+  if(kind==='sparkle'){w=h=Math.round(m*0.6);o.fill=(s.bg&&toHex6(s.bg).toLowerCase()!=='#ffffff')?'#ffffff':brand;}
+  if(kind==='line'||kind==='arrow'){w=Math.round(m*1.6);h=0;o.fill=null;o.stroke='#1f2328';o.strokeW=Math.max(2,Math.round(P.W/240));}
+  const nl=sLayer(Object.assign(o,{x:Math.round((P.W-w)/2),y:Math.round((P.H-h)/2),w,h}));
+  LS(s).push(nl); selSet=[nl.id]; selLayer=nl.id;
+  renderAll(); recordHistory();
+  return nl;
+}
+(function(){
+  const pop=$('#shapePop'), btn=$('#shapeBtn');
+  pop.innerHTML='<h4>도형 추가</h4><div class="sgrid">'+SHAPE_DEFS.map(([k,n])=>
+    `<button type="button" data-shape="${k}" title="${n} 추가">${shapeIcon(k)}<span>${n}</span></button>`).join('')+'</div>';
+  const close=()=>{pop.style.display='none';};
+  btn.onclick=e=>{
+    e.stopPropagation();
+    if(pop.style.display==='block'){close();return;}
+    pop.style.display='block';
+    const r=btn.getBoundingClientRect();
+    pop.style.left=Math.max(8,Math.min(r.left,innerWidth-pop.offsetWidth-8))+'px';
+    pop.style.top=(r.bottom+6)+'px';
+  };
+  pop.addEventListener('click',e=>{
+    const b=e.target.closest('[data-shape]'); if(!b)return;
+    close(); addShape(b.dataset.shape);
+  });
+  document.addEventListener('mousedown',e=>{if(pop.style.display==='block'&&!e.target.closest('#shapePop')&&!e.target.closest('#shapeBtn'))close();});
+  window.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
+})();
 
 /* ================= 이미지 추가 ================= */
 $('#addImgBtn').onclick=()=>$('#imgInput').click();
@@ -3302,7 +3455,7 @@ function recordHistory(){
 }
 function restoreState(json){
   clearTimeout(histTimer);
-  slides=JSON.parse(json);
+  slides=migrateDoc(JSON.parse(json));
   lastState=json;
   uid=slides.reduce((m,s)=>Math.max(m,s.id,...s.layers.map(l=>l.id)),uid)+1;
   if(cur>=slides.length)cur=slides.length-1;
@@ -3592,6 +3745,7 @@ renderAll();
       const d=JSON.parse(await f.text());
       if(!d||!Array.isArray(d.slides)||!d.slides.length) throw new Error('페이지 정보가 없습니다');
       if(!confirm('현재 작업을 덮어씁니다. 계속할까요?'))return;
+      migrateDoc(d.slides);
       slides.length=0; d.slides.forEach(s=>slides.push(s));
       if(d.title&&$('#docTitle'))$('#docTitle').value=d.title;
       cur=0; selLayer=null; selSet=[];
