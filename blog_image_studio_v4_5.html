@@ -615,7 +615,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
 <script src="shared/ui-kit.js?v=20261025-16"></script>
-<script src="shared/stock-kit.js?v=20261104-3"></script>
+<script src="shared/stock-kit.js?v=20261104-4"></script>
 <script src="shared/app-header.js?v=20261104-3"></script>
 <script>
 /* ================= 상수/데이터 ================= */
@@ -4472,7 +4472,8 @@ async function loadStock(){
   let mine=[],stars=[];
   // 공용 저장(design 저장소 /api/stock)이 켜져 있으면 공용 이미지, 꺼져 있으면(로컬 서버·파일 열기·설정 전) 이 브라우저 이미지
   const RM=window.StockKit?await StockKit.remote('',true):{on:false}; STOCK_RM=RM;
-  if(RM.on) mine=StockKit.sharedItems(RM).map(i=>({sharedId:i.sharedId,shared:true,name:i.name,category:i.category,url:i.url,kb:i.kb,ts:i.ts})).sort((a,b)=>b.ts-a.ts);
+  if(RM.error) mine=[];                                                     // 공용 저장에 연결 못 함 — 로컬로 떨어지지 않는다
+  else if(RM.on) mine=StockKit.sharedItems(RM).map(i=>({sharedId:i.sharedId,shared:true,name:i.name,category:i.category,url:i.url,kb:i.kb,ts:i.ts})).sort((a,b)=>b.ts-a.ts);
   else try{mine=(await bsDo('readonly',os=>os.getAll())).map(i=>({id:i.id,name:i.name,category:i.category||'기본',url:i.src,kb:i.kb,ts:i.ts||0})).sort((a,b)=>b.ts-a.ts);}catch(e){}
   try{stars=(await assetList()).map(a=>({name:a.name,category:'⭐ 블로그 보관함',url:a.src,builtin:true,star:true}));}catch(e){}
   const hid=RM.on?new Set(RM.hidden||[]):(window.StockKit?StockKit.hiddenSet():new Set());   // 이미지 소스 페이지에서 숨긴 저장소 기본 이미지는 빼고
@@ -4482,6 +4483,8 @@ async function loadStock(){
   $('#stockSrc').textContent=([['라이브러리',lib.length],['기본',base.length],[RM.on?'공용':'내 이미지',mine.length]].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(' · ')||'배너 스튜디오와 같은 보관함')
     +(RM.on?' · 공용 저장 켜짐':' · 공용 저장 꺼짐(이 브라우저만)');
   $('#stockSrc').title=RM.on?'design 저장소에 저장 — 어느 컴퓨터에서나 같은 목록':('이 브라우저에만 저장돼 ('+(RM.reason||'')+')');
+  if(RM.error){ const ss=$('#stockSrc'); ss.innerHTML=`<b style="color:#b45309">${esc(RM.reason||'공용 저장에 연결 못 함')}</b> <button type="button" id="stockRetry" class="btn small" style="padding:1px 7px">다시 시도</button>`;
+    ss.title='공용 목록을 못 읽어 올리기·지우기를 막아 두었어'; $('#stockRetry').onclick=e=>{e.stopPropagation();loadStock();}; }
   const sel=$('#stockCat'),curC=sel.value;
   const cats=[...new Set(STOCK.map(i=>i.category))].sort();
   sel.innerHTML='<option value="">전체 카테고리</option>'+cats.map(c=>`<option${c===curC?' selected':''}>${esc(c)}</option>`).join('');
@@ -4540,6 +4543,7 @@ async function uploadStock(files){
   for(const f of files){
     if(!/^image\//.test(f.type))continue;
     if(f.size>30*1024*1024){alert(f.name+' — 30MB 를 넘어 건너뛸게.');continue;}
+    if(STOCK_RM.error){alert((STOCK_RM.reason||'공용 저장에 연결 못 함')+'\n\n보관함의 [다시 시도]를 누른 뒤 올려줘. (이 브라우저에만 저장되는 걸 막으려고 멈췄어)');return;}
     try{
       const src=await fileToDataURL(f), category=(cat&&!/^(라이브러리|⭐)/.test(cat))?cat:'기본';
       if(STOCK_RM.on){                                                          // 공용 저장 — design 저장소로

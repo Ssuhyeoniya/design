@@ -67,8 +67,9 @@
   }
   // ── 공용 저장(design 저장소, /api/stock) ─────────────────────────────────────────────
   // 서버(/api)가 없거나(로컬 http.server·파일 열기) 토큰이 설정 안 됐으면 로컬 모드 — 지금처럼 이 브라우저(IndexedDB·localStorage)만
-  const PWKEY = 'stockPw:v1';
-  let remoteCache = null, remoteAt = 0;
+  const PWKEY = 'stockPw:v1', SEENKEY = 'stockRemoteSeen:v1';
+  let remoteCache = null, remoteAt = 0, bustUntil = 0;
+  const seen = () => { try { return localStorage.getItem(SEENKEY) === '1'; } catch (e) { return false; } };
   async function remote(root, fresh) {
     root = root || '';
     if (!fresh && remoteCache && Date.now() - remoteAt < 1500) return remoteCache;
@@ -78,14 +79,19 @@
     let force = ''; try { force = localStorage.getItem('stockApi') || ''; } catch (e) { }
     const localHost = location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)$/.test(location.hostname);
     if ((localHost && force !== 'on') || force === 'off') { st = { on: false, reason: '로컬에서 연 화면(서버 없음)', root }; remoteCache = st; remoteAt = Date.now(); return st; }
+    // 이 브라우저에서 공용 모드가 켜진 적이 있으면, 목록을 일시적으로 못 읽어도(5xx·네트워크) 로컬로 떨어지지 않고 '연결 못 함' 상태
+    // — 그 사이 올린 이미지가 이 브라우저에만 저장되는 일을 막는다. 처음부터 서버가 없는 환경(404·HTML)은 로컬 모드
+    const fail = reason => seen() ? { on: false, error: true, reason } : { on: false, reason };
     try {
-      const r = await fetch(root + 'api/stock', { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+      const q = Date.now() < bustUntil ? '?t=' + Date.now() : '';   // 방금 쓴 뒤에는 CDN 캐시를 건너뛰고 최신 목록
+      const r = await fetch(root + 'api/stock' + q, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
       const ct = r.headers.get('content-type') || '';
-      if (!r.ok || !/json/.test(ct)) st = { on: false, reason: r.status === 404 ? '서버(/api) 없음' : '서버 응답 ' + r.status };
+      if (r.status === 404 || (r.ok && !/json/.test(ct))) st = { on: false, reason: '서버(/api) 없음' };
+      else if (!r.ok) { let j = {}; try { j = await r.json(); } catch (e) { } st = fail(j.code === 'upstream_auth' ? '서버 설정(토큰) 문제 — 관리자에게 알려 주세요' : '공용 저장에 연결 못 함 (' + r.status + ')'); }
       else { const j = await r.json();
-        st = j.enabled ? { on: true, writable: !!j.writable, public: !!j.public, items: j.items || [], hidden: j.hidden || [] }
-          : { on: false, reason: j.message || '서버 설정 필요' }; }
-    } catch (e) { st = { on: false, reason: '서버에 연결 못 함' }; }
+        if (j.enabled) { st = { on: true, writable: !!j.writable, public: !!j.public, items: j.items || [], hidden: j.hidden || [] }; try { localStorage.setItem(SEENKEY, '1'); } catch (e) { } }
+        else st = { on: false, reason: j.message || '서버 설정 필요' }; }
+    } catch (e) { st = fail('공용 저장에 연결 못 함 (네트워크)'); }
     st.root = root;
     remoteCache = st; remoteAt = Date.now();
     return st;
@@ -105,9 +111,10 @@
       const pw = password(attempt > 0); if (!pw) throw new Error('비밀번호를 입력하지 않아 취소했어');
       const r = await fetch((root || '') + 'api/stock', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-stock-password': pw }, body: JSON.stringify(body) });
       let j = {}; try { j = await r.json(); } catch (e) { }
-      if (r.status === 401) { try { localStorage.removeItem(PWKEY); } catch (e) { } if (attempt === 0) continue; }
+      if (r.status === 401) { try { localStorage.removeItem(PWKEY); } catch (e) { } if (attempt === 0) continue; }   // 401 = 비밀번호 틀림(이것만)
+      if (j.code === 'upstream_auth') throw new Error('서버 설정(토큰) 문제 — 관리자에게 알려 주세요');            // 토큰 문제 — 저장된 비밀번호는 그대로
       if (!r.ok) throw new Error(j.error || ('서버 오류 ' + r.status));
-      remoteCache = null; return j;
+      remoteCache = null; bustUntil = Date.now() + 60 * 1000; return j;
     }
   }
   async function upload(root, o) { const j = await post(root, Object.assign({ action: 'upload' }, o)); notify('shared'); return j; }
@@ -115,6 +122,7 @@
   // 숨김 — 공용 모드면 저장소 hidden.json, 아니면 이 브라우저 localStorage
   async function setHiddenAny(root, keys, on) {
     const st = await remote(root);
+    if (st.error) throw new Error(st.reason + ' — 다시 시도한 뒤 해 줘');
     if (st.on) { const j = await post(root, { action: 'hide', keys, on }); notify('hidden'); return new Set(j.hidden || []); }
     return setHidden(keys, on);
   }
@@ -126,7 +134,7 @@
     const [st, rm] = await Promise.all([loadStatic(root), remote(root, true)]);
     const hid = rm.on ? new Set(rm.hidden || []) : hiddenSet();
     let my = [];
-    if (!rm.on || opts.includeLocal) {
+    if (!rm.error && (!rm.on || opts.includeLocal)) {      // 연결 못 함 상태에서는 이 브라우저 이미지도 보여 주지 않는다(로컬에 올리는 혼동 방지)
       try { my = (await mine()).map(i => ({ key: 'mine:' + i.id, source: 'mine', id: i.id, name: i.name, category: i.category || '기본', url: i.src, kb: i.kb, ts: i.ts || 0 })).sort((a, b) => b.ts - a.ts); }
       catch (e) { if (opts.throwOnDb) throw e; }
     }

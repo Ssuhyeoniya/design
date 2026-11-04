@@ -215,6 +215,7 @@
     <button class="btn small" id="stkRestore" disabled>선택 복원</button>
     <button class="btn small pri" id="stkMigrate" style="display:none" title="이 브라우저(IndexedDB)에만 있는 내 이미지를 design 저장소 공용 목록으로 올린다. 이 브라우저 데이터는 지우지 않는다">⇪ 이 브라우저의 이미지를 공용으로 올리기</button>
     <span id="stkMode" style="font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:6px"></span>
+    <button class="btn small" id="stkRetry" style="display:none">다시 시도</button>
   </div>
   <input type="file" id="upInput" accept="image/*" multiple hidden>
   <input type="file" id="uiImportInput" accept=".json,application/json" hidden>
@@ -258,7 +259,7 @@
   </div></div>
 
 <script src="shared/ui-kit.js?v=20261025-16"></script>
-<script src="shared/stock-kit.js?v=20261104-3"></script>
+<script src="shared/stock-kit.js?v=20261104-4"></script>
 <script src="shared/app-header.js?v=20261104-3"></script>
 <script>
 const $=s=>document.querySelector(s);
@@ -917,9 +918,11 @@ async function renderStock(){
   let all;
   try{all=await StockKit.loadAll('',{includeHidden:true,includeLocal:true,throwOnDb:false});}catch(e){all=[];}
   STK=all; STK_RM=await StockKit.remote('');
-  { const m=$('#stkMode'); m.textContent=STK_RM.on?(STK_RM.writable?'● 공용 저장 켜짐':'● 공용 저장 읽기 전용'):'○ 공용 저장 꺼짐 — 이 브라우저만';
+  { const m=$('#stkMode'); m.textContent=STK_RM.error?('⚠ '+(STK_RM.reason||'공용 저장에 연결 못 함')+' — 다시 시도'):STK_RM.on?(STK_RM.writable?'● 공용 저장 켜짐':'● 공용 저장 읽기 전용'):'○ 공용 저장 꺼짐 — 이 브라우저만';
+    $('#stkRetry').style.display=STK_RM.error?'':'none';
     m.title=STK_RM.on?'design 저장소(assets/user-stock)에 저장 — 어느 컴퓨터에서나 같은 목록':('이 브라우저에만 저장돼 다른 컴퓨터에서는 안 보여 ('+(STK_RM.reason||'')+')');
     m.style.background=STK_RM.on?'#e7f8ea':'#fff4e5'; m.style.color=STK_RM.on?'#0a7a1f':'#9a5b00';
+    if(STK_RM.error)m.title='공용 목록을 못 읽어 삭제·숨기기·올리기를 막아 두었어. [다시 시도]를 눌러 줘';
     const nLocal=all.filter(i=>i.source==='mine').length; $('#stkMigrate').style.display=STK_RM.on&&STK_RM.writable&&nLocal?'':'none'; $('#stkMigrate').dataset.n=nLocal; }
   const q=($('#stkQ').value||'').trim().toLowerCase(), src=$('#stkSrc').value, showH=$('#stkShowHidden').checked;
   const list=all.filter(i=>(showH||!i.hidden)&&(!src||i.source===src)&&(!q||[i.name,i.category,i.assetId,i.key].some(v=>String(v||'').toLowerCase().includes(q))));
@@ -950,11 +953,12 @@ async function renderStock(){
 function stkPaintSel(){
   document.querySelectorAll('.stk-card').forEach(c=>{const on=stkSel.has(c.dataset.key);c.classList.toggle('sel',on);const ck=c.querySelector('.ck');if(ck)ck.checked=on;});
   const picked=STK.filter(i=>stkSel.has(i.key));
-  $('#stkDel').disabled=!picked.some(i=>i.source==='mine'||i.source==='shared'||!i.hidden);
-  $('#stkRestore').disabled=!picked.some(i=>i.hidden);
+  $('#stkDel').disabled=STK_RM.error||!picked.some(i=>i.source==='mine'||i.source==='shared'||!i.hidden);
+  $('#stkRestore').disabled=STK_RM.error||!picked.some(i=>i.hidden);
   $('#stkDel').textContent=picked.length?`선택 삭제·숨기기 (${picked.filter(i=>i.source==='mine'||i.source==='shared'||!i.hidden).length})`:'선택 삭제·숨기기';
 }
 async function stkApply(act,items){
+  if(STK_RM.error){alert((STK_RM.reason||'공용 저장에 연결 못 함')+'\n[다시 시도]를 누른 뒤 해 줘.');return;}
   const mine=items.filter(i=>i.source==='mine'), shared=items.filter(i=>i.source==='shared'), stat=items.filter(i=>i.source==='lib'||i.source==='base');
   if(act==='restore'){ const ks=stat.filter(i=>i.hidden).map(i=>i.key); if(!ks.length)return;
     try{await StockKit.setHiddenAny('',ks,false);}catch(err){alert('복원 실패: '+(err&&err.message||err));return;}
@@ -985,6 +989,7 @@ $('#stkMigrate').onclick=async()=>{
   b.disabled=false; b.textContent='⇪ 이 브라우저의 이미지를 공용으로 올리기'; renderStock();
 };
 window.addEventListener('focus',()=>{ if(tab==='stock')renderStock(); });   // 다른 컴퓨터에서 바뀐 공용 목록
+$('#stkRetry').onclick=()=>renderStock();
 $('#stkQ').oninput=()=>renderStock();
 $('#stkSrc').onchange=()=>renderStock();
 $('#stkShowHidden').onchange=()=>renderStock();

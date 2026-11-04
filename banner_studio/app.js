@@ -1520,7 +1520,8 @@ async function loadStock() {
   let mine = [];
   // 공용 저장(design 저장소 /api/stock)이 켜져 있으면 공용 이미지, 꺼져 있으면 이 브라우저 이미지 (shared/stock-kit.js)
   const RM = window.StockKit ? await StockKit.remote('../', true) : { on: false }; stockRM = RM;
-  if (RM.on) mine = StockKit.sharedItems(RM).map(i => ({ sharedId: i.sharedId, shared: true, rel: '공용/' + i.name, name: i.name, category: i.category, url: i.url, kb: i.kb, mtime: i.ts }));
+  if (RM.error) mine = [];                                // 공용 저장에 연결 못 함 — 로컬로 떨어지지 않는다
+  else if (RM.on) mine = StockKit.sharedItems(RM).map(i => ({ sharedId: i.sharedId, shared: true, rel: '공용/' + i.name, name: i.name, category: i.category, url: i.url, kb: i.kb, mtime: i.ts }));
   else try {
     mine = (await dbAll('stock')).map(i => ({
       id: i.id, rel: i.category + '/' + i.name, name: i.name, category: i.category,
@@ -1545,6 +1546,8 @@ async function loadStock() {
   $('#stockDir').textContent = '라이브러리 ' + libraryStock.length + '장 · 기본 ' + builtinStock.length + '장 + ' + (RM.on ? '공용 ' : '내 이미지 ') + mine.length + '장' +
     (srcs.length ? ' + 이미지 소스 ' + srcs.length + '장' : '') + (RM.on ? ' · 공용 저장 켜짐' : ' · 공용 저장 꺼짐(이 브라우저만)');
   $('#stockDir').title = RM.on ? 'design 저장소에 저장 — 어느 컴퓨터에서나 같은 목록' : ('이 브라우저에만 저장돼 (' + (RM.reason || '') + ')');
+  if (RM.error) { const sd = $('#stockDir'); sd.innerHTML = `<b style="color:#d97706">${esc(RM.reason || '공용 저장에 연결 못 함')}</b> <button type="button" id="stockRetry" class="btn sm">다시 시도</button>`;
+    $('#stockRetry').onclick = e => { e.stopPropagation(); loadStock(); }; }
   $('#stockCnt').textContent = stock.length + '장';
   const cur = $('#catSel').value;
   $('#catSel').innerHTML = '<option value="">전체 카테고리</option>' +
@@ -1627,6 +1630,7 @@ async function uploadFiles(files, cat) {
   for (const f of files) {
     if (!/^image\//.test(f.type) && !/\.(png|jpe?g|gif|webp|svg)$/i.test(f.name)) continue;
     if (f.size > 30 * 1024 * 1024) { toast(`${f.name} — 30MB 를 넘어 건너뜁니다`, true); continue; }
+    if (stockRM.error) { toast((stockRM.reason || '공용 저장에 연결 못 함') + ' — [다시 시도] 후 올려 주세요', true); return; }
     try {
       const category = cat || $('#catSel').value || '기본', src = await fileToDataURL(f);
       if (stockRM.on) {                                     // 공용 저장 — design 저장소로
