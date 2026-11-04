@@ -68,7 +68,7 @@
   // ── 공용 저장(design 저장소, /api/stock) ─────────────────────────────────────────────
   // 서버(/api)가 없거나(로컬 http.server·파일 열기) 토큰이 설정 안 됐으면 로컬 모드 — 지금처럼 이 브라우저(IndexedDB·localStorage)만
   const PWKEY = 'stockPw:v1', SEENKEY = 'stockRemoteSeen:v1';
-  let remoteCache = null, remoteAt = 0, bustUntil = 0;
+  let remoteCache = null, remoteAt = 0, bustUntil = 0, bustLeft = 0;   // 쓰기 직후 60초 동안 최신 목록 요청은 최대 2번(직후 1번 + 실패 시 1번)
   const seen = () => { try { return localStorage.getItem(SEENKEY) === '1'; } catch (e) { return false; } };
   async function remote(root, fresh) {
     root = root || '';
@@ -86,9 +86,11 @@
       // 평소에는 서버·CDN 캐시(약 15초)를 그대로 쓴다(cache:'default' — no-store 로 보내면 브라우저가 no-cache 헤더를 붙인다).
       // 방금 쓴 뒤 60초만 비밀번호 헤더 + ?t= 로 최신 목록을 받는다(서버는 비밀번호가 맞는 ?t= 만 캐시를 건너뛴다)
       let pw = ''; try { pw = localStorage.getItem(PWKEY) || ''; } catch (e) { }
-      const fresh = Date.now() < bustUntil && pw;
+      const fresh = Date.now() < bustUntil && pw && bustLeft > 0;
+      if (fresh) bustLeft--;
       let r = await fetch(root + 'api/stock' + (fresh ? '?t=' + Date.now() : ''), { cache: 'default', headers: Object.assign({ 'Accept': 'application/json' }, fresh ? { 'x-stock-password': pw } : {}) });
-      if (fresh && (r.status === 401 || r.status === 429)) { bustUntil = 0; r = await fetch(root + 'api/stock', { cache: 'default', headers: { 'Accept': 'application/json' } }); }   // 최신 받기가 안 되면 평소 목록으로
+      if (fresh && r.ok) bustLeft = 0;                      // 최신을 받았으면 남은 우회는 쓰지 않는다
+      if (fresh && (r.status === 401 || r.status === 429)) { bustUntil = 0; bustLeft = 0; r = await fetch(root + 'api/stock', { cache: 'default', headers: { 'Accept': 'application/json' } }); }   // 최신 받기가 안 되면 평소 목록으로
       const ct = r.headers.get('content-type') || '';
       if (r.status === 404 || (r.ok && !/json/.test(ct))) st = { on: false, reason: '서버(/api) 없음' };
       else if (!r.ok) { let j = {}; try { j = await r.json(); } catch (e) { } st = fail(j.code === 'upstream_auth' ? '서버 설정(토큰) 문제 — 관리자에게 알려 주세요' : '공용 저장에 연결 못 함 (' + r.status + ')'); }
@@ -111,14 +113,18 @@
     return pw;
   }
   async function post(root, body) {
+    let busyRetried = false, askAgain = false;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const pw = password(attempt > 0); if (!pw) throw new Error('비밀번호를 입력하지 않아 취소했어');
+      const pw = password(askAgain); askAgain = false; if (!pw) throw new Error('비밀번호를 입력하지 않아 취소했어');
       const r = await fetch((root || '') + 'api/stock', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-stock-password': pw }, body: JSON.stringify(body) });
       let j = {}; try { j = await r.json(); } catch (e) { }
-      if (r.status === 401) { try { localStorage.removeItem(PWKEY); } catch (e) { } if (attempt === 0) continue; }   // 401 = 비밀번호 틀림(이것만)
+      if (r.status === 401) { try { localStorage.removeItem(PWKEY); } catch (e) { } if (attempt === 0) { askAgain = true; continue; } }   // 401 = 비밀번호 틀림(이것만)
+      if (r.status === 429 && j.code === 'busy' && !busyRetried) {   // 같은 곳에서 바로 앞 요청(오타 등)을 확인하는 중 — 1초 뒤 한 번 자동 재시도
+        busyRetried = true; await new Promise(res => setTimeout(res, 1000)); attempt--; continue; }
+      if (r.status === 429 && j.code === 'busy') throw new Error('서버가 앞 요청을 확인하는 중이야 — 잠시 뒤 다시 시도해 줘');
       if (j.code === 'upstream_auth') throw new Error('서버 설정(토큰) 문제 — 관리자에게 알려 주세요');            // 토큰 문제 — 저장된 비밀번호는 그대로
       if (!r.ok) throw new Error(j.error || ('서버 오류 ' + r.status));
-      remoteCache = null; bustUntil = Date.now() + 60 * 1000; return j;
+      remoteCache = null; bustUntil = Date.now() + 60 * 1000; bustLeft = 2; return j;
     }
   }
   async function upload(root, o) { const j = await post(root, Object.assign({ action: 'upload' }, o)); notify('shared'); return j; }
