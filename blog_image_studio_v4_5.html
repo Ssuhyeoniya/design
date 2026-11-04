@@ -615,7 +615,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
 <script src="shared/ui-kit.js?v=20261025-16"></script>
-<script src="shared/stock-kit.js?v=20261104-1"></script>
+<script src="shared/stock-kit.js?v=20261104-3"></script>
 <script src="shared/app-header.js?v=20261104-3"></script>
 <script>
 /* ================= 상수/데이터 ================= */
@@ -4453,7 +4453,7 @@ async function bsDo(mode,fn){
   });
 }
 const encPath=p=>p.split('/').map(encodeURIComponent).join('/');
-let STOCK=[], stockStatic=null;
+let STOCK=[], stockStatic=null, STOCK_RM={on:false};
 async function loadStockStatic(){
   if(stockStatic)return stockStatic;
   const getJ=u=>fetch(u,{cache:'no-cache'}).then(r=>r.ok?r.json():null).catch(()=>null);
@@ -4470,13 +4470,18 @@ async function loadStockStatic(){
 async function loadStock(){
   const st=await loadStockStatic();
   let mine=[],stars=[];
-  try{mine=(await bsDo('readonly',os=>os.getAll())).map(i=>({id:i.id,name:i.name,category:i.category||'기본',url:i.src,kb:i.kb,ts:i.ts||0})).sort((a,b)=>b.ts-a.ts);}catch(e){}
+  // 공용 저장(design 저장소 /api/stock)이 켜져 있으면 공용 이미지, 꺼져 있으면(로컬 서버·파일 열기·설정 전) 이 브라우저 이미지
+  const RM=window.StockKit?await StockKit.remote('',true):{on:false}; STOCK_RM=RM;
+  if(RM.on) mine=StockKit.sharedItems(RM).map(i=>({sharedId:i.sharedId,shared:true,name:i.name,category:i.category,url:i.url,kb:i.kb,ts:i.ts})).sort((a,b)=>b.ts-a.ts);
+  else try{mine=(await bsDo('readonly',os=>os.getAll())).map(i=>({id:i.id,name:i.name,category:i.category||'기본',url:i.src,kb:i.kb,ts:i.ts||0})).sort((a,b)=>b.ts-a.ts);}catch(e){}
   try{stars=(await assetList()).map(a=>({name:a.name,category:'⭐ 블로그 보관함',url:a.src,builtin:true,star:true}));}catch(e){}
-  const hid=window.StockKit?StockKit.hiddenSet():new Set();   // 이미지 소스 페이지에서 숨긴 저장소 기본 이미지는 빼고
+  const hid=RM.on?new Set(RM.hidden||[]):(window.StockKit?StockKit.hiddenSet():new Set());   // 이미지 소스 페이지에서 숨긴 저장소 기본 이미지는 빼고
   const lib=st.lib.filter(i=>!hid.has(i.key)), base=st.base.filter(i=>!hid.has(i.key));
   STOCK=[...lib,...mine,...base,...stars];
   $('#stockCnt').textContent=STOCK.length?'· '+STOCK.length+'장':'';
-  $('#stockSrc').textContent=[['라이브러리',lib.length],['기본',base.length],['내 이미지',mine.length]].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(' · ')||'배너 스튜디오와 같은 보관함';
+  $('#stockSrc').textContent=([['라이브러리',lib.length],['기본',base.length],[RM.on?'공용':'내 이미지',mine.length]].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(' · ')||'배너 스튜디오와 같은 보관함')
+    +(RM.on?' · 공용 저장 켜짐':' · 공용 저장 꺼짐(이 브라우저만)');
+  $('#stockSrc').title=RM.on?'design 저장소에 저장 — 어느 컴퓨터에서나 같은 목록':('이 브라우저에만 저장돼 ('+(RM.reason||'')+')');
   const sel=$('#stockCat'),curC=sel.value;
   const cats=[...new Set(STOCK.map(i=>i.category))].sort();
   sel.innerHTML='<option value="">전체 카테고리</option>'+cats.map(c=>`<option${c===curC?' selected':''}>${esc(c)}</option>`).join('');
@@ -4501,9 +4506,10 @@ function paintStock(){
     img.addEventListener('dragstart',ev=>{ev.dataTransfer.setData('text/x-stock',String(STOCK.indexOf(it)));ev.dataTransfer.effectAllowed='copy';});
     if(!it.builtin)d.querySelector('.del').onclick=async ev=>{
       ev.stopPropagation();
-      const yes=await askConfirm(`"${it.name}"\n\n공통 보관함에서 영구 삭제할까요?\n배너 스튜디오에서도 함께 사라져.`,'영구 삭제');
+      const yes=await askConfirm(it.shared?`"${it.name}"\n\n공용 보관함(design 저장소)에서 삭제할까요?\n모든 컴퓨터의 블로그·배너 스튜디오에서 함께 사라져.`:`"${it.name}"\n\n공통 보관함에서 영구 삭제할까요?\n배너 스튜디오에서도 함께 사라져.`,'영구 삭제');
       if(!yes)return;
-      try{await bsDo('readwrite',os=>os.delete(it.id));if(window.StockKit)StockKit.notify('mine');}catch(err){alert('삭제 실패: '+err.message);}
+      try{ if(it.shared)await StockKit.delShared('',[it.sharedId]);                              // 공용 이미지 — 저장소에서 삭제
+           else {await bsDo('readwrite',os=>os.delete(it.id));if(window.StockKit)StockKit.notify('mine');} }catch(err){alert('삭제 실패: '+err.message);}
       loadStock();
     };
     g.appendChild(d);
@@ -4535,8 +4541,11 @@ async function uploadStock(files){
     if(!/^image\//.test(f.type))continue;
     if(f.size>30*1024*1024){alert(f.name+' — 30MB 를 넘어 건너뛸게.');continue;}
     try{
-      const src=await fileToDataURL(f);
-      await bsDo('readwrite',os=>os.put({category:(cat&&!/^(라이브러리|⭐)/.test(cat))?cat:'기본',name:f.name,src,kb:Math.round(f.size/1024),ts:Date.now()}));
+      const src=await fileToDataURL(f), category=(cat&&!/^(라이브러리|⭐)/.test(cat))?cat:'기본';
+      if(STOCK_RM.on){                                                          // 공용 저장 — design 저장소로
+        if(f.size>StockKit.MAX_UPLOAD){alert(f.name+' — 공용 보관함은 3MB 까지야. 줄여서 다시 올려줘.');continue;}
+        await StockKit.upload('',{name:f.name,category,dataUrl:src});
+      } else await bsDo('readwrite',os=>os.put({category,name:f.name,src,kb:Math.round(f.size/1024),ts:Date.now()}));
       n++;
     }catch(err){alert(f.name+' 등록 실패 — '+err.message);}
   }

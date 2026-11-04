@@ -79,7 +79,7 @@
   .stk-card .nm{font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .stk-card .sub{font-size:10.5px;color:var(--text-faint);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .stk-card .badge{position:absolute;left:7px;top:7px;font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;color:#fff;}
-  .stk-card .badge.lib{background:#6b5bd2;} .stk-card .badge.base{background:#4b5563;} .stk-card .badge.mine{background:#00a316;}
+  .stk-card .badge.shared{background:#0068ff;} .stk-card .badge.lib{background:#6b5bd2;} .stk-card .badge.base{background:#4b5563;} .stk-card .badge.mine{background:#00a316;}
   .stk-card .badge.h{left:auto;right:7px;background:#b45309;}
   .stk-card input.ck{position:absolute;right:7px;bottom:46px;width:16px;height:16px;}
   .stk-card .act{position:absolute;right:6px;top:6px;border:1px solid var(--border-strong);background:#fff;border-radius:6px;font:inherit;font-size:11px;font-weight:600;padding:2px 7px;cursor:pointer;opacity:0;}
@@ -207,12 +207,14 @@
     <div id="actStock" style="display:none">
     <input type="search" id="stkQ" placeholder="이름·카테고리·ID 검색" style="width:170px;padding:6px 9px;border:1px solid var(--border-strong);border-radius:8px;font:inherit;font-size:12px">
     <select id="stkSrc" style="padding:6px 8px;border:1px solid var(--border-strong);border-radius:8px;font:inherit;font-size:12px">
-      <option value="">전체 출처</option><option value="lib">라이브러리</option><option value="base">기본 스톡</option><option value="mine">내 이미지</option>
+      <option value="">전체 출처</option><option value="shared">공용</option><option value="lib">라이브러리</option><option value="base">기본 스톡</option><option value="mine">이 브라우저</option>
     </select>
     <label style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="stkShowHidden"> 숨긴 항목 보기</label>
     <button class="btn small" id="stkAll" title="지금 보이는 항목 전체 선택/해제">☑ 전체 선택</button>
     <button class="btn small danger" id="stkDel" disabled>선택 삭제·숨기기</button>
     <button class="btn small" id="stkRestore" disabled>선택 복원</button>
+    <button class="btn small pri" id="stkMigrate" style="display:none" title="이 브라우저(IndexedDB)에만 있는 내 이미지를 design 저장소 공용 목록으로 올린다. 이 브라우저 데이터는 지우지 않는다">⇪ 이 브라우저의 이미지를 공용으로 올리기</button>
+    <span id="stkMode" style="font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:6px"></span>
   </div>
   <input type="file" id="upInput" accept="image/*" multiple hidden>
   <input type="file" id="uiImportInput" accept=".json,application/json" hidden>
@@ -256,7 +258,7 @@
   </div></div>
 
 <script src="shared/ui-kit.js?v=20261025-16"></script>
-<script src="shared/stock-kit.js?v=20261104-1"></script>
+<script src="shared/stock-kit.js?v=20261104-3"></script>
 <script src="shared/app-header.js?v=20261104-3"></script>
 <script>
 const $=s=>document.querySelector(s);
@@ -907,20 +909,26 @@ $('#clearAll').onclick=async()=>{
 /* ===== 스톡 이미지 탭 (shared/stock-kit.js) — 블로그·배너 스튜디오 보관함과 같은 세 출처 =====
    ③ 내 이미지는 IndexedDB 에서 실제 삭제, ①·② 저장소 정적 파일은 '숨김'(파일은 저장소에 남고 세 화면 보관함에서만 빠짐) */
 let STK=[], stkSel=new Set();
-const STK_SRC={lib:'라이브러리',base:'기본 스톡',mine:'내 이미지'};
+const STK_SRC={shared:'공용',lib:'라이브러리',base:'기본 스톡',mine:'이 브라우저'};
+let STK_RM={on:false};
 async function renderStock(){
   const body=$('#body'),cntEl=$('#count');
   if(!window.StockKit){body.innerHTML='<div class="empty">스톡 로더(shared/stock-kit.js)를 불러오지 못했어.</div>';return;}
   let all;
-  try{all=await StockKit.loadAll('',{includeHidden:true,throwOnDb:false});}catch(e){all=[];}
-  STK=all;
+  try{all=await StockKit.loadAll('',{includeHidden:true,includeLocal:true,throwOnDb:false});}catch(e){all=[];}
+  STK=all; STK_RM=await StockKit.remote('');
+  { const m=$('#stkMode'); m.textContent=STK_RM.on?(STK_RM.writable?'● 공용 저장 켜짐':'● 공용 저장 읽기 전용'):'○ 공용 저장 꺼짐 — 이 브라우저만';
+    m.title=STK_RM.on?'design 저장소(assets/user-stock)에 저장 — 어느 컴퓨터에서나 같은 목록':('이 브라우저에만 저장돼 다른 컴퓨터에서는 안 보여 ('+(STK_RM.reason||'')+')');
+    m.style.background=STK_RM.on?'#e7f8ea':'#fff4e5'; m.style.color=STK_RM.on?'#0a7a1f':'#9a5b00';
+    const nLocal=all.filter(i=>i.source==='mine').length; $('#stkMigrate').style.display=STK_RM.on&&STK_RM.writable&&nLocal?'':'none'; $('#stkMigrate').dataset.n=nLocal; }
   const q=($('#stkQ').value||'').trim().toLowerCase(), src=$('#stkSrc').value, showH=$('#stkShowHidden').checked;
   const list=all.filter(i=>(showH||!i.hidden)&&(!src||i.source===src)&&(!q||[i.name,i.category,i.assetId,i.key].some(v=>String(v||'').toLowerCase().includes(q))));
   stkSel=new Set([...stkSel].filter(k=>list.some(i=>i.key===k)));
   const n=s=>all.filter(i=>i.source===s&&!i.hidden).length, nh=all.filter(i=>i.hidden).length;
-  cntEl.textContent=`라이브러리 ${n('lib')} · 기본 ${n('base')} · 내 이미지 ${n('mine')}${nh?` · 숨김 ${nh}`:''}`;
+  cntEl.textContent=`${STK_RM.on?`공용 ${n('shared')} · `:''}라이브러리 ${n('lib')} · 기본 ${n('base')} · 이 브라우저 ${n('mine')}${nh?` · 숨김 ${nh}`:''}`;
   body.innerHTML=`<div class="stk-note">블로그 이미지 제작·배너 스튜디오의 <b>스톡 이미지 보관함</b>과 같은 목록이야.
-    <b>내 이미지</b>는 삭제하면 이 브라우저 보관함에서 영구히 지워지고, <b>라이브러리·기본 스톡</b>(저장소에 들어 있는 기본 이미지)은
+    ${STK_RM.on?'<b>공용</b> 이미지는 design 저장소에 저장돼 어느 컴퓨터에서나 보이고, 삭제하면 저장소에서 지워져. <b>이 브라우저</b> 이미지는 이 컴퓨터에만 있어 — 위 버튼으로 공용에 올릴 수 있어(이 브라우저 데이터는 남겨 둬). ':'<b>공용 저장이 꺼져 있어</b> 이 브라우저에만 저장돼(다른 컴퓨터에서는 안 보여). '}
+    <b>이 브라우저</b> 이미지는 삭제하면 이 브라우저 보관함에서 영구히 지워지고, <b>라이브러리·기본 스톡</b>(저장소에 들어 있는 기본 이미지)은
     <b>숨김 처리</b>만 돼 — 파일 자체는 저장소에 그대로 남고, '숨긴 항목 보기'에서 언제든 복원할 수 있어.
     이미 작업에 넣은 이미지는 작업 파일 안에 복사돼 있거나(내 이미지) 저장소 파일을 그대로 가리켜서(기본 이미지) 삭제·숨기기로 깨지지 않아.</div>`+
     (list.length?'<div class="stk-grid" id="stkGrid"></div>':`<div class="empty">${all.length?'조건에 맞는 스톡 이미지가 없어.':'스톡 이미지가 없어.'}</div>`);
@@ -929,7 +937,7 @@ async function renderStock(){
     const d=document.createElement('div');d.className='stk-card'+(stkSel.has(it.key)?' sel':'')+(it.hidden?' hid':'');d.dataset.key=it.key;
     d.title=`${STK_SRC[it.source]} · ${it.category} / ${it.name}${it.kb?' · '+it.kb+'KB':''}${it.assetId?'\n'+it.assetId+(it.description?' — '+it.description:''):''}`;
     d.innerHTML=`<div class="th"><img src="${esc(it.url)}" loading="lazy" alt=""></div><span class="badge ${it.source}">${STK_SRC[it.source]}</span>${it.hidden?'<span class="badge h">숨김</span>':''}`+
-      `<button class="act${it.source==='mine'?' del':''}" data-act="${it.source==='mine'?'del':it.hidden?'restore':'hide'}">${it.source==='mine'?'삭제':it.hidden?'복원':'숨기기'}</button>`+
+      `<button class="act${it.source==='mine'||it.source==='shared'?' del':''}" data-act="${it.source==='mine'||it.source==='shared'?'del':it.hidden?'restore':'hide'}">${it.source==='mine'||it.source==='shared'?'삭제':it.hidden?'복원':'숨기기'}</button>`+
       `<input type="checkbox" class="ck"${stkSel.has(it.key)?' checked':''} aria-label="선택">`+
       `<div class="meta"><div class="nm">${esc(it.name||'')}</div><div class="sub"><span class="dim"></span>${it.kb?it.kb+'KB · ':''}${esc(it.category||'')}</div></div>`;
     const im=d.querySelector('img');im.onload=()=>{const s=d.querySelector('.dim');if(s)s.textContent=im.naturalWidth+'×'+im.naturalHeight+' · ';};
@@ -942,26 +950,41 @@ async function renderStock(){
 function stkPaintSel(){
   document.querySelectorAll('.stk-card').forEach(c=>{const on=stkSel.has(c.dataset.key);c.classList.toggle('sel',on);const ck=c.querySelector('.ck');if(ck)ck.checked=on;});
   const picked=STK.filter(i=>stkSel.has(i.key));
-  $('#stkDel').disabled=!picked.some(i=>i.source==='mine'||!i.hidden);
+  $('#stkDel').disabled=!picked.some(i=>i.source==='mine'||i.source==='shared'||!i.hidden);
   $('#stkRestore').disabled=!picked.some(i=>i.hidden);
-  $('#stkDel').textContent=picked.length?`선택 삭제·숨기기 (${picked.filter(i=>i.source==='mine'||!i.hidden).length})`:'선택 삭제·숨기기';
+  $('#stkDel').textContent=picked.length?`선택 삭제·숨기기 (${picked.filter(i=>i.source==='mine'||i.source==='shared'||!i.hidden).length})`:'선택 삭제·숨기기';
 }
 async function stkApply(act,items){
-  const mine=items.filter(i=>i.source==='mine'), stat=items.filter(i=>i.source!=='mine');
-  if(act==='restore'){ const ks=stat.filter(i=>i.hidden).map(i=>i.key); if(!ks.length)return; StockKit.setHidden(ks,false); toast(`${ks.length}개를 보관함에 다시 보이게 했어`); stkSel.clear(); return renderStock(); }
+  const mine=items.filter(i=>i.source==='mine'), shared=items.filter(i=>i.source==='shared'), stat=items.filter(i=>i.source==='lib'||i.source==='base');
+  if(act==='restore'){ const ks=stat.filter(i=>i.hidden).map(i=>i.key); if(!ks.length)return;
+    try{await StockKit.setHiddenAny('',ks,false);}catch(err){alert('복원 실패: '+(err&&err.message||err));return;}
+    toast(`${ks.length}개를 보관함에 다시 보이게 했어`); stkSel.clear(); return renderStock(); }
   const hide=stat.filter(i=>!i.hidden);
-  if(!mine.length&&!hide.length)return;
-  const msg=[mine.length?`내 이미지 ${mine.length}개를 이 브라우저 보관함에서 영구 삭제해 (되돌릴 수 없음).`:'',
+  if(!mine.length&&!hide.length&&!shared.length)return;
+  const msg=[shared.length?`공용 이미지 ${shared.length}개를 design 저장소에서 삭제해 — 모든 컴퓨터에서 사라져 (저장소 기록(커밋)에는 남아).`:'',
+    mine.length?`이 브라우저 이미지 ${mine.length}개를 이 브라우저 보관함에서 영구 삭제해 (되돌릴 수 없음).`:'',
     hide.length?`저장소 기본 이미지 ${hide.length}개는 숨김 처리돼 — 파일 자체는 저장소에 남고, '숨긴 항목 보기'에서 복원할 수 있어.`:'',
     '블로그 이미지 제작·배너 스튜디오 보관함에서도 함께 빠져. 이미 작업에 넣은 이미지는 영향 없어.'].filter(Boolean).join('\n\n');
-  if(!await askConfirm(msg,mine.length?'삭제':'숨기기'))return;
+  if(!await askConfirm(msg,mine.length||shared.length?'삭제':'숨기기'))return;
   try{
+    if(shared.length)await StockKit.delShared('',shared.map(i=>i.sharedId));
     if(mine.length)await StockKit.delMine(mine.map(i=>i.id));
-    if(hide.length)StockKit.setHidden(hide.map(i=>i.key),true);
-    toast([mine.length?`${mine.length}개 삭제`:'',hide.length?`${hide.length}개 숨김`:''].filter(Boolean).join(' · ')+'했어');
+    if(hide.length)await StockKit.setHiddenAny('',hide.map(i=>i.key),true);
+    toast([shared.length+mine.length?`${shared.length+mine.length}개 삭제`:'',hide.length?`${hide.length}개 숨김`:''].filter(Boolean).join(' · ')+'했어');
   }catch(err){ alert('처리 실패: '+(err&&err.message||err)); }
   stkSel.clear(); renderStock();
 }
+$('#stkMigrate').onclick=async()=>{
+  const n=+$('#stkMigrate').dataset.n||0;
+  if(!await askConfirm(`이 브라우저에만 있는 이미지 ${n}개를 design 저장소 공용 목록으로 올릴게.\n같은 내용은 건너뛰고, 이 브라우저 데이터는 지우지 않아.\n이 브라우저에서 숨긴 기본 이미지 목록도 공용 숨김으로 옮겨.`,'공용으로 올리기'))return;
+  const b=$('#stkMigrate'); b.disabled=true;
+  try{ const r=await StockKit.migrateLocal('',(i,t)=>{b.textContent=`올리는 중… ${i}/${t}`;});
+    toast(`공용으로 ${r.up}개 올림${r.dup?` · 이미 있던 ${r.dup}개 건너뜀`:''}${r.fail.length?` · 실패 ${r.fail.length}개`:''}`,!!r.fail.length);
+    if(r.fail.length)alert('올리지 못한 항목:\n'+r.fail.join('\n'));
+  }catch(err){ alert('공용으로 올리기 실패: '+(err&&err.message||err)); }
+  b.disabled=false; b.textContent='⇪ 이 브라우저의 이미지를 공용으로 올리기'; renderStock();
+};
+window.addEventListener('focus',()=>{ if(tab==='stock')renderStock(); });   // 다른 컴퓨터에서 바뀐 공용 목록
 $('#stkQ').oninput=()=>renderStock();
 $('#stkSrc').onchange=()=>renderStock();
 $('#stkShowHidden').onchange=()=>renderStock();

@@ -65,15 +65,90 @@
       kb: i.kb, url: root + 'banner_studio/stock/' + enc(i.rel) })).filter(i => !inLib.has(i.key));
     return { lib: libItems, base };
   }
-  // 전체 목록 — opts.includeHidden 이면 숨긴 것도 hidden:true 로 함께
+  // ── 공용 저장(design 저장소, /api/stock) ─────────────────────────────────────────────
+  // 서버(/api)가 없거나(로컬 http.server·파일 열기) 토큰이 설정 안 됐으면 로컬 모드 — 지금처럼 이 브라우저(IndexedDB·localStorage)만
+  const PWKEY = 'stockPw:v1';
+  let remoteCache = null, remoteAt = 0;
+  async function remote(root, fresh) {
+    root = root || '';
+    if (!fresh && remoteCache && Date.now() - remoteAt < 1500) return remoteCache;
+    let st;
+    // 로컬에서 연 화면(파일·localhost)은 서버(/api)가 없으니 묻지 않는다(콘솔 404 방지). vercel dev 등으로 시험할 때는
+    // localStorage 'stockApi' = 'on' 으로 켠다
+    let force = ''; try { force = localStorage.getItem('stockApi') || ''; } catch (e) { }
+    const localHost = location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)$/.test(location.hostname);
+    if ((localHost && force !== 'on') || force === 'off') { st = { on: false, reason: '로컬에서 연 화면(서버 없음)', root }; remoteCache = st; remoteAt = Date.now(); return st; }
+    try {
+      const r = await fetch(root + 'api/stock', { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+      const ct = r.headers.get('content-type') || '';
+      if (!r.ok || !/json/.test(ct)) st = { on: false, reason: r.status === 404 ? '서버(/api) 없음' : '서버 응답 ' + r.status };
+      else { const j = await r.json();
+        st = j.enabled ? { on: true, writable: !!j.writable, public: !!j.public, items: j.items || [], hidden: j.hidden || [] }
+          : { on: false, reason: j.message || '서버 설정 필요' }; }
+    } catch (e) { st = { on: false, reason: '서버에 연결 못 함' }; }
+    st.root = root;
+    remoteCache = st; remoteAt = Date.now();
+    return st;
+  }
+  const absUrl = (root, u) => /^\/api\//.test(u) ? root + u.slice(1) : u;   // 프록시 주소를 화면 위치 기준으로
+  function sharedItems(st) {
+    return (st.items || []).map(i => ({ key: 'shared:' + i.id, source: 'shared', sharedId: i.id, name: i.name, category: i.category || '기본',
+      url: absUrl(st.root || '', i.url), kb: i.kb, ts: i.ts || 0 }));
+  }
+  function password(ask) {
+    let pw = ''; try { pw = localStorage.getItem(PWKEY) || ''; } catch (e) { }
+    if (!pw || ask) { pw = (prompt('공용 스톡 비밀번호를 입력해줘\n(처음 한 번만 — 이 브라우저에 기억해. 비밀번호는 관리자가 Vercel 에 정한 값)') || '').trim(); if (pw) try { localStorage.setItem(PWKEY, pw); } catch (e) { } }
+    return pw;
+  }
+  async function post(root, body) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const pw = password(attempt > 0); if (!pw) throw new Error('비밀번호를 입력하지 않아 취소했어');
+      const r = await fetch((root || '') + 'api/stock', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-stock-password': pw }, body: JSON.stringify(body) });
+      let j = {}; try { j = await r.json(); } catch (e) { }
+      if (r.status === 401) { try { localStorage.removeItem(PWKEY); } catch (e) { } if (attempt === 0) continue; }
+      if (!r.ok) throw new Error(j.error || ('서버 오류 ' + r.status));
+      remoteCache = null; return j;
+    }
+  }
+  async function upload(root, o) { const j = await post(root, Object.assign({ action: 'upload' }, o)); notify('shared'); return j; }
+  async function delShared(root, ids) { const j = await post(root, { action: 'delete', ids }); notify('shared'); return j; }
+  // 숨김 — 공용 모드면 저장소 hidden.json, 아니면 이 브라우저 localStorage
+  async function setHiddenAny(root, keys, on) {
+    const st = await remote(root);
+    if (st.on) { const j = await post(root, { action: 'hide', keys, on }); notify('hidden'); return new Set(j.hidden || []); }
+    return setHidden(keys, on);
+  }
+  async function hiddenNow(root) { const st = await remote(root); return st.on ? new Set(st.hidden || []) : hiddenSet(); }
+  // 전체 목록 — 공용 모드면 ① 라이브러리 ② 기본 + 공용 이미지(저장소), opts.includeLocal 이면 이 브라우저 이미지도(옮기기용)
+  //           로컬 모드면 ① ② + 이 브라우저 이미지. opts.includeHidden 이면 숨긴 것도 hidden:true 로 함께
   async function loadAll(root, opts) {
     opts = opts || {};
-    const st = await loadStatic(root), hid = hiddenSet();
+    const [st, rm] = await Promise.all([loadStatic(root), remote(root, true)]);
+    const hid = rm.on ? new Set(rm.hidden || []) : hiddenSet();
     let my = [];
-    try { my = (await mine()).map(i => ({ key: 'mine:' + i.id, source: 'mine', id: i.id, name: i.name, category: i.category || '기본', url: i.src, kb: i.kb, ts: i.ts || 0 })).sort((a, b) => b.ts - a.ts); }
-    catch (e) { if (opts.throwOnDb) throw e; }
-    const all = [...st.lib, ...my, ...st.base].map(i => Object.assign(i, { hidden: i.source !== 'mine' && hid.has(i.key) }));
+    if (!rm.on || opts.includeLocal) {
+      try { my = (await mine()).map(i => ({ key: 'mine:' + i.id, source: 'mine', id: i.id, name: i.name, category: i.category || '기본', url: i.src, kb: i.kb, ts: i.ts || 0 })).sort((a, b) => b.ts - a.ts); }
+      catch (e) { if (opts.throwOnDb) throw e; }
+    }
+    const shared = rm.on ? sharedItems(rm).sort((a, b) => b.ts - a.ts) : [];
+    const all = [...st.lib, ...shared, ...my, ...st.base].map(i => Object.assign(i, { hidden: (i.source === 'lib' || i.source === 'base') && hid.has(i.key) }));
     return opts.includeHidden ? all : all.filter(i => !i.hidden);
   }
-  window.StockKit = { HKEY, hiddenSet, setHidden, loadStatic, loadAll, mine, delMine, onChange: fn => { subs.add(fn); return () => subs.delete(fn); }, notify };
+  // 이 브라우저 이미지 → 공용으로 (자동으로 하지 않는다. 로컬 데이터는 지우지 않는다) — 같은 내용은 서버가 중복으로 건너뜀
+  async function migrateLocal(root, onStep) {
+    const st = await remote(root, true); if (!st.on) throw new Error('공용 저장이 꺼져 있어');
+    const list = await mine(); let up = 0, dup = 0, fail = [];
+    for (let i = 0; i < list.length; i++) {
+      const it = list[i];
+      try { const j = await post(root, { action: 'upload', name: it.name, category: it.category || '기본', dataUrl: it.src }); if (j.duplicate) dup++; else up++; }
+      catch (e) { fail.push(it.name + ' — ' + e.message); if (/비밀번호/.test(e.message)) break; }
+      onStep && onStep(i + 1, list.length);
+    }
+    const hk = [...hiddenSet()]; if (hk.length) { try { await post(root, { action: 'hide', keys: hk, on: true }); } catch (e) { fail.push('숨김 목록 — ' + e.message); } }
+    notify('shared');
+    return { total: list.length, up, dup, fail, hidden: hk.length };
+  }
+  const MAX_UPLOAD = 3 * 1024 * 1024;   // 서버와 같은 한도(Vercel 요청 본문 4.5MB, base64 로 1.37배)
+  window.StockKit = { HKEY, hiddenSet, setHidden, setHiddenAny, hiddenNow, loadStatic, loadAll, mine, delMine, remote, sharedItems, upload, delShared, migrateLocal, password, MAX_UPLOAD,
+    onChange: fn => { subs.add(fn); return () => subs.delete(fn); }, notify };
 })();

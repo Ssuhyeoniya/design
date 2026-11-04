@@ -1493,7 +1493,7 @@ const fileToDataURL = f => new Promise((res, rej) => {
   const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(f);
 });
 
-let stock = [];
+let stock = [], stockRM = { on: false };
 let builtinStock = null;   // stock/manifest.json — 저장소에 동봉된 기본 스톡 (삭제 불가)
 // 캠페인 에셋 라이브러리 — 기획안이 Asset ID 로 참조하는 이미지 (읽기 전용)
 const ROOT = '../';
@@ -1518,7 +1518,10 @@ async function loadStock() {
     }));
   }
   let mine = [];
-  try {
+  // 공용 저장(design 저장소 /api/stock)이 켜져 있으면 공용 이미지, 꺼져 있으면 이 브라우저 이미지 (shared/stock-kit.js)
+  const RM = window.StockKit ? await StockKit.remote('../', true) : { on: false }; stockRM = RM;
+  if (RM.on) mine = StockKit.sharedItems(RM).map(i => ({ sharedId: i.sharedId, shared: true, rel: '공용/' + i.name, name: i.name, category: i.category, url: i.url, kb: i.kb, mtime: i.ts }));
+  else try {
     mine = (await dbAll('stock')).map(i => ({
       id: i.id, rel: i.category + '/' + i.name, name: i.name, category: i.category,
       url: i.src, kb: i.kb, mtime: i.ts,
@@ -1536,11 +1539,12 @@ async function loadStock() {
   // 라이브러리에 등록된 기본 스톡은 라이브러리 항목(Asset ID 있음)으로만 보여준다
   const inLib = new Set(libraryStock.map(i => i.url));
   // 이미지 소스 페이지에서 숨긴 저장소 기본 이미지(라이브러리·기본 스톡)는 빼고 보여준다 (shared/stock-kit.js)
-  const hid = window.StockKit ? StockKit.hiddenSet() : new Set();
+  const hid = RM.on ? new Set(RM.hidden || []) : (window.StockKit ? StockKit.hiddenSet() : new Set());
   stock = [...libraryStock.filter(i => !hid.has(i.key)), ...srcs, ...mine, ...builtinStock.filter(i => !inLib.has(i.url) && !hid.has(i.key))];
   const categories = [...new Set(stock.map(i => i.category))].sort();
-  $('#stockDir').textContent = '라이브러리 ' + libraryStock.length + '장 · 기본 ' + builtinStock.length + '장 + 내 이미지 ' + mine.length + '장' +
-    (srcs.length ? ' + 이미지 소스 ' + srcs.length + '장' : '');
+  $('#stockDir').textContent = '라이브러리 ' + libraryStock.length + '장 · 기본 ' + builtinStock.length + '장 + ' + (RM.on ? '공용 ' : '내 이미지 ') + mine.length + '장' +
+    (srcs.length ? ' + 이미지 소스 ' + srcs.length + '장' : '') + (RM.on ? ' · 공용 저장 켜짐' : ' · 공용 저장 꺼짐(이 브라우저만)');
+  $('#stockDir').title = RM.on ? 'design 저장소에 저장 — 어느 컴퓨터에서나 같은 목록' : ('이 브라우저에만 저장돼 (' + (RM.reason || '') + ')');
   $('#stockCnt').textContent = stock.length + '장';
   const cur = $('#catSel').value;
   $('#catSel').innerHTML = '<option value="">전체 카테고리</option>' +
@@ -1565,8 +1569,8 @@ function paintStock() {
     };
     if (!it.builtin) d.querySelector('.del').onclick = async ev => {
       ev.stopPropagation();
-      if (!confirm(`보관함에서 삭제합니다.\n\n${it.rel}\n\n이 브라우저 보관함에서 영구 삭제됩니다. 계속할까요?`)) return;
-      try { await dbDel('stock', it.id); toast('삭제했습니다'); if (window.StockKit) StockKit.notify('mine'); }
+      if (!confirm(it.shared ? `공용 보관함(design 저장소)에서 삭제합니다.\n\n${it.name}\n\n모든 컴퓨터의 배너·블로그 보관함에서 사라집니다. 계속할까요?` : `보관함에서 삭제합니다.\n\n${it.rel}\n\n이 브라우저 보관함에서 영구 삭제됩니다. 계속할까요?`)) return;
+      try { if (it.shared) await StockKit.delShared('../', [it.sharedId]); else { await dbDel('stock', it.id); if (window.StockKit) StockKit.notify('mine'); } toast('삭제했습니다'); }
       catch (e) { toast('삭제 실패 — ' + e.message, true); }
       loadStock();
     };
@@ -1593,6 +1597,9 @@ function srcAssetList() {
 }
 
 async function addStockImage(it) {
+  if (it.shared && !/^data:/.test(it.url)) {               // 공용 이미지는 작업에 dataURL 로 복사해 넣는다 — 나중에 삭제돼도 작업이 깨지지 않게
+    try { const b = await (await fetch(it.url)).blob(); it = Object.assign({}, it, { url: await fileToDataURL(b) }); } catch { /* 실패하면 주소 그대로 */ }
+  }
   const img = await loadImg(it.url).catch(() => null);
   if (!img) return toast('이미지를 불러오지 못했습니다', true);
   imgCache.set(it.url, img);
@@ -1621,10 +1628,11 @@ async function uploadFiles(files, cat) {
     if (!/^image\//.test(f.type) && !/\.(png|jpe?g|gif|webp|svg)$/i.test(f.name)) continue;
     if (f.size > 30 * 1024 * 1024) { toast(`${f.name} — 30MB 를 넘어 건너뜁니다`, true); continue; }
     try {
-      await dbPut('stock', {
-        category: cat || $('#catSel').value || '기본', name: f.name,
-        src: await fileToDataURL(f), kb: Math.round(f.size / 1024), ts: Date.now(),
-      });
+      const category = cat || $('#catSel').value || '기본', src = await fileToDataURL(f);
+      if (stockRM.on) {                                     // 공용 저장 — design 저장소로
+        if (f.size > StockKit.MAX_UPLOAD) { toast(`${f.name} — 공용 보관함은 3MB 까지입니다`, true); continue; }
+        await StockKit.upload('../', { name: f.name, category, dataUrl: src });
+      } else await dbPut('stock', { category, name: f.name, src, kb: Math.round(f.size / 1024), ts: Date.now() });
       n++;
     } catch (e) { toast(`${f.name} 등록 실패 — ${e.message}`, true); }
   }
