@@ -2297,19 +2297,53 @@ function renderProps(){
   bindProps(s,l);
 }
 
+/* 규격 변경 — 모든 레이어를 같은 규칙으로 축척한다.
+ *  · 크기는 k=min(가로비, 세로비) 균등 축척 → 원·정사각형·반짝이·이미지·글자 모두 비율 유지
+ *  · 위치는 '덩어리' 중심을 가로비·세로비로 옮긴 뒤 그 안에서 k 로 줄인다 → 원래 캔버스 안에 있던 것은 새 캔버스 안에 남는다
+ *  · 덩어리 = 맨 바깥 그룹 / 오토 레이아웃 짝(글자+박스) / 단독 레이어 — 안쪽 상대 배치·패딩 비율이 그대로
+ *  · 캔버스를 거의 다 덮는 배경형 단독 레이어(95% 이상)만 예전처럼 가로·세로 따로 늘려 채운다
+ *  · 직선·화살표는 상자(x,y,w,h)와 방향 플래그로 두 끝점을 표현하므로 같은 변환으로 두 끝점이 함께 옮겨진다 */
 function rescaleSlide(s,old,nw){
-  const rx=nw.W/old.W, ry=nw.H/old.H;
-  s.layers.forEach(x=>{
-    x.x*=rx; x.y*=ry; x.w*=rx;
-    if(x.type==='t')x.size=Math.max(8,Math.round(x.size*rx));
-    if(x.type==='r'){x.h*=ry;x.radius=Math.round(x.radius*rx);}
-    if(x.type==='f'){x.h*=ry;x.topW*=rx;}
-    if(x.type==='shape'){
-      x.h*=((x.shape==='sparkle'||x.shape==='circle')?rx:ry);   // 반짝이·원은 비율 유지
-      if(x.strokeW)x.strokeW=Math.max(1,Math.round(x.strokeW*rx));
-      if(x.radius)x.radius=Math.round(x.radius*rx);
+  const rx=nw.W/old.W, ry=nw.H/old.H, k=Math.min(rx,ry);
+  const A=s.layers||[];
+  // 덩어리 묶기
+  const unitOf=new Map(), units=new Map();
+  const put=(l,key)=>{ unitOf.set(l.id,key); if(!units.has(key))units.set(key,[]); units.get(key).push(l); };
+  A.forEach(l=>{ const g=window.UIKit?UIKit.gpOf(l)[0]:l.gid; put(l,g!=null?'g:'+g:'l:'+l.id); });
+  A.forEach(l=>{ if(l.type!=='t'||l.fitBox==null)return;
+    const a=unitOf.get(l.id), bx=A.find(x=>x.id===l.fitBox); if(!bx)return; const b=unitOf.get(bx.id); if(a===b)return;
+    units.get(b).forEach(x=>{unitOf.set(x.id,a);units.get(a).push(x);}); units.delete(b); });
+  const sc=v=>v==null?v:v*k;
+  const scaleLayer=x=>{                     // 크기·두께·반경 등 길이 값만 k 로 (위치는 아래에서)
+    x.w*=k;
+    if(x.type==='t'){ x.size=Math.max(8,Math.round(x.size*k));
+      ['fitPad','fitPadY','fitDy'].forEach(p=>{ if(x[p]!=null)x[p]=Math.round(x[p]*k); });   // 패딩 비율 유지
+      if(Array.isArray(x.shadows))x.shadows=x.shadows.map(d=>Object.assign({},d,{x:sc(d.x),y:sc(d.y),blur:sc(d.blur)})); }
+    if(x.type==='r'||x.type==='shape'||x.type==='f'){ x.h*=k; }
+    if(x.type==='f'&&x.topW!=null)x.topW*=k;
+    if(x.radius)x.radius=Math.round(x.radius*k);
+    if(x.strokeW)x.strokeW=Math.max(1,Math.round(x.strokeW*k));
+    if(x.tailW)x.tailW=Math.round(x.tailW*k);
+    if(x.shadow)x.shadow=Object.assign({},x.shadow,{blur:sc(x.shadow.blur),dist:sc(x.shadow.dist)});
+    if(x.fx){ const f=x.fx;
+      if(Array.isArray(f.radii))f.radii=f.radii.map(v=>v*k);
+      if(f.stroke&&f.stroke.width)f.stroke=Object.assign({},f.stroke,{width:f.stroke.width*k});
+      if(Array.isArray(f.effects))f.effects=f.effects.map(e=>Object.assign({},e,{x:sc(e.x),y:sc(e.y),blur:sc(e.blur),spread:sc(e.spread)})); }
+    if(x.al){ const a=Object.assign({},x.al); ['gap','pl','pr','pt','pb'].forEach(p=>{ if(a[p]!=null)a[p]*=k; }); x.al=a; }
+    if(x.fb)x.fb={dx:x.fb.dx*k,dy:x.fb.dy*k,w:x.fb.w*k,h:x.fb.h*k};
+  };
+  units.forEach(list=>{
+    const bs=list.map(layerBBox);
+    const x0=Math.min(...bs.map(b=>b.x)), y0=Math.min(...bs.map(b=>b.y)), x1=Math.max(...bs.map(b=>b.x+b.w)), y1=Math.max(...bs.map(b=>b.y+b.h));
+    if(list.length===1&&(x1-x0)>=old.W*0.95&&(y1-y0)>=old.H*0.95&&list[0].type!=='t'&&list[0].type!=='i'&&!(list[0].type==='shape'&&['circle','sparkle'].includes(list[0].shape))){
+      const x=list[0]; x.x*=rx; x.y*=ry; x.w*=rx; if(x.h!=null)x.h*=ry; if(x.type==='f'&&x.topW!=null)x.topW*=rx;   // 배경형: 새 캔버스를 채운다
+      if(x.radius)x.radius=Math.round(x.radius*k); if(x.strokeW)x.strokeW=Math.max(1,Math.round(x.strokeW*k));
+      return;
     }
+    const cx=(x0+x1)/2, cy=(y0+y1)/2, ncx=cx*rx, ncy=cy*ry;
+    list.forEach(x=>{ x.x=ncx+(x.x-cx)*k; x.y=ncy+(x.y-cy)*k; scaleLayer(x); });
   });
+  if(s.layers)syncFitBoxes(s.layers);
   (s.guides||[]).forEach(g=>{g.x*=rx;g.y*=ry;g.w*=rx;g.h*=ry;});
 }
 function applyDocPreset(v,cwv,chv){
@@ -2348,7 +2382,7 @@ function bindProps(s,l){
     const v=e.target.value, old=getP(s);
     if(v==='custom'){applyDocPreset('custom',Math.round(old.W),Math.round(old.H));}
     else{applyDocPreset(v);}
-    renderAll();
+    renderAll(); recordHistory();          // 규격 변경은 실행 취소 한 번으로 되돌린다
   };
   ['pCW','pCH'].forEach(id=>{
     const el=document.getElementById(id);
@@ -2356,7 +2390,7 @@ function bindProps(s,l){
     el.onchange=()=>{
       const old=getP(s);
       applyDocPreset('custom',Math.max(100,+$('#pCW').value||old.W),Math.max(100,+$('#pCH').value||old.H));
-      renderAll();
+      renderAll(); recordHistory();
     };
   });
   if(document.getElementById('cpTiles'))$('#cpTiles').onclick=()=>{
