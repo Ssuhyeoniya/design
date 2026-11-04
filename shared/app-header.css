@@ -40,6 +40,8 @@
 .app-hdr.compact .app-opt { display: none !important; }
 .app-hdr .app-more, .app-tools .app-more { flex: 0 0 auto !important; font-weight: 800; letter-spacing: 1px; }
 .app-more-menu { position: fixed; z-index: 2000; display: none; flex-direction: column; gap: 4px; min-width: 170px; padding: 6px;
-  background: #fff; border: 1px solid rgba(0,0,0,.14); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+  /* 화면 테마 토큰을 따른다 — 배너(--panel·--line·--fg, 다크 기본) · 블로그/이미지 소스(--panel·--border·--text) */
+  background: var(--panel, #fff); color: var(--fg, var(--text, #1f2328)); border: 1px solid var(--line, var(--border, rgba(0,0,0,.14)));
+  border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.28); }
 .app-more-menu.open { display: flex; }
 .app-more-menu > * { width: 100%; text-align: left; white-space: nowrap; justify-content: flex-start; }
