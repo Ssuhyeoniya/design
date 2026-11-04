@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>이미지 소스 라이브러리 · 이미지 스튜디오</title>
-<link rel="stylesheet" href="shared/app-header.css?v=20261104-1">
+<link rel="stylesheet" href="shared/app-header.css?v=20261104-3">
 <style>
   /* 컴포넌트 썸네일·잘린 글자를 그림으로 구울 때 스튜디오와 같은 글꼴을 쓴다 */
 @font-face{font-family:Pretendard;src:url("banner_studio/fonts/Pretendard/Pretendard-Thin.otf")format("opentype");font-weight:100;font-display:swap}
@@ -190,7 +190,7 @@
       <button data-tab="ui">🧩 UI 컴포넌트</button>
       <button data-tab="stock">📦 스톡 이미지</button>
     </div>
-    <span class="cnt" id="count"></span>
+    <span class="cnt app-opt" id="count"></span>
     <div class="actions" id="actImg">
       <button class="btn small pri" id="upBtn">＋ 이미지 등록</button>
       <button class="btn small" id="refresh">↻ 새로고침</button>
@@ -256,6 +256,7 @@
 
 <script src="shared/ui-kit.js?v=20261025-16"></script>
 <script src="shared/stock-kit.js?v=20261104-1"></script>
+<script src="shared/app-header.js?v=20261104-2"></script>
 <script>
 const $=s=>document.querySelector(s);
 

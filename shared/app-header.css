@@ -34,3 +34,12 @@
 /* 헤더 안 나머지 버튼·입력은 폭이 모자라면 줄어든다(줄바꿈 대신) */
 .app-hdr .app-shrink { flex: 0 1 auto !important; min-width: 0 !important; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 900px) { .app-hdr { overflow-x: auto; } }
+/* 폭이 모자랄 때(shared/app-header.js): ① 버튼 라벨 → 아이콘만(툴팁에 전체) ② 그래도 넘치면 '⋯' 더보기 메뉴 */
+.app-hdr.compact [data-icon]:not([data-icon=""]), .app-tools.compact [data-icon]:not([data-icon=""]) { font-size: 0 !important; padding-left: 9px !important; padding-right: 9px !important; }
+.app-hdr.compact [data-icon]:not([data-icon=""])::before, .app-tools.compact [data-icon]:not([data-icon=""])::before { content: attr(data-icon); font-size: 14px; line-height: 1; }
+.app-hdr.compact .app-opt { display: none !important; }
+.app-hdr .app-more, .app-tools .app-more { flex: 0 0 auto !important; font-weight: 800; letter-spacing: 1px; }
+.app-more-menu { position: fixed; z-index: 2000; display: none; flex-direction: column; gap: 4px; min-width: 170px; padding: 6px;
+  background: #fff; border: 1px solid rgba(0,0,0,.14); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+.app-more-menu.open { display: flex; }
+.app-more-menu > * { width: 100%; text-align: left; white-space: nowrap; justify-content: flex-start; }
