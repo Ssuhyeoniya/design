@@ -2363,19 +2363,48 @@ function rescaleSlide(s,old,nw){
   if(s.layers)syncFitBoxes(s.layers);
   (s.guides||[]).forEach(g=>{g.x*=rx;g.y*=ry;g.w*=rx;g.h*=ry;});
 }
+/* 규격 왕복 보존 — 규격을 바꿀 때마다 줄인 값을 다시 줄이면 오갈수록 작아진다(k=min(rx,ry) 는 되돌아가지 않음).
+ * 슬라이드마다 '기준 규격과 그 규격에서의 레이어 기하'(geoBase)를 저장해 두고, 규격 변경은 언제나 기준에서 새로 계산한다.
+ * 마지막 변경 뒤 사용자가 위치·크기·글자 등을 고쳤으면(기하 서명이 달라짐) 지금 규격·지금 값을 새 기준으로 삼는다.
+ * 기하만 저장하므로(이미지·색은 안 담음) 저장 파일이 크게 늘지 않는다. geoBase 가 없는 예전 저장물은 현재 값이 기준. */
+const GEO_KEYS=['x','y','w','h','size','topW','radius','strokeW','tailW','fitPad','fitPadY','fitDy','shadow','shadows','al','fb'];
+function geoOf(l){
+  const o={};
+  GEO_KEYS.forEach(k=>{ if(l[k]!==undefined)o[k]=l[k]; });
+  if(l.fx)o.fx={radii:l.fx.radii,stroke:l.fx.stroke,effects:l.fx.effects};
+  return JSON.parse(JSON.stringify(o));
+}
+function geoSig(sl){ return JSON.stringify([(sl.layers||[]).map(l=>[l.id,geoOf(l)]),sl.guides||[]]); }
+function geoRestore(sl){
+  const g=sl.geoBase; if(!g)return false;
+  const by=new Map(g.layers.map(([id,o])=>[id,o]));
+  if((sl.layers||[]).some(l=>!by.has(l.id))||by.size!==(sl.layers||[]).length)return false;
+  sl.layers.forEach(l=>{ const o=JSON.parse(JSON.stringify(by.get(l.id)));
+    GEO_KEYS.forEach(k=>{ if(k in o)l[k]=o[k]; else delete l[k]; });
+    if(l.fx&&o.fx){ ['radii','stroke','effects'].forEach(k=>{ if(o.fx[k]!==undefined)l.fx[k]=o.fx[k]; else delete l.fx[k]; }); } });
+  sl.guides=JSON.parse(JSON.stringify(g.guides||[]));
+  return true;
+}
+// 규격 변경 직후(화면 반영 뒤) 기하 서명을 찍어 둔다 — 다음 변경 때 '그 뒤로 고친 게 없는지' 판단
+function stampGeoBase(){ slides.forEach(sl=>{ if(sl.geoBase)sl.geoBase.sig=geoSig(sl); }); }
 function applyDocPreset(v,cwv,chv){
   slides.forEach(sl=>{
-    const old=getP(sl);
+    let old=getP(sl);
     const nw = v==='custom' ? {W:cwv,H:chv} : PRESETS[v];
     if(sl.kind==='qna'&&v!=='custom'){
       // 질문 텍스트 보존 후 해당 규격으로 재조판 (스트레치 방지)
       const ts=sl.layers.filter(L=>L.type==='t').map(L=>L.text).filter(t=>t!=='Q&A'&&t!=='자주 물어보는 질문');
       const nq=qnaSlide(v,sl.service,ts[0]||'',ts[1]||'',ts[2]||'');
       sl.preset=v;delete sl.cw;delete sl.ch;
-      sl.bg=nq.bg;sl.layers=nq.layers;sl.guides=nq.guides||[];
+      sl.bg=nq.bg;sl.layers=nq.layers;sl.guides=nq.guides||[]; delete sl.geoBase;   // 새로 조판했으니 기준도 새로
       return;
     }
-    rescaleSlide(sl,old,nw);
+    if(Math.abs(nw.W-old.W)<0.01&&Math.abs(nw.H-old.H)<0.01){   // 크기가 같으면(같은 값 재입력·필드 blur 로 인한 중복 호출) 기준을 건드리지 않는다
+      sl.preset=v; if(v==='custom'){sl.cw=nw.W;sl.ch=nw.H;}else{delete sl.cw;delete sl.ch;} return; }
+    // 기준에서 계산: 마지막 규격 변경 뒤 기하가 그대로면 기준 기하로 되돌린 뒤 기준 규격→새 규격 한 번에
+    if(sl.geoBase&&sl.geoBase.sig===geoSig(sl)&&geoRestore(sl)) old={W:sl.geoBase.W,H:sl.geoBase.H};
+    else sl.geoBase={W:old.W,H:old.H,layers:(sl.layers||[]).map(l=>[l.id,geoOf(l)]),guides:JSON.parse(JSON.stringify(sl.guides||[]))};
+    if(Math.abs(nw.W-old.W)>0.01||Math.abs(nw.H-old.H)>0.01) rescaleSlide(sl,old,nw);
     sl.preset=v;
     if(v==='custom'){sl.cw=nw.W;sl.ch=nw.H;}else{delete sl.cw;delete sl.ch;}
     if(sl.kind==='guide')layoutGuideSlots(sl); // 슬롯은 규격 기준 재조판으로 비율 유지
@@ -2397,17 +2426,21 @@ function _applyText(prop,val,fallbackLayer){
 function bindProps(s,l){
   if($('#pPreset'))$('#pPreset').onchange=e=>{
     const v=e.target.value, old=getP(s);
+    recordHistoryNow();                    // 앞서 고친 내용은 따로 한 단계로
     if(v==='custom'){applyDocPreset('custom',Math.round(old.W),Math.round(old.H));}
     else{applyDocPreset(v);}
-    renderAll(); recordHistory();          // 규격 변경은 실행 취소 한 번으로 되돌린다
+    renderAll(); stampGeoBase(); recordHistoryNow();       // 규격 변경은 실행 취소 한 번으로 되돌린다
   };
   ['pCW','pCH'].forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
     el.onchange=()=>{
       const old=getP(s);
-      applyDocPreset('custom',Math.max(100,+$('#pCW').value||old.W),Math.max(100,+$('#pCH').value||old.H));
-      renderAll(); recordHistory();
+      const W=Math.max(100,+$('#pCW').value||old.W), H=Math.max(100,+$('#pCH').value||old.H);
+      if(W===old.W&&H===old.H)return;        // 같은 값(필드 blur 등) — 아무것도 안 바꾼다
+      recordHistoryNow();
+      applyDocPreset('custom',W,H);
+      renderAll(); stampGeoBase(); recordHistoryNow();
     };
   });
   if(document.getElementById('cpTiles'))$('#cpTiles').onclick=()=>{
@@ -4565,6 +4598,12 @@ function toHex6(c){
 /* ================= 히스토리 (undo/redo) ================= */
 let history=[],future=[],histTimer=null;
 let lastState=JSON.stringify(slides);
+/* 즉시 기록(디바운스 없이) — 규격 변경처럼 한 번에 되돌려야 하는 동작 앞뒤에서 쓴다 */
+function recordHistoryNow(){
+  clearTimeout(histTimer);
+  const now=JSON.stringify(slides);
+  if(now!==lastState){ history.push(lastState); if(history.length>60)history.shift(); future=[]; lastState=now; updateUndoBtns(); }
+}
 function recordHistory(){
   clearTimeout(histTimer);
   histTimer=setTimeout(()=>{
