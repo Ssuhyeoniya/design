@@ -20,6 +20,7 @@
 const crypto = require('crypto');
 
 const MAX_BYTES = 3 * 1024 * 1024;
+const BUST_MIN = 5 * 1000;
 const LIST_TTL = 15 * 1000, FILE_TTL = 5 * 60 * 1000, FILE_CACHE_MAX = 24 * 1024 * 1024;
 const FAIL_WINDOW = 10 * 60 * 1000, FAIL_MAX = 20, FAIL_DELAY = 800, LOCK_MS = 5 * 60 * 1000, FAIL_MAP_MAX = 5000;
 const cfg = () => ({
@@ -132,7 +133,10 @@ async function ensureBranch(c, g) {
 // 클라이언트 IP — x-forwarded-for 의 '첫' 값은 요청한 사람이 마음대로 넣을 수 있어(위조로 잠금 우회·남의 IP 잠그기) 쓰지 않는다.
 // Vercel 은 x-real-ip 를 직접 설정하므로(클라이언트가 보낸 값을 덮어씀) 그것을 먼저 쓰고, 없으면 x-forwarded-for 의 '마지막' 값
 // (가장 가까운 프록시가 붙인 값)을 쓴다. 둘 다 없으면 소켓 주소.
+// 단, 이 헤더들을 믿는 것은 Vercel 에서 돌 때(process.env.VERCEL)뿐 — 그 밖(직접 띄운 Node 서버 등)에서는 누구나 위조할 수 있어
+// 소켓 주소만 쓴다(그 경우 프록시 뒤라면 모두 같은 IP 로 보여 IP 제한이 약해진다 — 문서에 적음)
 function clientIp(req) {
+  if (!process.env.VERCEL) return String((req.socket && req.socket.remoteAddress) || '?');
   const real = String(req.headers['x-real-ip'] || '').trim(); if (real) return real;
   const xff = String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
   if (xff.length) return xff[xff.length - 1];
@@ -164,8 +168,8 @@ async function checkPassword(req, c) {
   } finally { inflight.delete(ip); }
 }
 function deny(res, chk) {
-  if (chk.r === 'locked') return send(res, 429, { error: `비밀번호를 너무 많이 틀렸어 — ${Math.ceil(lockedFor(chk.ip) / 60)}분 뒤 다시 시도해 줘 (같은 회사 공인 IP 를 쓰면 함께 잠길 수 있어)` }, { 'Retry-After': String(lockedFor(chk.ip)) });
-  if (chk.r === 'busy') return send(res, 429, { error: '이전 요청을 확인하는 중이야 — 잠시 뒤 다시 시도해 줘' }, { 'Retry-After': '1' });
+  if (chk.r === 'locked') return send(res, 429, { error: `비밀번호를 너무 많이 틀렸어 — ${Math.ceil(lockedFor(chk.ip) / 60)}분 뒤 다시 시도해 줘 (같은 회사 공인 IP 를 쓰면 함께 잠길 수 있어)`, code: 'locked' }, { 'Retry-After': String(lockedFor(chk.ip)) });
+  if (chk.r === 'busy') return send(res, 429, { error: '이전 요청을 확인하는 중이야 — 잠시 뒤 다시 시도해 줘', code: 'busy' }, { 'Retry-After': '1' });
   return send(res, 401, { error: '비밀번호가 맞지 않아' });
 }
 
@@ -220,7 +224,8 @@ async function handler(req, res) {
         const chk = await checkPassword(req, c); if (chk.r !== 'ok') return deny(res, chk); bust = true;
       }
       const fresh = listCache && Date.now() - listCache.at < LIST_TTL;
-      if (fresh && !(bust && Date.now() - listCache.at > 1000)) return send(res, 200, listCache.body, { 'Cache-Control': bust ? 'private, no-store' : 's-maxage=15, stale-while-revalidate=60', 'X-Stock-Cache': 'mem' });
+      // 인증된 우회도 마지막 갱신 5초 이내면 캐시 — 우회를 반복해 GitHub 토큰 한도(5000/h)를 소진하지 못하게(최대 720/h)
+      if (fresh && !(bust && Date.now() - listCache.at > BUST_MIN)) return send(res, 200, listCache.body, { 'Cache-Control': bust ? 'private, no-store' : 's-maxage=15, stale-while-revalidate=60', 'X-Stock-Cache': 'mem' });
       const [idx, hid, pub] = await Promise.all([g.getJSON(idxPath), g.getJSON(hidPath), isPublic(c, g)]);
       const items = ((idx.data && idx.data.items) || []).map(it => Object.assign({}, it, {
         url: pub.v ? `https://raw.githubusercontent.com/${c.repo}/${encodeURIComponent(c.branch)}/${it.path.split('/').map(encodeURIComponent).join('/')}` : `/api/stock?file=${it.id}`,

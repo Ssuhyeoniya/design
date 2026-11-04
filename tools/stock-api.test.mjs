@@ -221,7 +221,7 @@ test('캐시: 목록 s-maxage=15 · 메모리 15초 · 요청 헤더 no-cache·�
     for (let i = 0; i < 10; i++) await fetch(t.api.url, { cache: 'no-store' });
     assert.equal(t.gh.calls.index, n0, '인증 없는 우회 시도 20회 → GitHub 목록 호출 0');
     const wrong = await fetch(t.api.url + '?t=x', { headers: { 'x-stock-password': 'nope' } }); assert.equal(wrong.status, 401);
-    await new Promise(r => setTimeout(r, 1100));
+    await new Promise(r => setTimeout(r, 5100));
     const right = await fetch(t.api.url + '?t=y', { headers: { 'x-stock-password': 'pw-123' } });
     assert.equal(right.status, 200); assert.equal(right.headers.get('cache-control'), 'private, no-store'); assert.equal(t.gh.calls.index, n0 + 1, '비밀번호 맞는 ?t= 만 새로 읽음');
     const j = await (await t.post({ action: 'upload', name: 'c.png', dataUrl: dataUrl(PNG) })).json();
@@ -243,7 +243,7 @@ test('비밀번호: 해시 비교 · 오답 800ms 지연 · 10분 20회 → 5분
     assert.equal(r.status, 401); assert.ok(dt >= 780, '오답 지연 ' + dt + 'ms');
     for (let i = 0; i < 19; i++) assert.equal((await t.post({ action: 'hide', keys: ['a'] }, 'nope')).status, 401);
     const over = await t.post({ action: 'hide', keys: ['a'] }, 'nope'); assert.equal(over.status, 429); assert.ok(+over.headers.get('retry-after') <= 300 && +over.headers.get('retry-after') > 0);
-    assert.match((await over.json()).error, /같은 회사 공인 IP/);
+    const oj = await over.json(); assert.match(oj.error, /같은 회사 공인 IP/); assert.equal(oj.code, 'locked');
     assert.equal((await t.post({ action: 'hide', keys: ['a'] }, 'pw-123')).status, 429);   // 잠긴 동안은 맞아도 거부
   } finally { t.close(); }
 });
@@ -254,11 +254,13 @@ test('병렬 대입 차단: 같은 IP 의 동시 비밀번호 확인은 1개만(
     const rs = await Promise.all(Array.from({ length: 5 }, () => t.post({ action: 'hide', keys: ['a'] }, 'nope')));
     const st = rs.map(r => r.status).sort();
     assert.deepEqual(st, [401, 429, 429, 429, 429]);
+    const busy = await Promise.all(rs.filter(r => r.status === 429).map(r => r.json()));
+    assert.ok(busy.every(j => j.code === 'busy'), '동시 확인 중 429 는 code:busy');
   } finally { t.close(); }
 });
 
-test('IP: x-real-ip 우선, 없으면 x-forwarded-for 마지막 값 — 첫 값 위조로 잠금 우회·남 잠그기 불가', async () => {
-  const t = await setup();
+test('IP(Vercel): x-real-ip 우선, 없으면 x-forwarded-for 마지막 값 — 첫 값 위조로 잠금 우회·남 잠그기 불가', async () => {
+  const t = await setup(); process.env.VERCEL = '1';
   try {
     const h = require('../api/stock.js')._test;
     assert.equal(h.clientIp({ headers: { 'x-real-ip': '9.9.9.9', 'x-forwarded-for': '1.1.1.1, 9.9.9.9' }, socket: {} }), '9.9.9.9');
@@ -271,5 +273,31 @@ test('IP: x-real-ip 우선, 없으면 x-forwarded-for 마지막 값 — 첫 값 
     // 다른 사람(x-real-ip 다름)은 영향 없음 — 위조 XFF 로 남을 잠글 수 없음
     const other = await fetch(t.api.url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-stock-password': 'pw-123', 'x-real-ip': '8.8.8.8', 'x-forwarded-for': '7.7.7.7' }, body: '{"action":"hide","keys":["a"]}' });
     assert.equal(other.status, 200);
+  } finally { delete process.env.VERCEL; t.close(); }
+});
+
+test('IP(Vercel 밖): x-real-ip·XFF 를 믿지 않고 소켓 주소 — 헤더를 바꿔도 같은 IP 로 잠김', async () => {
+  const t = await setup(); delete process.env.VERCEL;
+  try {
+    const h = require('../api/stock.js')._test;
+    assert.equal(h.clientIp({ headers: { 'x-real-ip': '9.9.9.9', 'x-forwarded-for': '1.1.1.1' }, socket: { remoteAddress: '3.3.3.3' } }), '3.3.3.3');
+    for (let i = 0; i < 20; i++) await fetch(t.api.url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-stock-password': 'nope', 'x-real-ip': '10.0.0.' + i, 'x-forwarded-for': '10.1.0.' + i }, body: '{"action":"hide","keys":["a"]}' });
+    const r = await fetch(t.api.url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-stock-password': 'pw-123', 'x-real-ip': '10.9.9.9' }, body: '{"action":"hide","keys":["a"]}' });
+    assert.equal(r.status, 429, '헤더 위조로 잠금 우회 불가');
+  } finally { t.close(); }
+});
+
+test('인증된 ?t= 우회 반복·동시 → GitHub 목록 호출 5초에 1회 이하, 쓰기 직후 첫 우회는 바로 최신', async () => {
+  const t = await setup();
+  try {
+    await fetch(t.api.url);                                     // 캐시 데움
+    const n0 = t.gh.calls.index;
+    for (let i = 0; i < 8; i++) await fetch(t.api.url + '?t=s' + i, { headers: { 'x-stock-password': 'pw-123' } });
+    await Promise.all(Array.from({ length: 6 }, (_, i) => fetch(t.api.url + '?t=c' + i, { headers: { 'x-stock-password': 'pw-123' } })));
+    assert.ok(t.gh.calls.index - n0 <= 1, '5초 안 우회 14회 → 목록 호출 ' + (t.gh.calls.index - n0));
+    // 쓰기 → 쓴 브라우저의 첫 우회는 바로 최신(쓰기가 캐시를 비움)
+    const up = await (await t.post({ action: 'upload', name: 'z.png', dataUrl: dataUrl(PNG) })).json();
+    const l = await (await fetch(t.api.url + '?t=after', { headers: { 'x-stock-password': 'pw-123' } })).json();
+    assert.ok(l.items.some(x => x.id === up.item.id));
   } finally { t.close(); }
 });
