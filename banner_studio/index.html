@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>배너 스튜디오 · 이미지 스튜디오</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=20261013-2">
+<link rel="stylesheet" href="style.css?v=20261025-2">
 <style id="fontface"></style>
 </head>
 <body>
@@ -14,9 +14,9 @@
   <div id="top">
     <span class="brand">배너 스튜디오</span>
     <nav class="topnav" aria-label="페이지 이동">
-      <a href="../blog_image_studio_v4_5.html" target="_blank" rel="noopener">🎨 블로그 이미지 제작</a>
+      <a href="../blog_image_studio_v4_5.html">🎨 블로그 이미지 제작</a>
       <a class="on" href="index.html" aria-current="page">🪧 배너 스튜디오</a>
-      <a href="../library.html" target="_blank" rel="noopener">🖼 이미지 소스</a>
+      <a href="../library.html">🖼 이미지 소스</a>
     </nav>
     <span class="ver" id="verTag">규격 로딩 중…</span>
     <span class="sp"></span>
@@ -55,7 +55,7 @@
       <div class="sect">
         <h3>스톡 이미지 보관함 <span class="tag" id="stockCnt"></span></h3>
         <div class="body">
-          <div id="drop">이미지를 끌어다 놓거나 클릭해서 등록<br><span class="mono" id="stockDir"></span></div>
+          <div id="drop">이미지를 끌어다 놓거나 클릭해서 등록<br><b>Ctrl+V</b> — 복사한 이미지 파일·캡처를 캔버스에 바로 붙여넣기<br><span class="mono" id="stockDir"></span></div>
           <div class="row">
             <select id="catSel" class="grow"><option value="">전체 카테고리</option></select>
             <button class="btn sm" id="btnNewCat" title="새 카테고리로 등록">＋</button>
@@ -69,6 +69,18 @@
       </div>
 
       <div class="sect">
+        <h3>UI 컴포넌트 <span class="tag" id="uiCnt"></span></h3>
+        <div class="body">
+          <div class="row">
+            <button class="btn sm grow" id="btnUiSave" title="선택한 레이어를 UI 컴포넌트로 저장 (도형 안 글자는 오토 레이아웃으로 묶임)">🧩 선택을 UI로 저장</button>
+          </div>
+          <select id="uiGroup" style="display:none"><option value="*">전체 그룹</option></select>
+          <div id="uiGrid"></div>
+          <p class="hint" id="uiEmpty">저장된 UI 가 없습니다. 도형·텍스트를 Shift+클릭으로 함께 고른 뒤 저장하면, 블로그 이미지 제작에서도 같은 UI 를 꺼내 쓸 수 있습니다.</p>
+        </div>
+      </div>
+
+      <div class="sect">
         <h3>레이어</h3>
         <div class="body">
           <div class="row">
@@ -76,6 +88,7 @@
             <button class="btn sm grow" id="btnAddRect">＋ 도형</button>
           </div>
           <div id="layers"></div>
+          <p class="hint">Shift+클릭으로 여러 개 선택 → 🎛 리모콘(Ctrl+Num*)으로 정렬·간격·붙여정렬·그리드 복사</p>
         </div>
       </div>
     </div>
@@ -90,6 +103,14 @@
           <option value="clean">시안</option>
         </select>
         <input type="range" id="guideOp" min="10" max="100" value="55" style="width:70px" title="가이드 투명도">
+        <span id="uiEditBar" style="display:none">
+          <b>🧩 컴포넌트 편집 중</b>
+          <input type="text" id="uiEdName" placeholder="이름" style="width:150px">
+          <select id="uiEdGroup" class="btn sm" style="width:130px"></select>
+          <button class="btn sm pri" id="uiEdSave" title="이 컴포넌트를 고친 내용으로 덮어쓰기">저장</button>
+          <button class="btn sm" id="uiEdSaveAs" title="원본은 두고 새 컴포넌트로 저장">새 컴포넌트로 저장</button>
+          <button class="btn sm" id="uiEdExit" title="편집을 끝내고 이미지 소스로 돌아가기">이미지 소스로</button>
+        </span>
         <span class="sp"></span>
         <button class="btn sm" id="zoomOut">−</button>
         <span id="zoomLbl">100%</span>
@@ -123,6 +144,23 @@
                 <input type="number" id="cw" class="grow"><span class="hint">×</span>
                 <input type="number" id="ch" class="grow">
               </div>
+              <div class="row" id="freeSizeRow" style="display:none">
+                <label>프리셋</label>
+                <select id="sizePreset" class="grow">
+                  <option value="">— 사이즈 프리셋 —</option>
+                  <option value="1080x1080">정사각 1080×1080</option>
+                  <option value="1080x1350">세로 4:5 1080×1350</option>
+                  <option value="1080x1920">스토리 9:16 1080×1920</option>
+                  <option value="1920x1080">가로 16:9 1920×1080</option>
+                  <option value="1200x628">링크 썸네일 1200×628</option>
+                  <option value="1200x1200">카톡 정사각 1200×1200</option>
+                  <option value="728x90">리더보드 728×90</option>
+                  <option value="300x250">미디엄 렉탱글 300×250</option>
+                  <option value="1600x900">PPT 16:9 1600×900</option>
+                </select>
+                <button class="btn sm" id="btnSwapWH" title="가로·세로 바꾸기">⇄</button>
+              </div>
+              <p class="hint" id="freeSizeHint" style="display:none">자유 캔버스 — 규정·검수 없이 16~8000px 사이에서 원하는 크기로 지정합니다.</p>
               <div class="row">
                 <label>배경</label>
                 <select id="bgMode" class="grow">
@@ -174,7 +212,9 @@
 </div>
 <div id="toast"></div>
 <input type="file" id="filePick" accept="image/*" multiple hidden>
-<script src="plans.js?v=20261013-2"></script>
-<script src="app.js?v=20261013-2"></script>
+<script src="../shared/ppt-remote.js?v=20261015-1"></script>
+<script src="../shared/ui-kit.js?v=20261025-16"></script>
+<script src="plans.js?v=20261015-5"></script>
+<script src="app.js?v=20261025-11"></script>
 </body>
 </html>

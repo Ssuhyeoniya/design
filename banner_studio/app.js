@@ -63,6 +63,7 @@ function installFonts() {
 }
 // 규격의 서체명("S-core Dream 6Bold" 등)을 캔버스 font 속성으로 변환
 function parseFont(name) {
+  if (window.UIKit) return UIKit.parseFont(name);       // 무료 글꼴 모음(Noto Sans KR·SUIT 등)까지 해석한다
   const s = String(name || '');
   let m = s.match(/S-?core\s*Dream\s*(\d)/i);
   if (m) return { family: 'SCDream', weight: +m[1] * 100 };
@@ -70,19 +71,55 @@ function parseFont(name) {
   if (m) return { family: 'Pretendard', weight: PRE_W[m[1]] || 400 };
   return { family: 'Pretendard', weight: 400 };
 }
-const fontCss = (f, size) => `${f.weight} ${size}px ${f.family}, "Malgun Gothic", sans-serif`;
+const fontCss = (f, size) => `${f.weight} ${size}px ${window.UIKit ? UIKit.cssFamily(f.family) : f.family}, "Malgun Gothic", sans-serif`;
 
 // ══════════════════════════════════ 상태 ══════════════════════════════════
 let SPECS = null;
 let S = null;              // 현재 작업 상태
 let zoom = 1, autoFit = true;
 let sel = null;            // 선택된 레이어 id
+// 다중 선택 (Shift+클릭) — sel 이 '주 선택', multi 는 함께 고른 나머지.
+// sel 이 다른 경로로 바뀌면(레이어 추가·타입 전환 등) multi 는 자동으로 풀린다.
+const multi = new Set();
+let multiFor = null;
+function selIds() {
+  if (multiFor !== sel) { multi.clear(); multiFor = sel; }
+  const ids = sel ? [sel, ...multi] : [];
+  return ids.filter((id, i) => ids.indexOf(id) === i && S && S.layers.some(l => l.id === id));
+}
+const selLayers = () => { const ids = selIds(); return S.layers.filter(l => ids.includes(l.id)); };
+// 그룹(gid) — 캔버스에서 누르면 묶음 전체가 잡힌다. 레이어 목록·더블클릭으로는 낱개를 고친다
+// 목록을 그대로 고른다 (마지막이 주 선택)
+function setSel(list) { sel = list.length ? list[list.length - 1] : null; multi.clear(); multiFor = sel; list.slice(0, -1).forEach(id => multi.add(id)); }
+// 캔버스 클릭 — 피그마처럼: 아무것도 안 고른 상태면 맨 바깥 그룹, 이미 그룹 안을 고르고 있으면 같은 단계의 형제(그룹 또는 낱개)
+function clickTarget(l, cur) {
+  const g = UIKit.gpOf(l); if (!g.length) return [l.id];
+  let depth = -1;
+  for (let i = 0; i < g.length; i++) { const mem = UIKit.groupMembers(S.layers, g[i]).map(x => x.id); if (cur.length && cur.every(id => mem.includes(id)) && !(cur.length === mem.length)) depth = i; }
+  const next = depth + 1;
+  return next < g.length ? UIKit.groupMembers(S.layers, g[next]).map(x => x.id) : [l.id];
+}
+function selectGroup(l) {
+  sel = l.id; multi.clear(); multiFor = sel;
+  UIKit.groupMembers(S.layers, UIKit.gpOf(l)[0]).forEach(x => { if (x !== l) multi.add(x.id); });
+}
+function toggleSel(id) {                     // Shift+클릭
+  const ids = selIds();
+  if (ids.includes(id)) {
+    if (id === sel) { const rest = [...multi]; sel = rest.shift() || null; multi.clear(); rest.forEach(x => multi.add(x)); }
+    else multi.delete(id);
+  } else { if (sel) multi.add(sel); multi.delete(id); sel = id; }
+  multiFor = sel;
+}
 const imgCache = new Map(); // src -> HTMLImageElement
 const guideCache = new Map();
 let history = [], hIdx = -1;
 
 const TYPE_ORDER = ['splash', 'popup', 'pick_banner', 'pick_detail', 'shortcut', 'main_banner', 'event_banner',
-  'bow_splash', 'bow_popup', 'bow_pick_banner', 'bow_pick_detail'];
+  'bow_splash', 'bow_popup', 'bow_pick_banner', 'bow_pick_detail', 'free'];
+// 자유 캔버스 — 규정·검수 없이 크기를 마음대로 정하는 타입 (banner_specs.json 의 free: true)
+const isFree = sp => !!(sp && sp.free);
+const FREE_MIN = 16, FREE_MAX = 8000;
 
 function blankState(type) {
   const sp = SPECS[type];
@@ -96,6 +133,7 @@ function blankState(type) {
 function defaultCanvas(type, sp) {
   if (sp.canvas && sp.canvas[0] && sp.canvas[1]) return [sp.canvas[0], sp.canvas[1]];
   if (sp.psd_canvas) return [sp.psd_canvas[0], sp.psd_canvas[1]];
+  if (isFree(sp)) return [1080, 1080];                // 자유 캔버스 — 정사각 기본, 이후 자유 조정
   return [1000, 1000]; // 스플래시 — 1:1 기본
 }
 
@@ -120,6 +158,16 @@ function zonesOf(sp, w, h) {
 async function seedLayers() {
   const sp = SPECS[S.type], zs = zonesOf(sp, S.w, S.h);
   const L = [];
+  if (isFree(sp)) {
+    const size = Math.max(12, Math.round(Math.min(S.w, S.h) / 12)), pad = Math.round(S.w * 0.08);
+    S.layers = [{
+      id: uid(), kind: 'text', role: 'free', name: '텍스트',
+      x: pad, y: Math.round(S.h / 2 - size * 0.65), w: S.w - pad * 2,
+      text: '텍스트를 입력하세요', size, lh: 1.3, ls: -0.02,
+      color: '#ffffff', align: 'center', font: 'Pretendard Bold',
+    }];
+    return;
+  }
   const mainZ = zs.find(z => z.kind === 'text_main');
   const subZs = zs.filter(z => z.kind === 'text_sub');
   const btnZ = zs.find(z => z.kind === 'button');
@@ -253,7 +301,7 @@ function setTextFont(ctx, l) {
 // 텍스트 레이어의 실제 렌더 정보 (검수·핸들에서 공용)
 function textMetrics(l) {
   setTextFont(actx, l);
-  const lines = wrapText(actx, l.text, l.w);
+  const lines = l.nowrap ? String(l.text).split('\n') : wrapText(actx, l.text, l.w);   // 피그마에서 한 줄이던 글자는 저절로 줄바꿈하지 않는다
   const lh = l.size * l.lh;
   const widths = lines.map(s => actx.measureText(s).width);
   const maxW = Math.max(0, ...widths);
@@ -293,6 +341,11 @@ function srcRect(img, l) {
 function drawLayer(ctx, l) {
   ctx.save();
   ctx.globalAlpha = l.opacity == null ? 1 : l.opacity;
+  // 피그마에서 가져온 그대로면 피그마가 그린 그림을 쓴다 (100% 같게). 고치는 순간부터는 아래에서 직접 그린다
+  if (l.bake && window.UIKit && !(editing && editing.l === l) && UIKit.bakeOk(l)) {
+    const im = UIKit.img(l.bake.src);
+    if (im) { ctx.globalAlpha = l.bake.alpha == null ? 1 : l.bake.alpha; ctx.drawImage(im, l.x + l.bake.dx, l.y + l.bake.dy, l.bake.w, l.bake.h); ctx.restore(); return; }
+  }
   if (l.kind === 'image') {
     const img = imgCache.get(l.src);
     if (img) {
@@ -306,13 +359,26 @@ function drawLayer(ctx, l) {
         tx.globalCompositeOperation = 'source-in';
         tx.fillStyle = '#fff'; tx.fillRect(0, 0, t.width, t.height);
         ctx.drawImage(t, l.x, l.y, l.w, l.h);
+      } else if (l.crop && window.UIKit) {        // 자르기 — 이미지 전체를 옮겨 그리고 상자로 자른다 (이미지 밖으로 옮겨도 된다)
+        const r = UIKit.cropDest(l.crop, l);
+        ctx.beginPath(); ctx.rect(l.x, l.y, l.w, l.h); ctx.clip(); ctx.drawImage(img, r.x, r.y, r.w, r.h);
       } else ctx.drawImage(img, ...srcRect(img, l), l.x, l.y, l.w, l.h);
       ctx.restore();
     } else {
       ctx.fillStyle = 'rgba(120,130,150,.25)'; ctx.fillRect(l.x, l.y, l.w, l.h);
     }
   } else if (l.kind === 'rect') {
-    ctx.fillStyle = l.fill; roundRect(ctx, l.x, l.y, l.w, l.h, l.radius || 0); ctx.fill();
+    if (l.fx && window.UIKit) {
+      // 피그마식 채우기·효과 (그라데이션·이미지 채우기·그림자·블러·테두리) — ../shared/ui-kit.js 공용 페인터
+      let backdrop = null;
+      if ((l.fx.effects || []).some(e => e.type === 'BACKGROUND_BLUR' && e.visible !== false)) {
+        backdrop = el('canvas'); backdrop.width = ctx.canvas.width; backdrop.height = ctx.canvas.height;
+        backdrop.getContext('2d').drawImage(ctx.canvas, 0, 0);
+      }
+      ctx.globalAlpha = 1;                                // 투명도는 페인터가 적용한다
+      UIKit.paintBox(ctx, l, { k: ctx.getTransform().a || 1, backdrop });
+      ctx.globalAlpha = l.opacity == null ? 1 : l.opacity;
+    } else { ctx.fillStyle = l.fill; roundRect(ctx, l.x, l.y, l.w, l.h, l.radius || 0); ctx.fill(); }
     // 도형도 글자를 담는다 — 도형 높이 안에서 세로 가운데 정렬
     if (l.text && !(editing && editing.l === l)) drawText(ctx, l, l.y + (l.h - textMetrics(l).h) / 2);
   } else if (l.kind === 'text') {
@@ -325,13 +391,58 @@ function drawLayer(ctx, l) {
 function drawText(ctx, l, top) {
   const m = textMetrics(l);
   setTextFont(ctx, l);
-  ctx.fillStyle = l.color; ctx.textBaseline = 'top';
+  ctx.fillStyle = l.tfill && window.UIKit ? UIKit.textPaint(ctx, l.tfill, { x: l.x, y: top, w: l.w, h: m.h }) : l.color; ctx.textBaseline = 'top';   // 글자 그라데이션(피그마) 유지
   ctx.textAlign = l.align === 'center' ? 'center' : l.align === 'right' ? 'right' : 'left';
   const ax = l.align === 'center' ? l.x + l.w / 2 : l.align === 'right' ? l.x + l.w : l.x;
-  m.lines.forEach((s, i) => ctx.fillText(s, ax, top + i * m.lh + (m.lh - l.size) / 2));
+  const draw = () => m.lines.forEach((s, i) => ctx.fillText(s, ax, top + i * m.lh + (m.lh - l.size) / 2));
+  for (const sh of (l.shadows || [])) {             // 글자 그림자 (피그마 드롭 섀도) — 겹마다 한 번씩
+    ctx.save(); ctx.shadowColor = sh.color; ctx.shadowBlur = sh.blur; ctx.shadowOffsetX = sh.x; ctx.shadowOffsetY = sh.y; draw(); ctx.restore();
+  }
+  draw();
 }
 
+// 오토 레이아웃 — 글자 + 패딩으로 도형 크기를 정한다 (rect.auto = { padX, padY|null }, padY 가 null 이면 높이 고정)
+// 피그마의 Hug 처럼 왼쪽 위는 그대로 두고 오른쪽·아래로 늘고 준다.
+function syncAuto() {
+  for (const l of S.layers) {
+    if (l.kind !== 'rect' || !l.auto) continue;
+    if (l.bake && window.UIKit && UIKit.bakeOk(l)) { if (l.bake.lw) { l.w = l.bake.lw; l.h = l.bake.lh; } continue; }   // 피그마 그림으로 보이는 동안은 피그마 크기 그대로
+    setTextFont(actx, l);
+    const lines = String(l.text || '').split('\n');
+    const tw = Math.max(0, ...lines.map(t => t ? actx.measureText(t).width : 0));
+    l.align = 'center';
+    l.w = Math.round(Math.max(tw + l.auto.padX * 2, l.size * 1.2));
+    if (l.auto.padY != null) l.h = Math.round(lines.length * l.size * l.lh + l.auto.padY * 2);
+  }
+}
+
+// 무료 글꼴 모음은 쓰는 순간 받는다 — 캔버스는 글꼴이 없으면 대체 글꼴로 그리므로, 받으면 다시 그린다 (UIKit.onFont)
+function needFonts() {
+  if (!window.UIKit) return;
+  for (const l of S.layers) if (l.font && (l.kind === 'text' || (l.kind === 'rect' && l.text))) { const f = parseFont(l.font); UIKit.ensureFont(f.family, f.weight); }
+}
+// 서체 선택 목록 — 기본 서체 + 무료 글꼴 모음 (굵기별)
+const WNAMES = { 100: 'Thin', 200: 'ExtraLight', 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'SemiBold', 700: 'Bold', 800: 'ExtraBold', 900: 'Black' };
+function fontOptions(base, cur) {
+  let h = base.map(f => `<option${f === cur ? ' selected' : ''}>${f}</option>`).join('');
+  if (window.UIKit) for (const F of UIKit.fonts) {
+    if (F.family === 'SCDream') continue;
+    h += `<optgroup label="${esc(F.family)}">` + F.weights.filter(w => w <= 900).map(w => {
+      const n = `${F.family} ${WNAMES[w]}`; return `<option${n === cur ? ' selected' : ''}>${n}</option>`; }).join('') + '</optgroup>';
+  }
+  if (cur && !h.includes(`>${esc(cur)}<`)) h = `<option selected>${esc(cur)}</option>` + h;
+  return h;
+}
+
+// 오토 레이아웃(피그마) — 요소가 실제로 차지하는 상자. 글자는 지금 글꼴로 잰다
+function layoutExt(l) {
+  if (l.kind === 'text') { const m = textMetrics(l); return { x: m.left, y: l.y, w: m.maxW, h: Math.max(m.h, 1) }; }
+  return { x: l.x, y: l.y, w: l.w, h: l.h };
+}
+if (document.fonts) document.fonts.addEventListener('loadingdone', () => { if (S && window.UIKit && UIKit.relayoutChanged(S.layers)) render(); });
 function renderArt() {
+  syncAuto(); needFonts();
+  if (window.UIKit && UIKit.reflow(S.layers, layoutExt)) syncAuto();   // 안의 요소가 바뀐 오토 레이아웃 프레임을 다시 배치
   art.width = S.w; art.height = S.h;
   actx.clearRect(0, 0, S.w, S.h);
   drawBg(actx, S);
@@ -397,6 +508,26 @@ function renderOverlay() {
     octx.restore();
   }
 
+  // 함께 선택된 레이어 (Shift+클릭) — 점선 상자
+  for (const m of selLayers()) {
+    if (m.id === sel) continue;
+    const b = bboxOf(m), u = Math.max(1, S.w / 400);
+    octx.save(); octx.strokeStyle = '#3d7eff'; octx.lineWidth = u * 0.9; octx.setLineDash([u * 4, u * 3]);
+    octx.strokeRect(b.x, b.y, b.w, b.h); octx.restore();
+  }
+  // 이미지 위치 조정(자르기) 모드 — 상자 밖으로 나간 이미지는 흐리게, 이미지 테두리와 모서리 핸들
+  if (cropEdit && (cropEdit.l.id !== sel || !S.layers.includes(cropEdit.l))) cropEdit = null;
+  if (cropEdit) {
+    const cl = cropEdit.l, r = cropRect(cl), u = Math.max(1, S.w / 400), im = cropImg(cl);
+    octx.save();
+    if (im) { octx.globalAlpha = .35; octx.drawImage(im, r.x, r.y, r.w, r.h); octx.globalAlpha = 1; }
+    octx.strokeStyle = '#3d7eff'; octx.lineWidth = u; octx.setLineDash([u * 4, u * 3]); octx.strokeRect(cl.x, cl.y, cl.w, cl.h);
+    octx.setLineDash([]); octx.strokeRect(r.x, r.y, r.w, r.h);
+    octx.fillStyle = '#fff'; octx.lineWidth = u * 0.7;
+    for (const [hx, hy] of cropCorners(r)) { octx.beginPath(); octx.rect(hx - u * 3.5, hy - u * 3.5, u * 7, u * 7); octx.fill(); octx.stroke(); }
+    octx.restore();
+    return;
+  }
   // 선택 핸들
   const l = S.layers.find(x => x.id === sel);
   if (l) {
@@ -451,6 +582,7 @@ let lastKB = null;
 
 function runChecks() {
   const sp = SPECS[S.type], C = [];
+  if (isFree(sp)) return C;                        // 자유 캔버스 — 검수 없음
   const add = (lv, t, m) => C.push({ lv, t, m });
   const zs = zonesOf(sp, S.w, S.h);
   const texts = S.layers.filter(l => l.kind === 'text');
@@ -609,6 +741,12 @@ function runChecks() {
 }
 
 function paintChecks() {
+  if (isFree(SPECS[S.type])) {
+    $('#verdict').className = 'ok';
+    $('#verdict').innerHTML = '검수 없음<span class="cnt">자유 캔버스는 규격 검수를 하지 않습니다</span>';
+    $('#checks').innerHTML = '';
+    return;
+  }
   const C = runChecks();
   const bad = C.filter(c => c.lv === 'bad').length, warn = C.filter(c => c.lv === 'warn').length;
   const v = $('#verdict');
@@ -637,8 +775,30 @@ function measureKB() {
 }
 
 // ══════════════════════════════════ 패널 ══════════════════════════════════
+// 자유 캔버스면 검수·규정 탭과 가이드 도구를 감추고, 사이즈 프리셋을 보여준다
+function syncFreeUI(sp) {
+  const free = isFree(sp);
+  for (const k of ['check', 'rule']) {
+    const tb = document.querySelector(`.tb[data-tab=${k}]`);
+    tb.style.display = free ? 'none' : '';
+    if (free && tb.classList.contains('on')) document.querySelector('.tb[data-tab=prop]').click();
+  }
+  $('#freeSizeRow').style.display = free ? '' : 'none';
+  $('#freeSizeHint').style.display = free ? '' : 'none';
+  for (const id of ['#tgGuide', '#guideMode', '#guideOp']) $(id).style.display = free ? 'none' : '';
+}
+
 function paintSpecInfo() {
   const sp = SPECS[S.type];
+  syncFreeUI(sp);
+  if (isFree(sp)) {
+    $('#specInfo').innerHTML = [['노출 위치', sp.placement], ['캔버스', `${S.w}×${S.h}px (자유)`],
+      ['포맷', (sp.formats || []).join(' / ')], ['규정 · 검수', '없음']]
+      .map(([k, v]) => `<div class="kv"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('');
+    $('#verTag').textContent = '자유 캔버스 · 규정 없음';
+    $('#rules').innerHTML = ''; $('#zoneList').innerHTML = '';
+    return;
+  }
   const rows = [
     ['트랙', sp.track || '-'],
     ['가이드', sp.guideline_version || '-'],
@@ -663,16 +823,66 @@ function paintSpecInfo() {
     </div>`).join('') || '<span class="hint">좌표 데이터 없음</span>';
 }
 
+// ── 레이어 패널 (피그마식) ──
+// 위가 앞(맨 위에 그려지는 것). 그룹은 ▾/▸ 로 접고 펼치고, 하위 요소는 들여 쓴다.
+// 목록에서 고르면 캔버스도 같이 고른다 (Shift = 여러 개). 끌어다 놓아 순서를 바꾸고, 그룹 안팎으로 옮긴다.
+const tree = window.UIKit ? UIKit.treeState() : null;   // 접기 상태 (처음엔 접힘, 고른 것의 경로는 열림)
+let layerDrag = null;                        // { ids: [...] } 끌고 있는 레이어들
 function paintLayers() {
   const box = $('#layers'); box.innerHTML = '';
-  [...S.layers].reverse().forEach(l => {
-    const d = el('div', 'layer' + (l.id === sel ? ' sel' : '') + (l.lockSize ? ' locked' : ''));
-    const ic = l.kind === 'text' ? 'T' : l.kind === 'rect' ? '▭' : '▣';
-    d.innerHTML = `<span class="ic">${ic}</span><span class="nm">${esc(l.name || l.kind)}</span>` +
-      `<span class="lk">${l.hidden ? '숨김' : ''}${l.lockSize ? ' 고정' : ''}</span>`;
-    d.onclick = () => { sel = l.id; paintLayers(); paintProps(); renderOverlay(); };
+  const ids = selIds();
+  tree.setSelection(S.layers, ids);
+  const rows = UIKit.layerRows(S.layers, tree.shut);
+  for (const r of rows) {
+    let d;
+    if (r.g != null) {
+      const mem = UIKit.groupMembers(S.layers, r.g), on = mem.length && mem.every(x => ids.includes(x.id)), shut = tree.shut(r.g);
+      d = el('div', 'layer grp' + (on ? ' sel' : ''));
+      d.innerHTML = `<span class="tw">${shut ? '▸' : '▾'}</span><span class="ic">▦</span><span class="nm"><b>${esc(r.name || '그룹')}</b></span><span class="lk">${mem.length}</span>`;
+      d.querySelector('.tw').onclick = e => { e.stopPropagation(); tree.toggle(r.g); paintLayers(); };
+      d.onclick = e => pickRows(e, mem.map(x => x.id));
+      d.ondblclick = () => { const v = prompt('그룹 이름', r.name || '그룹'); if (v == null) return; mem.forEach(x => { const g = UIKit.gpOf(x), n = UIKit.gpnOf(x); n[g.indexOf(r.g)] = v.trim() || '그룹'; UIKit.setGp(x, g, n); }); push(); paintLayers(); };
+    } else {
+      const l = r.l;
+      d = el('div', 'layer' + (l.id === sel ? ' sel' : ids.includes(l.id) ? ' sel multi' : '') + (l.lockSize ? ' locked' : '') + (l.hidden ? ' off' : ''));
+      const ic = l.kind === 'text' ? 'T' : l.kind === 'rect' ? '▭' : '▣';
+      d.innerHTML = `<span class="tw"></span><span class="ic">${ic}</span><span class="nm">${esc(l.name || l.kind)}</span>` +
+        `<span class="lk">${l.hidden ? '숨김' : ''}${l.lockSize ? ' 고정' : ''}</span>`;
+      d.onclick = e => pickRows(e, [l.id]);
+    }
+    d.style.paddingLeft = (7 + r.depth * 12) + 'px'; d.style.minWidth = (150 + r.depth * 12) + 'px';   // 들여쓰기는 줄 안에서 — 깊어도 이름이 안 짤리게 (패널은 가로로 스크롤)
+    if (r.g != null) d.dataset.g = r.g; else d.dataset.id = r.l.id;
+    // 끌어다 놓기 — 위/아래 절반 = 그 앞/뒤, 그룹 머리줄 가운데 = 그 그룹 안 맨 앞
+    d.draggable = true;
+    d.addEventListener('dragstart', e => {
+      const own = r.g != null ? UIKit.groupMembers(S.layers, r.g).map(x => x.id) : ids.includes(r.l.id) ? ids : [r.l.id];
+      layerDrag = { ids: own, group: r.g != null ? r.g : null };
+      e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', 'layer'); } catch { /* 무시 */ }
+    });
+    d.addEventListener('dragover', e => {
+      if (!layerDrag) return; e.preventDefault();
+      const rc = d.getBoundingClientRect(), y = (e.clientY - rc.top) / rc.height;
+      box.querySelectorAll('.dropB,.dropA,.dropIn').forEach(x => x.classList.remove('dropB', 'dropA', 'dropIn'));
+      d.classList.add(r.g != null && y > .3 && y < .7 ? 'dropIn' : y < .5 ? 'dropB' : 'dropA');
+    });
+    d.addEventListener('dragleave', () => d.classList.remove('dropB', 'dropA', 'dropIn'));
+    d.addEventListener('drop', e => {
+      e.preventDefault(); if (!layerDrag) return;
+      const mode = d.classList.contains('dropIn') ? 'in' : d.classList.contains('dropB') ? 'before' : 'after';
+      d.classList.remove('dropB', 'dropA', 'dropIn');
+      const out = UIKit.moveInTree(S.layers, layerDrag, r.g != null ? { g: r.g } : { l: r.l }, mode); layerDrag = null;
+      if (out) { S.layers = out; push(); render(); paintLayers(); paintProps(); }
+    });
+    d.addEventListener('dragend', () => { layerDrag = null; box.querySelectorAll('.dropB,.dropA,.dropIn').forEach(x => x.classList.remove('dropB', 'dropA', 'dropIn')); });
     box.appendChild(d);
-  });
+  }
+  const cur = box.querySelector('.layer.sel:not(.grp)'); if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+}
+// 목록 선택 → 캔버스 선택 (Shift = 더하기·빼기)
+function pickRows(e, list) {
+  if (editing) commitEdit();
+  if (e.shiftKey) list.forEach(id => toggleSel(id)); else setSel(list);
+  paintLayers(); paintProps(); renderOverlay();
 }
 
 function paintProps() {
@@ -686,9 +896,8 @@ function paintProps() {
     const m = textMetrics(l);
     h += `<div class="row wide"><label>내용 (Enter = 줄바꿈)</label><textarea data-k="text">${esc(l.text)}</textarea></div>`;
     h += `<div class="row"><label>서체</label><select data-k="font" class="grow">` +
-      ['Pretendard Thin', 'Pretendard Light', 'Pretendard Regular', 'Pretendard Medium', 'Pretendard SemiBold', 'Pretendard Bold', 'Pretendard ExtraBold', 'Pretendard Black',
-        'S-core Dream 3Light', 'S-core Dream 4Regular', 'S-core Dream 5Medium', 'S-core Dream 6Bold', 'S-core Dream 7ExtraBold', 'S-core Dream 8Heavy', 'S-core Dream 9Black']
-        .map(f => `<option${f === l.font ? ' selected' : ''}>${f}</option>`).join('') + '</select></div>';
+      fontOptions(['Pretendard Thin', 'Pretendard Light', 'Pretendard Regular', 'Pretendard Medium', 'Pretendard SemiBold', 'Pretendard Bold', 'Pretendard ExtraBold', 'Pretendard Black',
+        'S-core Dream 3Light', 'S-core Dream 4Regular', 'S-core Dream 5Medium', 'S-core Dream 6Bold', 'S-core Dream 7ExtraBold', 'S-core Dream 8Heavy', 'S-core Dream 9Black'], l.font) + '</select></div>';
     h += `<div class="row"><label>크기</label><input type="number" data-k="size" value="${l.size}" class="grow">
           <label style="flex:0 0 34px">색</label><input type="color" data-k="color" value="${l.color}"></div>`;
     h += `<div class="row"><label>정렬</label><select data-k="align" class="grow">` +
@@ -704,7 +913,8 @@ function paintProps() {
     h += `<div class="row"><label>옵션</label><label class="hint"><input type="checkbox" data-k="flip" ${l.flip ? 'checked' : ''}> 좌우반전</label>`;
     if (l.role === 'bi') h += `<label class="hint"><input type="checkbox" data-k="white" ${l.white ? 'checked' : ''}> 화이트</label>`;
     h += `</div>`;
-    if (l.role !== 'bi') h += `<div class="row"><button class="btn sm grow" data-act="fitZone">권장 영역에 맞추기</button><button class="btn sm grow" data-act="fitRatio">원본 비율</button></div>`;
+    if (l.role !== 'bi') h += `<div class="row"><button class="btn sm grow" data-act="imgPick">이미지 바꾸기</button>${l.figPic ? '' : '<button class="btn sm grow" data-act="imgCrop" title="캔버스에서 이미지를 더블클릭해도 됩니다">✥ 위치·크기 조정</button>'}</div>`;
+    if (l.role !== 'bi') h += `<div class="row"><button class="btn sm grow" data-act="fitZone">${isFree(SPECS[S.type]) ? '캔버스에 맞추기' : '권장 영역에 맞추기'}</button><button class="btn sm grow" data-act="fitRatio">원본 비율</button></div>`;
     if (l.assetId) h += `<p class="hint">라이브러리 에셋 <b class="mono">${esc(l.assetId)}</b>${l.slot ? ' · 슬롯 ' + esc(l.slot) : ''}${l.crop ? ' · 크롭 적용' : ''}</p>`;
     else if (l.role !== 'bi') h += `<p class="hint">브라우저 보관함 이미지 — 라이브러리에 등록되지 않아 기획안에는 저장되지 않습니다.</p>`;
     if (l.role === 'bi') h += `<p class="hint">BI 는 사이즈·좌우 위치 고정입니다. 상하(Y)만 조정할 수 있습니다.</p>`;
@@ -712,11 +922,17 @@ function paintProps() {
     h += num('X', 'x') + num('Y', 'y') + num('폭', 'w') + num('높이', 'h');
     h += `<div class="row"><label>채움</label><input type="color" data-k="fill" value="${l.fill}"><input type="text" data-k="fill" value="${l.fill}" class="grow mono"></div>`;
     h += `<div class="row"><label>모서리</label><input type="number" data-k="radius" value="${l.radius || 0}" class="grow"></div>`;
+    h += fxPropsHTML(l);
+    const au = l.auto;
+    // 오토 = 도형 안 '자기 글자'에 맞춰 크기 자동(피그마 Hug). 자기 글자가 없는 도형(카드·배경)에는 보이지 않는다 — 켜면 도형이 쪼그라든다
+    if (au || (l.text && l.text.trim())) h += `<div class="row"><label>오토</label><label class="hint"><input type="checkbox" data-auto="on" ${au ? 'checked' : ''}> 글자에 맞춰 크기 자동 (피그마 Hug)</label></div>`;
+    if (au) h += `<div class="row"><label>패딩 좌우</label><input type="number" min="0" data-auto="padX" value="${au.padX}" class="grow">
+          <label style="flex:0 0 34px">상하</label><input type="number" min="0" data-auto="padY" value="${au.padY == null ? '' : au.padY}" placeholder="고정" class="grow"></div>
+          <p class="hint">글자를 고치면 도형이 늘고 줄어듭니다. 글자를 모두 지우면 도형도 함께 삭제됩니다. 모서리 핸들을 끌면 패딩이 바뀝니다.</p>`;
     h += `<div class="row wide"><label>글자 (도형을 더블클릭해도 입력됩니다)</label><textarea data-k="text">${esc(l.text || '')}</textarea></div>`;
     h += `<div class="row"><label>서체</label><select data-k="font" class="grow">` +
-      ['Pretendard Regular', 'Pretendard Medium', 'Pretendard SemiBold', 'Pretendard Bold', 'Pretendard ExtraBold',
-        'S-core Dream 5Medium', 'S-core Dream 6Bold', 'S-core Dream 7ExtraBold']
-        .map(f => `<option${f === l.font ? ' selected' : ''}>${f}</option>`).join('') + '</select></div>';
+      fontOptions(['Pretendard Regular', 'Pretendard Medium', 'Pretendard SemiBold', 'Pretendard Bold', 'Pretendard ExtraBold',
+        'S-core Dream 5Medium', 'S-core Dream 6Bold', 'S-core Dream 7ExtraBold'], l.font) + '</select></div>';
     h += `<div class="row"><label>크기</label><input type="number" data-k="size" value="${l.size || 40}" class="grow">
           <label style="flex:0 0 34px">색</label><input type="color" data-k="color" value="${l.color || '#111111'}"></div>`;
     h += `<div class="row"><label>정렬</label><select data-k="align" class="grow">` +
@@ -725,6 +941,7 @@ function paintProps() {
   if (l.kind === 'text' || l.kind === 'rect') {
     h += `<div class="row"><button class="btn sm grow" data-act="edit">캔버스에서 글자 입력</button></div>`;
   }
+  if (selIds().length > 1 && UIKit.gpOf(l).length) h += `<div class="row"><button class="btn sm grow" data-act="ungroup" title="Ctrl+Shift+G">그룹 해제</button></div>`;
   h += `<div class="row" style="margin-top:9px">
       <button class="btn sm grow" data-act="up">위로</button>
       <button class="btn sm grow" data-act="down">아래로</button>
@@ -738,33 +955,143 @@ function paintProps() {
     inp.addEventListener(ev, () => {
       if (l.role === 'bi' && ['x', 'w', 'h'].includes(k)) { toast('BI 는 사이즈·좌우 위치가 고정입니다', true); paintProps(); return; }
       let v = inp.type === 'checkbox' ? inp.checked : inp.type === 'number' || inp.type === 'range' ? +inp.value : inp.value;
-      l[k] = v; push(); render(); paintChecks(); measureKB();
+      l[k] = v;
+      // 피그마에서 온 도형 — 색을 고르면 이미지 채우기는 두고 나머지 채우기를 그 색으로, 모서리를 고르면 모서리별 값을 푼다
+      if (k === 'color') delete l.tfill;                 // 단색을 고르면 글자 그라데이션은 뺀다
+      if (l.fx && k === 'fill') l.fx.fills = [{ type: 'SOLID', color: v }, ...(l.fx.fills || []).filter(p => p.type === 'IMAGE')];
+      if (l.fx && k === 'radius') delete l.fx.radii;
+      push(); render(); paintChecks(); measureKB();
       if (['text', 'size', 'w', 'font', 'lh', 'ls', 'align'].includes(k)) paintProps();
       if (k === 'name') paintLayers();
     });
     if (inp.tagName === 'TEXTAREA') inp.addEventListener('input', () => { l.text = inp.value; render(); paintChecks(); });
   });
   box.querySelectorAll('[data-act]').forEach(b => b.onclick = () => layerAct(b.dataset.act, l));
+  bindFxProps(box, l);
+  box.querySelectorAll('[data-auto]').forEach(inp => inp.addEventListener('change', () => {
+    const k = inp.dataset.auto;
+    if (k === 'on') {
+      if (inp.checked) {
+        const m = l.text ? textMetrics(l) : null;
+        l.auto = m ? { padX: Math.max(0, Math.round((l.w - m.maxW) / 2)), padY: Math.max(0, Math.round((l.h - m.h) / 2)) }
+          : { padX: Math.round(l.size * 0.8), padY: Math.round(l.size * 0.5) };
+      } else delete l.auto;
+    } else if (k === 'padY') l.auto.padY = inp.value === '' ? null : Math.max(0, +inp.value);
+    else l.auto.padX = Math.max(0, +inp.value || 0);
+    push(); render(); paintProps(); paintChecks(); measureKB();
+  }));
+}
+
+// ── 도형 이미지 채우기 · 효과 (피그마와 같은 모델 — ../shared/ui-kit.js) ──
+const FX_NAME = { DROP_SHADOW: '드롭 섀도', INNER_SHADOW: '이너 섀도', LAYER_BLUR: '레이어 블러', BACKGROUND_BLUR: '배경 블러' };
+const SCALE_NAME = [['FILL', '채우기'], ['FIT', '맞추기'], ['CROP', '자르기'], ['TILE', '바둑판']];
+const imgFillOf = l => l.fx && (l.fx.fills || []).find(p => p.type === 'IMAGE');
+function fxPropsHTML(l) {
+  const f = imgFillOf(l), eff = (l.fx && l.fx.effects) || [];
+  let h = `<div class="row"><label>이미지</label><button class="btn sm grow" data-fx="pick">${f ? '이미지 바꾸기' : '🖼 이미지 채우기'}</button>` +
+    `<button class="btn sm grow" data-fx="stock" title="다음에 누르는 스톡 이미지를 이 도형에 채웁니다">스톡에서</button></div>`;
+  if (f) h += `<div class="row"><label>맞춤</label><select data-fx="mode" class="grow">` +
+    SCALE_NAME.map(([v, n]) => `<option value="${v}"${(f.scaleMode || 'FILL') === v ? ' selected' : ''}>${n}</option>`).join('') +
+    `</select><button class="btn sm" data-fx="unimg">제거</button></div>` +
+    `<div class="row"><button class="btn sm grow" data-fx="crop" title="캔버스에서 도형을 더블클릭해도 됩니다">✥ 이미지 위치·크기 조정 (더블클릭)</button></div>`;
+  if (eff.length || (l.fx && l.fx.stroke)) {
+    h += `<div class="row wide"><label>효과</label>` + eff.map((e, i) => `<div class="row" style="gap:4px">
+      <label class="hint" style="flex:0 0 auto"><input type="checkbox" data-fxi="${i}" data-fp="visible" ${e.visible === false ? '' : 'checked'}> ${FX_NAME[e.type] || e.type}</label>
+      ${e.x != null ? `<input type="number" data-fxi="${i}" data-fp="x" value="${e.x}" title="X" class="grow"><input type="number" data-fxi="${i}" data-fp="y" value="${e.y}" title="Y" class="grow">` : ''}
+      <input type="number" min="0" data-fxi="${i}" data-fp="blur" value="${e.blur}" title="블러" class="grow">
+      ${e.color ? `<input type="color" data-fxi="${i}" data-fp="color" value="${toHexColor(e.color)}" title="색">` : ''}</div>`).join('') +
+      (l.fx.stroke ? `<p class="hint">테두리 ${l.fx.stroke.width}px · ${{ INSIDE: '안쪽', OUTSIDE: '바깥쪽', CENTER: '가운데' }[l.fx.stroke.align] || ''}</p>` : '') + `</div>`;
+  }
+  h += `<div class="row"><button class="btn sm grow" data-fx="shadow">＋ 그림자</button>` + (l.fx ? `<button class="btn sm grow" data-fx="clear" title="효과·그라데이션·이미지 채우기를 모두 지우고 단색으로">효과 모두 지우기</button>` : '') + `</div>`;
+  return h;
+}
+// 'rgba()'·'#rrggbb' → '#rrggbb' (색 선택기용, 투명도는 유지하지 않는다)
+function toHexColor(c) {
+  const m = String(c).match(/rgba?\(([^)]+)\)/);
+  if (!m) return /^#[0-9a-f]{6}$/i.test(c) ? c : '#000000';
+  return '#' + m[1].split(',').slice(0, 3).map(v => (+v).toString(16).padStart(2, '0')).join('');
+}
+function alphaOf(c) { const m = String(c).match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)/); return m ? +m[1] : 1; }
+function ensureFx(l) {
+  if (!l.fx) l.fx = { fills: [{ type: 'SOLID', color: l.fill }] };
+  if (!l.fx.fills) l.fx.fills = [{ type: 'SOLID', color: l.fill }];
+  return l.fx;
+}
+async function setImageFill(l, src) {
+  // 경로 이미지는 dataURL 로 바꿔 둔다 — UI 로 저장해 다른 화면(블로그)에서 열어도 깨지지 않게
+  if (!/^data:/.test(src)) { try { src = await fileToDataURL(await (await fetch(src)).blob()); } catch { /* 실패하면 경로 그대로 */ } }
+  const fx = ensureFx(l), f = imgFillOf(l);
+  if (f) { f.src = src; if (f.scaleMode === 'CROP') { f.scaleMode = 'FILL'; delete f.crop; } }   // 새 이미지는 채우기(가운데)로 — 더블클릭해서 위치를 옮긴다
+  else fx.fills.push({ type: 'IMAGE', src, scaleMode: 'FILL' });
+  UIKit.img(src);
+  push(); render(); paintProps(); measureKB();
+  toast('도형에 이미지를 채웠습니다 — 더블클릭하면 이미지 위치·크기를 옮길 수 있습니다');
+}
+let stockFillTarget = null;                  // '스톡에서' 를 누른 뒤 고르는 스톡 이미지를 채울 도형
+function bindFxProps(box, l) {
+  box.querySelectorAll('[data-fx]').forEach(b => b.addEventListener(b.tagName === 'SELECT' ? 'change' : 'click', () => {
+    const a = b.dataset.fx;
+    if (a === 'pick') {
+      const inp = el('input'); inp.type = 'file'; inp.accept = 'image/*';
+      inp.onchange = async () => { const f = inp.files[0]; if (f) setImageFill(l, await fileToDataURL(f)); };
+      inp.click(); return;
+    }
+    if (a === 'stock') { stockFillTarget = l.id; toast('왼쪽 스톡 이미지를 누르면 이 도형에 채웁니다 (Esc 취소)'); return; }
+    if (a === 'crop') { enterCrop(l); return; }
+    if (a === 'mode') imgFillOf(l).scaleMode = b.value;
+    if (a === 'unimg') { l.fx.fills = l.fx.fills.filter(p => p.type !== 'IMAGE'); }
+    if (a === 'shadow') ensureFx(l).effects = [...(l.fx.effects || []), { type: 'DROP_SHADOW', x: 0, y: Math.round(l.h * 0.06) || 4, blur: Math.round(l.h * 0.15) || 12, spread: 0, color: 'rgba(0,0,0,0.25)' }];
+    if (a === 'clear') delete l.fx;
+    push(); render(); paintProps(); measureKB();
+  }));
+  box.querySelectorAll('[data-fxi]').forEach(inp => inp.addEventListener(inp.type === 'color' ? 'input' : 'change', () => {
+    const e = l.fx.effects[+inp.dataset.fxi], k = inp.dataset.fp;
+    if (k === 'visible') e.visible = inp.checked;
+    else if (k === 'color') { const a = alphaOf(e.color), [r, g, b2] = [1, 3, 5].map(i => parseInt(inp.value.slice(i, i + 2), 16)); e.color = `rgba(${r},${g},${b2},${a})`; }
+    else e[k] = +inp.value || 0;
+    if (inp.type !== 'color') push();
+    render(); measureKB();
+  }));
 }
 
 function layerAct(a, l) {
   const i = S.layers.indexOf(l);
   if (a === 'edit') { startEdit(l); return; }
+  if (a === 'imgCrop') { if (canCrop(l)) enterCrop(l); return; }
+  if (a === 'imgPick') {                    // 이미지 바꾸기 — 상자 크기는 그대로, 새 이미지는 가운데 채우기. 더블클릭해서 위치를 옮긴다
+    const inp = el('input'); inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return;
+      const src = await fileToDataURL(f), im = await loadImg(src).catch(() => null);
+      if (!im) return toast('이미지를 열지 못했습니다', true);
+      imgCache.set(src, im);
+      Object.assign(l, { src, crop: UIKit.modeCrop('FILL', im.width, im.height, l.w, l.h) });
+      delete l.assetId; delete l.bake; delete l.figPic;
+      push(); render(); paintProps(); measureKB();
+      toast('이미지를 바꿨습니다 — 더블클릭하면 위치·크기를 옮길 수 있습니다');
+    };
+    inp.click(); return;
+  }
   if (a === 'del') { S.layers.splice(i, 1); sel = null; }
-  if (a === 'dup') { const c = { ...l, id: uid(), x: l.x + 20, y: l.y + 20, name: l.name + ' 사본' }; S.layers.splice(i + 1, 0, c); sel = c.id; }
+  if (a === 'dup') {
+    const c = Object.assign(JSON.parse(JSON.stringify(l)), { id: uid(), x: l.x + 20, y: l.y + 20, name: l.name + ' 사본' });
+    UIKit.setGp(c, null); delete c.al; S.layers.splice(i + 1, 0, c); sel = c.id;
+  }
+  if (a === 'ungroup') UIKit.ungroupLayers(S.layers, selIds());
   if (a === 'up' && i < S.layers.length - 1) S.layers.splice(i + 1, 0, S.layers.splice(i, 1)[0]);
   if (a === 'down' && i > 0) S.layers.splice(i - 1, 0, S.layers.splice(i, 1)[0]);
   if (a === 'fitZone') fitToZone(l);
   if (a === 'fitRatio') {
     const im = imgCache.get(l.src);
-    if (im) l.h = Math.round(l.w * im.height / im.width);
+    if (im) { l.h = Math.round(l.w * im.height / im.width); delete l.crop; }
   }
   push(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
 }
 
 // 이미지 레이어를 규격의 권장 이미지 영역 안에 원본 비율로 맞춘다
 function fitToZone(l) {
-  const z = zonesOf(SPECS[S.type], S.w, S.h).find(x => x.kind === 'image');
+  const z = isFree(SPECS[S.type]) ? { r: [0, 0, S.w, S.h] }
+    : zonesOf(SPECS[S.type], S.w, S.h).find(x => x.kind === 'image');
   if (!z) return;
   const zw = z.r[2] - z.r[0], zh = z.r[3] - z.r[1];
   const im = imgCache.get(l.src), ar = im ? im.width / im.height : l.w / l.h;
@@ -780,6 +1107,40 @@ function toCanvas(e) {
   const r = art.getBoundingClientRect();
   return { x: (e.clientX - r.left) / (r.width / S.w), y: (e.clientY - r.top) / (r.height / S.h) };
 }
+// ── 이미지 위치 조정 (피그마 '자르기' 모드) ──
+// 이미지를 더블클릭하면 들어간다: 이미지를 끌어 위치를 옮기고, 모서리를 끌어 크기를 바꾼다 (비율 유지).
+// Enter·Esc·더블클릭·바깥 클릭으로 끝낸다. 이미지 레이어는 l.crop, 도형 이미지 채우기는 scaleMode 'CROP' + crop 으로 남는다
+let cropEdit = null;                         // { l }
+const cropFill = l => l.kind === 'rect' ? imgFillOf(l) : null;
+// 피그마가 그린 요소 그림(figPic — 아이콘·버튼·카드를 통째로 그린 것)은 자르기 대상이 아니다: 더블클릭해도 그냥 선택·이동
+const canCrop = l => !!l && !l.hidden && window.UIKit && ((l.kind === 'image' && l.role !== 'bi' && !l.white && !l.figPic) || (l.kind === 'rect' && !!imgFillOf(l)));
+const cropImg = l => l.kind === 'image' ? imgCache.get(l.src) : UIKit.img(cropFill(l).src);
+const cropOf = l => l.kind === 'image' ? l.crop : cropFill(l).crop;
+const cropRect = l => UIKit.cropDest(cropOf(l), l);
+const cropCorners = r => [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
+function setCropRect(l, r) { const c = UIKit.destCrop(r, l), o = cropOf(l); for (const k of ['x', 'y', 'w', 'h']) o[k] = +c[k].toFixed(5); }
+function enterCrop(l) {
+  const im = cropImg(l);
+  if (!im || !im.naturalWidth && !im.width) return toast('이미지를 아직 불러오는 중입니다 — 잠시 뒤 다시 더블클릭하세요', true);
+  if (editing) commitEdit();
+  if (l.kind === 'image') { if (!l.crop) l.crop = { x: 0, y: 0, w: 1, h: 1 }; }
+  else {
+    const f = cropFill(l);
+    if (f.scaleMode !== 'CROP' || !f.crop) { f.crop = UIKit.modeCrop(f.scaleMode, im.naturalWidth || im.width, im.naturalHeight || im.height, l.w, l.h); f.scaleMode = 'CROP'; }
+  }
+  sel = l.id; multi.clear(); cropEdit = { l };
+  paintLayers(); paintProps(); render();
+  toast('이미지 위치 조정 — 이미지를 끌어 옮기고 모서리로 크기를 바꾸세요. 끝내려면 Enter · Esc · 바깥 클릭');
+}
+function exitCrop() { if (!cropEdit) return; cropEdit = null; push(); paintProps(); render(); }
+function cropHit(p) {
+  const l = cropEdit.l, r = cropRect(l), tol = Math.max(6, S.w / 90);
+  const i = cropCorners(r).findIndex(([x, y]) => Math.abs(p.x - x) < tol && Math.abs(p.y - y) < tol);
+  if (i >= 0) return { corner: i };
+  const inR = (b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+  return inR(r) || inR(l) ? { move: true } : null;
+}
+
 function pickAt(p) {
   for (let i = S.layers.length - 1; i >= 0; i--) {
     const l = S.layers[i]; if (l.hidden) continue;
@@ -806,6 +1167,7 @@ const onHit = (type, fn) => hit.addEventListener(type, e => { if (S) fn(e); });
 
 onHit('pointermove', e => {
   if (drag) return;
+  if (cropEdit) { const h = cropHit(toCanvas(e)); hit.style.cursor = !h ? 'default' : h.move ? 'move' : (h.corner % 2 ? 'nesw' : 'nwse') + '-resize'; return; }
   const p = toCanvas(e), hk = handleAt(p);
   hit.style.cursor = hk ? ({ n: 'ns', s: 'ns', e: 'ew', w: 'ew', nw: 'nwse', se: 'nwse', ne: 'nesw', sw: 'nesw' }[hk] + '-resize')
     : pickAt(p) ? 'move' : 'default';
@@ -813,16 +1175,33 @@ onHit('pointermove', e => {
 
 onHit('pointerdown', e => {
   const p = toCanvas(e);
+  if (cropEdit) {
+    const h = cropHit(p);
+    if (h) {
+      drag = { mode: h.move ? 'cropMove' : 'cropScale', corner: h.corner, l: cropEdit.l, r0: cropRect(cropEdit.l), p0: p };
+      try { hit.setPointerCapture(e.pointerId); } catch { /* 무시 */ }
+      return;
+    }
+    exitCrop();                                         // 바깥 클릭 = 끝내기 (그 자리 선택은 아래에서 이어서)
+  }
   const hk = handleAt(p);
   if (hk) {
     const l = S.layers.find(x => x.id === sel);
-    drag = { mode: 'resize', hk, l, s: { ...l }, p0: p, m0: l.kind === 'text' ? textMetrics(l) : null };
+    drag = { mode: 'resize', hk, l, s: { ...l }, p0: p, m0: l.kind === 'text' ? textMetrics(l) : null, a0: l.auto ? { ...l.auto } : null };
   } else {
     const l = pickAt(p);
     const wasSel = !!l && sel === l.id;                 // 이미 선택돼 있었나
-    sel = l ? l.id : null;
+    const ids0 = selIds();
+    const inGroup = !!l && UIKit.gpOf(l).length > 0 && !e.shiftKey && ids0.length > 1 && ids0.includes(l.id);   // 그룹을 고른 채 그 안을 다시 누름 → 떼면 한 단계 안으로
+    const shiftOff = !!l && e.shiftKey && ids0.includes(l.id);   // 이미 고른 것을 Shift 로 누름 — 끌면 일자 이동, 그냥 떼면 선택 해제 (파워포인트와 같다)
+    if (l && e.shiftKey && !shiftOff) toggleSel(l.id);   // Shift+클릭 = 다중 선택 추가/해제
+    else if (!(l && selIds().length > 1 && selIds().includes(l.id))) { if (!l) setSel([]); else if (wasSel && ids0.length === 1) setSel([l.id]); else setSel(clickTarget(l, ids0)); }  // 묶음 안에서 고른 낱개를 다시 누르면 낱개 유지  // 묶음 안을 누르면 묶음 유지
     paintLayers(); paintProps();
-    if (l) drag = { mode: 'move', l, s: { ...l }, p0: p, reselect: wasSel };
+    const group = selLayers();
+    if (l && group.includes(l)) drag = {
+      mode: 'move', l, s: { ...l }, p0: p, reselect: wasSel && group.length === 1 && !e.shiftKey, child: inGroup, shiftOff,
+      g: group.map(x => ({ l: x, x: x.x, y: x.y })),
+    };
   }
   renderOverlay();
   try { hit.setPointerCapture(e.pointerId); } catch { /* 포인터가 이미 사라진 경우 무시 */ }
@@ -830,10 +1209,28 @@ onHit('pointerdown', e => {
 
 onHit('pointermove', e => {
   if (!drag) return;
-  const p = toCanvas(e), dx = p.x - drag.p0.x, dy = p.y - drag.p0.y, l = drag.l, s = drag.s;
+  const p = toCanvas(e), l = drag.l, s = drag.s;
+  let dx = p.x - drag.p0.x, dy = p.y - drag.p0.y;
+  if (drag.mode === 'cropMove' || drag.mode === 'cropScale') {
+    const r0 = drag.r0;
+    if (drag.mode === 'cropMove') {
+      if (e.shiftKey) { if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0; }
+      setCropRect(l, { x: r0.x + dx, y: r0.y + dy, w: r0.w, h: r0.h });
+    } else {                                            // 맞은편 모서리를 고정하고 비율을 지킨 채 키우고 줄인다
+      const [ax, ay] = cropCorners(r0)[(drag.corner + 2) % 4];
+      const k = Math.max(8 / r0.w, Math.abs(p.x - ax) / r0.w, Math.abs(p.y - ay) / r0.h);
+      const w = r0.w * k, h = r0.h * k;
+      setCropRect(l, { x: p.x < ax ? ax - w : ax, y: p.y < ay ? ay - h : ay, w, h });
+    }
+    renderArt(); renderOverlay(); return;
+  }
   if (drag.mode === 'move') {
-    if (!l.lockX) l.x = Math.round(s.x + dx);
-    l.y = Math.round(s.y + dy);
+    // Shift = 일자 이동 (파워포인트처럼 더 많이 움직인 쪽 축으로만). 떼면 다시 자유 이동
+    if (e.shiftKey) { if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0; }
+    for (const g of drag.g) {
+      if (!g.l.lockX) g.l.x = Math.round(g.x + dx);
+      g.l.y = Math.round(g.y + dy);
+    }
   } else {
     const k = drag.hk;
     if (l.kind === 'text') {
@@ -856,6 +1253,10 @@ onHit('pointermove', e => {
         if (k.includes('n')) y = s.y + s.h - h;
       }
       Object.assign(l, { x: Math.round(x), y: Math.round(y), w: Math.round(Math.max(8, w)), h: Math.round(Math.max(8, h)) });
+      if (drag.a0) {                                      // 오토 레이아웃 — 크기 대신 패딩을 바꾼다
+        l.auto.padX = Math.max(0, Math.round(drag.a0.padX + (w - s.w) / 2));
+        if (drag.a0.padY != null) l.auto.padY = Math.max(0, Math.round(drag.a0.padY + (h - s.h) / 2));
+      }
     }
   }
   render(); paintChecks();
@@ -897,7 +1298,7 @@ function startEdit(layer) {
   ed.contentEditable = 'plaintext-only';
   if (ed.contentEditable !== 'plaintext-only') ed.contentEditable = 'true'; // 미지원 브라우저 대비
   const f = parseFont(l.font);
-  ed.style.cssText = `font:${f.weight} ${l.size * k}px ${f.family},"Malgun Gothic",sans-serif;` +
+  ed.style.cssText = `font:${f.weight} ${l.size * k}px ${window.UIKit ? UIKit.cssFamily(f.family) : f.family},"Malgun Gothic",sans-serif;` +
     `line-height:${l.lh};letter-spacing:${l.ls * l.size * k}px;color:${l.color};text-align:${l.align};` +
     `caret-color:${l.color}`;
   ed.textContent = l.text || '';
@@ -919,6 +1320,7 @@ function startEdit(layer) {
       wrap.style.height = Math.max(textMetrics(l).h, l.size) * k + 'px';
     }
     render(); paintChecks();
+    if (l.auto) { wrap.style.width = l.w * k + 'px'; wrap.style.height = l.h * k + 'px'; }  // 오토 도형은 글자를 따라 늘고 준다
   });
   ed.addEventListener('keydown', e => {
     e.stopPropagation();                                     // 전역 단축키(삭제·방향키) 차단
@@ -941,7 +1343,11 @@ function commitEdit() {
   const { l, wrap } = editing;
   const ed = wrap.querySelector('.inlineEdit');
   if (ed) l.text = ed.innerText.replace(/\n$/, '');
+  // 오토 레이아웃 도형은 글자를 다 지우면 도형도 같이 지운다 (Ctrl+Z 로 되돌릴 수 있다)
+  const gone = l.kind === 'rect' && l.auto && !String(l.text || '').trim();
+  if (gone) { S.layers = S.layers.filter(x => x !== l); if (sel === l.id) sel = null; }
   closeEdit(); push();
+  if (gone) toast('글자를 지워서 오토 레이아웃 도형도 삭제했습니다 — Ctrl+Z 로 되돌리기');
 }
 function cancelEdit() {
   if (!editing) return;
@@ -954,9 +1360,29 @@ document.addEventListener('pointerdown', e => {
   if (editing && !e.target.closest('.inlineEditWrap')) commitEdit();
 }, true);
 
+// 이미지 파일을 도형 위에 끌어다 놓으면 그 도형을 이미지로 채운다 (피그마와 같다). 빈 곳이면 이미지 레이어로 넣는다
+hit.addEventListener('dragover', e => { if (S && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+hit.addEventListener('drop', async e => {
+  if (!S) return;
+  const files = [...e.dataTransfer.files].filter(f => /^image\//.test(f.type));
+  if (!files.length) return;
+  e.preventDefault();
+  const p = toCanvas(e);
+  const tg = [...S.layers].reverse().find(l => !l.hidden && l.kind === 'rect' && p.x >= l.x && p.x <= l.x + l.w && p.y >= l.y && p.y <= l.y + l.h);
+  if (tg) { sel = tg.id; return setImageFill(tg, await fileToDataURL(files[0])); }
+  pasteImages(files);
+});
+
+// 더블클릭하면 브라우저가 페이지 글자를 선택해 두고, 이어서 끌면 '선택 영역 끌기'가 시작돼 캔버스 끌기가 끊긴다 — 막는다
+hit.addEventListener('dragstart', e => e.preventDefault());
+hit.addEventListener('mousedown', e => { if (e.detail > 1) e.preventDefault(); });
 // 더블클릭 = 바로 편집
 onHit('dblclick', e => {
+  try { getSelection().removeAllRanges(); } catch { /* 무시 */ }
+  if (cropEdit) { exitCrop(); return; }
   const l = pickAt(toCanvas(e));
+  // 이미지(또는 글자 없는 이미지 채우기 도형)를 더블클릭 = 이미지 위치 조정 (피그마와 같다)
+  if (canCrop(l) && !(l.kind === 'rect' && l.text && l.text.trim())) { enterCrop(l); return; }
   if (l && !l.lockSize) startEdit(l);
 });
 
@@ -966,6 +1392,8 @@ onHit('pointerup', e => {
   endDrag();
   if (!d || d.mode !== 'move') return;
   const moved = Math.abs(d.l.x - d.s.x) > 1 || Math.abs(d.l.y - d.s.y) > 1;
+  if (!moved && d.shiftOff) { toggleSel(d.l.id); paintLayers(); paintProps(); renderOverlay(); return; }
+  if (!moved && d.child) { setSel(UIKit.deeperSelection(S.layers, selIds(), d.l)); paintLayers(); paintProps(); renderOverlay(); return; }   // 그룹 안으로 한 단계
   if (!moved && d.reselect && !d.l.lockSize) startEdit(d.l);
 });
 
@@ -974,19 +1402,34 @@ document.addEventListener('keydown', e => {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   if (editing || (ae && ae.isContentEditable)) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(e.shiftKey); return; }
+  if (cropEdit && (e.key === 'Escape' || e.key === 'Enter')) { e.preventDefault(); exitCrop(); return; }
+  if (e.key === 'Escape' && stockFillTarget) { stockFillTarget = null; toast('이미지 채우기를 취소했습니다'); return; }
   const l = S.layers.find(x => x.id === sel);
   if (!l) return;
   // F2 / Enter 로도 편집을 연다
   if ((e.key === 'F2' || e.key === 'Enter') && !l.lockSize) { e.preventDefault(); startEdit(l); return; }
-  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); layerAct('del', l); }
+  const group = selLayers();
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+    e.preventDefault();
+    if (e.shiftKey) { if (UIKit.ungroupLayers(S.layers, group.map(x => x.id))) toast('그룹을 해제했습니다'); }
+    else if (group.length > 1) { if (UIKit.groupLayers(S.layers, group.map(x => x.id), uid())) toast(`${group.length}개를 그룹으로 묶었습니다 (Ctrl+Shift+G 해제)`); }
+    push(); paintLayers(); paintProps(); renderOverlay(); return;
+  }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    if (group.length > 1) { S.layers = S.layers.filter(x => !group.includes(x)); sel = null; push(); render(); paintLayers(); paintProps(); paintChecks(); measureKB(); }
+    else layerAct('del', l);
+  }
   else if (e.key === 'Escape') { sel = null; paintLayers(); paintProps(); renderOverlay(); }
   else if (e.key.startsWith('Arrow')) {
     e.preventDefault();
     const d = e.shiftKey ? 10 : 1;
-    if (e.key === 'ArrowLeft' && !l.lockX) l.x -= d;
-    if (e.key === 'ArrowRight' && !l.lockX) l.x += d;
-    if (e.key === 'ArrowUp') l.y -= d;
-    if (e.key === 'ArrowDown') l.y += d;
+    for (const g of group) {
+      if (e.key === 'ArrowLeft' && !g.lockX) g.x -= d;
+      if (e.key === 'ArrowRight' && !g.lockX) g.x += d;
+      if (e.key === 'ArrowUp') g.y -= d;
+      if (e.key === 'ArrowDown') g.y += d;
+    }
     render(); paintProps(); paintChecks();
   }
 });
@@ -1082,11 +1525,20 @@ async function loadStock() {
     }));
   } catch (e) { toast('보관함을 열지 못했습니다 — ' + e.message, true); }
   mine.sort((a, b) => b.mtime - a.mtime);
+  // 이미지 소스 페이지(library.html)에 등록한 이미지 — 블로그 이미지 제작의 ⭐ 보관함과 같은 저장소
+  let srcs = [];
+  try {
+    srcs = (await srcAssetList()).map(a => ({
+      rel: '이미지 소스/' + a.name, name: a.name, category: '⭐ 이미지 소스', url: a.src,
+      kb: Math.round(String(a.src).length * 3 / 4 / 1024), builtin: true, mtime: a.ts,
+    }));
+  } catch { /* 이미지 소스 저장소가 아직 없으면 건너뛴다 */ }
   // 라이브러리에 등록된 기본 스톡은 라이브러리 항목(Asset ID 있음)으로만 보여준다
   const inLib = new Set(libraryStock.map(i => i.url));
-  stock = [...libraryStock, ...mine, ...builtinStock.filter(i => !inLib.has(i.url))];
+  stock = [...libraryStock, ...srcs, ...mine, ...builtinStock.filter(i => !inLib.has(i.url))];
   const categories = [...new Set(stock.map(i => i.category))].sort();
-  $('#stockDir').textContent = '라이브러리 ' + libraryStock.length + '장 · 기본 ' + builtinStock.length + '장 + 내 이미지 ' + mine.length + '장';
+  $('#stockDir').textContent = '라이브러리 ' + libraryStock.length + '장 · 기본 ' + builtinStock.length + '장 + 내 이미지 ' + mine.length + '장' +
+    (srcs.length ? ' + 이미지 소스 ' + srcs.length + '장' : '');
   $('#stockCnt').textContent = stock.length + '장';
   const cur = $('#catSel').value;
   $('#catSel').innerHTML = '<option value="">전체 카테고리</option>' +
@@ -1103,7 +1555,12 @@ function paintStock() {
     d.title = `${it.category} / ${it.name} · ${it.kb}KB${it.assetId ? ' · ' + it.assetId + (it.description ? '\n' + it.description : '') : it.builtin ? ' · 기본 제공' : ''}\n클릭하면 캔버스에 추가`;
     d.innerHTML = `<img src="${esc(it.url)}" loading="lazy">` +
       (it.builtin ? '' : '<span class="del" title="보관함에서 삭제">×</span>');
-    d.querySelector('img').onclick = () => addStockImage(it);
+    d.querySelector('img').onclick = () => {
+      const tg = stockFillTarget && S.layers.find(x => x.id === stockFillTarget);
+      stockFillTarget = null;
+      if (tg) return setImageFill(tg, it.url);
+      addStockImage(it);
+    };
     if (!it.builtin) d.querySelector('.del').onclick = async ev => {
       ev.stopPropagation();
       if (!confirm(`보관함에서 삭제합니다.\n\n${it.rel}\n\n이 브라우저 보관함에서 영구 삭제됩니다. 계속할까요?`)) return;
@@ -1114,12 +1571,32 @@ function paintStock() {
     g.appendChild(d);
   }
 }
+// 이미지 소스 저장소 — library.html · 블로그 이미지 제작과 같은 'thumb_studio_assets' DB (읽기만 한다)
+function srcAssetList() {
+  return new Promise((res, rej) => {
+    if (!window.indexedDB) return rej(new Error('no idb'));
+    const q = indexedDB.open('thumb_studio_assets', 2);
+    q.onupgradeneeded = () => {
+      const d = q.result;
+      if (!d.objectStoreNames.contains('assets')) d.createObjectStore('assets', { keyPath: 'id', autoIncrement: true });
+      if (!d.objectStoreNames.contains('settings')) d.createObjectStore('settings', { keyPath: 'key' });
+    };
+    q.onerror = () => rej(q.error);
+    q.onsuccess = () => {
+      const r = q.result.transaction('assets', 'readonly').objectStore('assets').getAll();
+      r.onsuccess = () => res(r.result.sort((a, b) => b.ts - a.ts));
+      r.onerror = () => rej(r.error);
+    };
+  });
+}
+
 async function addStockImage(it) {
   const img = await loadImg(it.url).catch(() => null);
   if (!img) return toast('이미지를 불러오지 못했습니다', true);
   imgCache.set(it.url, img);
   const z = zonesOf(SPECS[S.type], S.w, S.h).find(x => x.kind === 'image');
   const box = z ? { x: z.r[0], y: z.r[1], w: z.r[2] - z.r[0], h: z.r[3] - z.r[1] }
+    : isFree(SPECS[S.type]) ? { x: S.w * .15, y: S.h * .15, w: S.w * .7, h: S.h * .7 }
     : { x: S.w * .15, y: S.h * .5, w: S.w * .7, h: S.h * .4 };
   const ar = img.width / img.height;
   let w = box.w, h = w / ar; if (h > box.h) { h = box.h; w = h * ar; }
@@ -1152,6 +1629,206 @@ async function uploadFiles(files, cat) {
   if (n) { toast(`${n}장을 보관함에 저장했습니다`); loadStock(); }
 }
 
+// ══════════════════════════════════ 외부 붙여넣기 ══════════════════════════════════
+// 파일 탐색기·Finder 에서 복사한 이미지 파일, 캡처, 웹에서 '이미지 복사' 한 것을 Ctrl+V 로 바로 캔버스에 넣는다
+const IMG_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i;
+function clipImageFiles(dt) {
+  const out = [], seen = new Set();
+  const take = f => {
+    if (!f || !(/^image\//.test(f.type) || IMG_EXT.test(f.name || ''))) return;
+    const k = f.name + '|' + f.size + '|' + f.type;
+    if (!seen.has(k)) { seen.add(k); out.push(f); }
+  };
+  for (const f of (dt.files || [])) take(f);                       // 파일 탐색기에서 복사한 파일 (여러 장)
+  for (const it of (dt.items || [])) if (it.kind === 'file') take(it.getAsFile());  // 캡처·웹 이미지
+  return out;
+}
+// HTML·텍스트로만 넘어온 이미지 주소 (웹 파일함의 '복사' 등)
+function clipImageUrls(dt) {
+  const html = dt.getData('text/html') || '', plain = (dt.getData('text/plain') || '').trim();
+  const urls = [...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
+  if (!urls.length && /^(https?:\/\/\S+\.(png|jpe?g|gif|webp|svg|avif)(\?\S*)?|data:image\/[^\s]+)$/i.test(plain)) urls.push(plain);
+  return [...new Set(urls)].filter(u => /^(https?:|data:image\/)/i.test(u));
+}
+async function urlToFile(u, i) {
+  const r = await fetch(u); if (!r.ok) throw new Error('HTTP ' + r.status);
+  const b = await r.blob(); if (!/^image\//.test(b.type)) throw new Error('이미지가 아닙니다');
+  return new File([b], (u.split(/[?#]/)[0].split('/').pop() || `붙여넣은 이미지 ${i + 1}`).slice(0, 80), { type: b.type });
+}
+async function pasteImages(files) {
+  let n = 0;
+  for (const [i, f] of files.entries()) {
+    if (f.size > 30 * 1024 * 1024) { toast(`${f.name} — 30MB 를 넘어 건너뜁니다`, true); continue; }
+    const name = (f.name && f.name !== 'image.png') ? f.name.replace(/\.[^.]+$/, '') : `붙여넣은 이미지 ${i + 1}`;
+    await addStockImage({ url: await fileToDataURL(f), name });
+    const l = S.layers.find(x => x.id === sel);
+    if (l && i) { l.x += 30 * i; l.y += 30 * i; }                    // 여러 장이면 겹치지 않게 살짝 비켜 놓는다
+    n++;
+  }
+  if (n) { push(); render(); paintProps(); toast(`이미지 ${n}장을 붙여넣었습니다`); }
+  return n;
+}
+document.addEventListener('paste', async e => {
+  const tg = e.target;
+  // 글자 입력칸에서는 원래대로 글자가 붙여넣어지게 둔다 (드롭다운·버튼에 포커스가 있어도 캔버스로 붙는다)
+  const typing = tg && tg.matches && (tg.isContentEditable || tg.matches('textarea,input:not([type=range]):not([type=color]):not([type=checkbox]):not([type=file]):not([type=button])'));
+  if (!S || editing || typing) return;
+  const dt = e.clipboardData; if (!dt) return;
+  const files = clipImageFiles(dt);
+  if (files.length) { e.preventDefault(); return pasteImages(files); }
+  const urls = clipImageUrls(dt);
+  if (urls.length) {
+    e.preventDefault();
+    const got = [];
+    for (const [i, u] of urls.entries()) { try { got.push(await urlToFile(u, i)); } catch { } }
+    if (got.length) return pasteImages(got);
+    return toast('이미지 주소는 복사됐지만 외부 사이트가 접근을 막아 가져오지 못했습니다 — 이미지를 저장한 뒤 파일을 복사해 붙여넣어 주세요', true);
+  }
+  // 글자만 있으면 텍스트 레이어로 넣는다
+  const txt = (dt.getData('text/plain') || '').trim();
+  if (txt) {
+    e.preventDefault();
+    const size = Math.max(12, Math.round(Math.min(S.w, S.h) / 16));
+    const l = {
+      id: uid(), kind: 'text', role: 'free', name: txt.split('\n')[0].slice(0, 20) || '텍스트',
+      x: Math.round(S.w * .1), y: Math.round(S.h * .1), w: Math.round(S.w * .8),
+      text: txt, size, lh: 1.3, ls: -0.02, color: '#ffffff', align: 'left', font: 'Pretendard Bold',
+    };
+    S.layers.push(l); sel = l.id;
+    push(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
+    toast('텍스트를 붙여넣었습니다');
+  }
+});
+
+// ══════════════════════════════════ UI 컴포넌트 ══════════════════════════════════
+// 선택한 레이어를 UI 로 저장하고, 저장된 UI 를 복사해서 넣는다 (../shared/ui-kit.js — 블로그 이미지 제작과 공용)
+// 넣을 때는 복사본이라 원본과 연결되지 않는다. 도형 안의 글자는 오토 레이아웃으로 묶여 글자를 고치면 도형이 늘고 준다.
+async function loadUi() {
+  if (!window.UIKit) return;
+  let items = [];
+  try { items = await UIKit.list(); } catch (e) { toast('UI 컴포넌트 저장소를 열지 못했습니다 — ' + e.message, true); }
+  $('#uiCnt').textContent = items.length ? items.length + '개' : '';
+  $('#uiEmpty').style.display = items.length ? 'none' : '';
+  // 그룹 필터 — 이미지 소스 페이지에서 정한 그룹(폴더)
+  const gs = $('#uiGroup'), curG = gs.value;
+  // 그룹 안 그룹(상위/하위 경로) — 들여 써서 보이고, 상위 그룹을 고르면 하위 그룹 것까지 보인다
+  const names = UIKit.groupPaths(items).concat(items.some(c => !c.group) ? [''] : []);
+  gs.innerHTML = '<option value="*">전체 그룹</option>' + names.map(n => `<option value="${esc(n)}">${n ? '\u3000'.repeat(n.split('/').length - 1) + esc(n.split('/').pop()) : '그룹 없음'} (${items.filter(c => UIKit.inGroup(c, n)).length})</option>`).join('');
+  gs.value = names.includes(curG) || curG === '*' ? curG : '*';
+  gs.style.display = names.length > 1 || (names[0] || '') !== '' ? '' : 'none';
+  const g = $('#uiGrid'); g.innerHTML = '';
+  for (const c of items.filter(c => UIKit.inGroup(c, gs.value))) {
+    const d = el('div', 'stock');
+    d.title = `${c.group ? '[' + c.group + '] ' : ''}${c.name} · ${c.w}×${c.h}px${c.origin === 'blog' ? ' · 블로그 이미지 제작에서 저장' : c.origin === 'figma' ? ' · 피그마에서 가져옴' : ''}\n클릭하면 캔버스에 복사해 넣습니다`;
+    d.innerHTML = `<img src="${esc(c.thumb)}" loading="lazy"><span class="nm">${esc(c.name)}</span><span class="ed" title="이 컴포넌트 편집">✎</span><span class="del" title="UI 컴포넌트 삭제">×</span>`;
+    d.onclick = () => insertUi(c);
+    d.querySelector('.ed').onclick = ev => { ev.stopPropagation(); openUiEditor(c.id); };
+    d.querySelector('.del').onclick = async ev => {
+      ev.stopPropagation();
+      if (!confirm(`UI 컴포넌트 “${c.name}” 을(를) 삭제할까요?\n이미 캔버스에 넣은 사본은 그대로 남습니다.`)) return;
+      try { await UIKit.del(c.id); toast('삭제했습니다 — ' + c.name); } catch (e) { toast('삭제 실패 — ' + e.message, true); }
+      loadUi();
+    };
+    g.appendChild(d);
+  }
+}
+async function saveUi() {
+  commitEdit();
+  const picked = selLayers().filter(l => l.role !== 'bi' && !l.hidden);
+  if (!picked.length) return toast('저장할 레이어를 먼저 선택하세요 — Shift+클릭으로 여러 개', true);
+  const first = picked.find(l => l.text && l.text.trim());
+  const name = (prompt('UI 컴포넌트 이름', first ? first.text.split('\n')[0].slice(0, 20) : 'UI') || '').trim();
+  if (!name) return;
+  try {
+    const gv = $('#uiGroup').value;
+    const c = await UIKit.save(name, UIKit.fromBanner(picked, textMetrics), gv === '*' ? '' : gv);
+    const auto = c.nodes.filter(n => n.pad).length;
+    toast(`UI 컴포넌트로 저장했습니다 — ${c.name}${auto ? ` (오토 레이아웃 ${auto}개)` : ''}`);
+  } catch (e) { toast('저장 실패 — ' + e.message, true); }
+  loadUi();
+}
+async function insertUi(c) {
+  commitEdit();
+  const k = UIKit.placeScale(c, S.w, S.h);
+  const at = { x: Math.round((S.w - c.w * k) / 2), y: Math.round((S.h - c.h * k) / 2) };
+  const { layers, skipped } = UIKit.toBanner(c, at, k, uid);
+  if (!layers.length) return toast('이 UI 에는 배너 스튜디오에서 쓸 수 있는 요소가 없습니다', true);
+  if (layers.length > 1) { const g = uid(); layers.forEach(l => UIKit.setGp(l, [g].concat(UIKit.gpOf(l)), [c.name].concat(UIKit.gpnOf(l)))); }   // 넣은 컴포넌트는 통째로 한 그룹 (안쪽 그룹은 그대로)
+  S.layers.push(...layers);
+  sel = layers[layers.length - 1].id; multi.clear(); multiFor = sel;
+  layers.slice(0, -1).forEach(l => multi.add(l.id));
+  await preloadImgs();
+  push(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
+  toast(`“${c.name}” 을(를) 복사해 넣었습니다${skipped ? ` — 배너에서 쓸 수 없는 요소 ${skipped}개 제외` : ''}`);
+}
+
+// ── 컴포넌트 편집기 ── 저장된 UI 를 자유 캔버스에 펼쳐 낱개로 고치고, 같은 컴포넌트에 덮어쓰거나 새로 저장한다
+// (이미지 소스의 ✏️ 편집 → ?editUi=<id> 로 들어온다)
+let uiEdit = null;                           // { comp, snap }
+async function openUiEditor(id) {
+  if (!window.UIKit) return;
+  const c = await UIKit.get(+id).catch(() => null);
+  if (!c) return toast('컴포넌트를 찾지 못했습니다 — 이미지 소스에서 삭제됐을 수 있습니다', true);
+  if (uiDirty() && !confirm('지금 편집 중인 컴포넌트의 저장하지 않은 수정이 사라집니다. 계속할까요?')) return;
+  closeEdit();
+  // 피그마 프레임은 캔버스 = 프레임 크기 그대로(여백 없음), 배경도 프레임 배경색. 그 밖의 UI 는 그림자가 보이게 약간 띄운다
+  // 예전에 저장한 피그마 컴포넌트는 frame 표시가 없다 — 피그마에서 온 것은 모두 프레임으로 본다
+  // 화면 전체를 덮는 배경 도형이 있으면(예전 버전에서 '새로 저장'해 표시가 빠진 화면 포함) 프레임으로 본다
+  const isFrame = !!(c.frame || c.origin === 'figma' || c.nodes.some(n => n.t === 'box' && n.x <= 0 && n.y <= 0 && n.x + n.w >= c.w - 1 && n.y + n.h >= c.h - 1));
+  const m = isFrame ? 0 : Math.max(24, ...c.nodes.map(n => n.t === 'box' ? UIKit.outset(n) + 8 : 0));
+  S = blankState('free');
+  const bgc = c.bg && /^#[0-9a-f]{6}$/i.test(c.bg) ? c.bg : isFrame ? '#ffffff' : '#e9ecf1';
+  Object.assign(S, { w: Math.max(FREE_MIN, Math.round(c.w + m * 2)), h: Math.max(FREE_MIN, Math.round(c.h + m * 2)),
+    bg: { mode: 'solid', c1: bgc, c2: '#5a6478', angle: 90 }, name: c.name });
+  S.layers = UIKit.toBanner(c, { x: m, y: m }, 1, uid).layers;   // 편집할 땐 그룹으로 묶지 않는다 — 하나씩 바로 고친다
+  sel = null; curPlan = null; $('#planSel').value = ''; paintPlanMeta();
+  $('#typeSel').value = 'free'; $('#projName').value = c.name;
+  await preloadImgs();
+  syncCanvasInputs(); paintSpecInfo(); render(); paintLayers(); paintProps(); paintChecks(); measureKB();
+  history = []; hIdx = -1; push();
+  uiEdit = { comp: c, snap: history[0], frame: isFrame, m };
+  await paintUiEditBar();
+  toast(`“${c.name}” 편집 — 글자·색·이미지·효과를 고친 뒤 위의 저장을 누르세요 (캔버스 배경은 저장되지 않습니다)`);
+}
+const uiDirty = () => !!(uiEdit && history[hIdx] !== uiEdit.snap);
+async function paintUiEditBar() {
+  const bar = $('#uiEditBar');
+  bar.style.display = uiEdit ? '' : 'none';
+  if (!uiEdit) return;
+  $('#uiEdName').value = uiEdit.comp.name;
+  const gs = UIKit.groupPaths(await UIKit.list().catch(() => []));
+  const cur = uiEdit.comp.group || '';
+  if (cur && !gs.includes(cur)) gs.push(cur);
+  $('#uiEdGroup').innerHTML = gs.map(g => `<option value="${esc(g)}"${g === cur ? ' selected' : ''}>${'\u3000'.repeat(g.split('/').length - 1)}📁 ${esc(g.split('/').pop())}</option>`).join('') +
+    `<option value=""${!cur ? ' selected' : ''}>그룹 없음</option><option value="__new">＋ 새 그룹…</option>`;
+}
+async function saveUiEdit(asNew) {
+  if (!uiEdit) return;
+  commitEdit();
+  const layers = S.layers.filter(l => !l.hidden);
+  if (!layers.length) return toast('저장할 레이어가 없습니다', true);
+  const name = ($('#uiEdName').value || '').trim() || uiEdit.comp.name;
+  let group = $('#uiEdGroup').value;
+  if (group === '__new') { group = (prompt('새 그룹 이름') || '').trim(); if (!group) return; }
+  try {
+    // 피그마 프레임은 캔버스 = 프레임이라 좌표·크기를 그대로 둔다 (저장 후에도 여백 없이 같은 크기)
+    const conv = UIKit.fromBanner(layers, textMetrics, uiEdit.frame ? { w: S.w, h: S.h } : null);
+    if (uiEdit.frame) { conv.origin = uiEdit.comp.origin || 'figma'; conv.bg = S.bg && S.bg.c1; }
+    if (asNew) uiEdit.comp = await UIKit.save(name, conv, group);
+    else {
+      const c = uiEdit.comp;
+      Object.assign(c, { name, group, w: conv.w, h: conv.h, nodes: conv.nodes, edited: Date.now() });
+      if (uiEdit.frame) Object.assign(c, { frame: true, bg: conv.bg });
+      c.thumb = await UIKit.thumb(c);
+      await UIKit.put(c);
+    }
+    uiEdit.snap = history[hIdx];
+    toast(asNew ? `새 컴포넌트로 저장했습니다 — ${name}` : `저장했습니다 — ${name} (이미 시안에 넣은 사본은 그대로입니다)`);
+  } catch (e) { return toast('저장 실패 — ' + e.message, true); }
+  paintUiEditBar(); loadUi();
+}
+function endUiEdit() { uiEdit = null; $('#uiEditBar').style.display = 'none'; }
+
 // ══════════════════════════════════ 저장 / 열기 / 내보내기 ══════════════════════════════════
 async function saveProject() {
   commitEdit();
@@ -1176,6 +1853,7 @@ async function openProject() {
     await dbDel('projects', d.name); return toast('삭제했습니다 — ' + d.name);
   }
   const it = items[+pick - 1]; if (!it) return;
+  endUiEdit();
   S = it.data; sel = null;
   curPlan = null; $('#planSel').value = ''; paintPlanMeta();   // 프로젝트 저장본은 기획안과 별개다
   $('#typeSel').value = S.type; $('#projName').value = S.name || it.name;
@@ -1191,10 +1869,16 @@ async function doExport() {
   const fmt = confirm('PNG 로 내보냅니다.\n\n[확인] PNG   /   [취소] JPG (용량 절감)') ? 'png' : 'jpg';
   sel = null; renderArt();
   const mime = fmt === 'png' ? 'image/png' : 'image/jpeg';
-  let q = 0.92, blob = await new Promise(r => art.toBlob(r, mime, q));
+  // 컴포넌트 편집기의 둘레 여백(보기용)은 내보내지 않는다 — 컴포넌트 크기 그대로
+  let src = art;
+  if (uiEdit && uiEdit.m > 0) {
+    const m = uiEdit.m, cv = el('canvas'); cv.width = Math.max(1, S.w - m * 2); cv.height = Math.max(1, S.h - m * 2);
+    cv.getContext('2d').drawImage(art, m, m, cv.width, cv.height, 0, 0, cv.width, cv.height); src = cv;
+  }
+  let q = 0.92, blob = await new Promise(r => src.toBlob(r, mime, q));
   // JPG 는 상한에 맞을 때까지 품질을 낮춘다
-  while (fmt === 'jpg' && blob.size / 1024 > sp.max_kb && q > 0.4) {
-    q -= 0.08; blob = await new Promise(r => art.toBlob(r, mime, q));
+  while (fmt === 'jpg' && sp.max_kb && blob.size / 1024 > sp.max_kb && q > 0.4) {
+    q -= 0.08; blob = await new Promise(r => src.toBlob(r, mime, q));
   }
   const kb = Math.round(blob.size / 1024);
   lastKB = kb; paintChecks(); renderOverlay();
@@ -1203,7 +1887,7 @@ async function doExport() {
   const base = `${date} ${sp.label.replace(/[\\/:*?"<>|]/g, '')}${S.name ? ' - ' + S.name : ''}`;
   const fname = `${base}.${fmt}`;
 
-  if (kb > sp.max_kb) {
+  if (sp.max_kb && kb > sp.max_kb) {
     if (!confirm(`용량이 상한을 넘습니다.\n\n현재 ${kb.toLocaleString()}KB / 상한 ${sp.max_kb.toLocaleString()}KB\n\n그래도 내보낼까요?`)) return;
   }
   // 정적 버전 — 브라우저 다운로드로 내보낸다
@@ -1265,7 +1949,7 @@ async function openPlan(bannerId) {
   if (!plan) return toast('기획안을 불러오지 못했습니다 — ' + (row.path || bannerId), true);
   if (!SPECS[plan.templateId]) return toast(`알 수 없는 배너 타입 ${plan.templateId} — banner_specs.json 에 없는 템플릿입니다`, true);
 
-  closeEdit();
+  closeEdit(); endUiEdit();
   S = blankState(plan.templateId);
   await seedLayers();
   const { state, missing } = BannerPlans.applyPlan(S, plan, library, ROOT);
@@ -1359,7 +2043,8 @@ function syncCanvasInputs() {
   $('#bg2').style.display = g ? '' : 'none';
   $('#gradRow').style.display = g ? '' : 'none';
   const sp = SPECS[S.type];
-  const fixed = !!(sp.canvas && sp.canvas[0] && sp.canvas[1]);
+  const fixed = !isFree(sp) && !!(sp.canvas && sp.canvas[0] && sp.canvas[1]);
+  for (const id of ['#cw', '#ch']) { $(id).min = isFree(sp) ? FREE_MIN : 100; $(id).max = FREE_MAX; }
   $('#cw').disabled = fixed || (sp.canvas && sp.canvas[0] === 1000 && !sp.canvas[1]);
   $('#ch').disabled = fixed;
   $('#bgMode').disabled = !!sp.bg_solid_only;
@@ -1367,7 +2052,10 @@ function syncCanvasInputs() {
 
 async function switchType(t) {
   closeEdit();               // 레이어가 교체되므로 편집칸을 닫는다
+  if (uiEdit) { if (uiDirty() && !confirm('컴포넌트 편집 중입니다. 저장하지 않은 수정을 버리고 바꿀까요?')) { $('#typeSel').value = S.type; return; } endUiEdit(); }
+  const keep = S && S.type === t && isFree(SPECS[t]) ? S : null;
   S = blankState(t);
+  if (keep) Object.assign(S, { w: keep.w, h: keep.h, bg: { ...keep.bg } });
   sel = null;
   await seedLayers();
   await preloadImgs();
@@ -1380,16 +2068,22 @@ async function boot() {
   $('#btnTheme').onclick = () =>
     applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
   installFonts();
-  SPECS = await fetch('data/banner_specs.json').then(r => r.json())
+  // 규격은 자주 바뀐다 — 브라우저·CDN 캐시를 거치지 않고 매번 새로 받는다
+  SPECS = await fetch('data/banner_specs.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json())
     .catch(() => ({ error: 'data/banner_specs.json 을 불러오지 못했습니다' }));
   if (SPECS.error) { document.body.innerHTML = '<p style="padding:40px">' + esc(SPECS.error) + '</p>'; return; }
+  // 규격 파일이 예전 것이어도 자유 캔버스는 항상 쓸 수 있게 한다
+  if (!SPECS.free) SPECS.free = {
+    label: '자유 캔버스', track: '자유 제작', placement: '규격 없음 — 용도 자유', free: true,
+    canvas: null, formats: ['PNG', 'JPG'], max_kb: null, has_psd_template: false, zones: [], rules: [],
+  };
 
   const sel2 = $('#typeSel');
   let lastTrack = null;
   for (const k of TYPE_ORDER) {
     const sp = SPECS[k]; if (!sp) continue;
     if (sp.track !== lastTrack) {
-      const og = el('optgroup'); og.label = sp.track; og.id = 'og-' + (sp.track === '이주의 브랜드' ? 'bow' : 'gen');
+      const og = el('optgroup'); og.label = sp.track; og.id = 'og-' + (isFree(sp) ? 'free' : sp.track === '이주의 브랜드' ? 'bow' : 'gen');
       sel2.appendChild(og); lastTrack = sp.track;
     }
     const o = el('option'); o.value = k; o.textContent = sp.label.replace(/^\[이주의 브랜드\]\s*/, '');
@@ -1411,11 +2105,20 @@ async function boot() {
 
   // 캔버스/배경 입력
   const onCanvas = () => {
-    S.w = clamp(+$('#cw').value || S.w, 100, 8000);
-    S.h = clamp(+$('#ch').value || S.h, 100, 8000);
+    const lo = isFree(SPECS[S.type]) ? FREE_MIN : 100;
+    S.w = Math.round(clamp(+$('#cw').value || S.w, lo, 8000));
+    S.h = Math.round(clamp(+$('#ch').value || S.h, lo, 8000));
+    $('#cw').value = S.w; $('#ch').value = S.h; $('#sizePreset').value = '';
     push(); render(); paintSpecInfo(); paintChecks(); measureKB();
   };
   $('#cw').onchange = onCanvas; $('#ch').onchange = onCanvas;
+  // 자유 캔버스 — 사이즈 프리셋 · 가로세로 바꾸기
+  $('#sizePreset').onchange = () => {
+    const v = $('#sizePreset').value; if (!v) return;
+    const [w, h] = v.split('x').map(Number);
+    $('#cw').value = w; $('#ch').value = h; onCanvas(); $('#sizePreset').value = v;
+  };
+  $('#btnSwapWH').onclick = () => { $('#cw').value = S.h; $('#ch').value = S.w; onCanvas(); };
   $('#bgMode').onchange = () => { S.bg.mode = $('#bgMode').value; syncCanvasInputs(); push(); render(); paintChecks(); };
   $('#bg1').oninput = () => { S.bg.c1 = $('#bg1').value; $('#bg1h').value = S.bg.c1; render(); paintChecks(); measureKB(); };
   $('#bg1h').onchange = () => { if (/^#[0-9a-f]{6}$/i.test($('#bg1h').value)) { S.bg.c1 = $('#bg1h').value; syncCanvasInputs(); render(); paintChecks(); } };
@@ -1492,14 +2195,47 @@ async function boot() {
   };
   $('#btnPlanSave').onclick = savePlan;
 
+  // UI 컴포넌트
+  $('#btnUiSave').onclick = saveUi;
+  $('#uiGroup').onchange = loadUi;
+  $('#uiEdSave').onclick = () => saveUiEdit(false);
+  $('#uiEdSaveAs').onclick = () => saveUiEdit(true);
+  $('#uiEdExit').onclick = () => {
+    if (uiDirty() && !confirm('저장하지 않은 수정이 있습니다. 버리고 나갈까요?')) return;
+    uiEdit = null; location.href = '../library.html';
+  };
+  addEventListener('beforeunload', e => { if (uiDirty()) { e.preventDefault(); e.returnValue = ''; } });
+  if (window.UIKit) UIKit.onImage = () => { if (S) { render(); } };   // 이미지 채우기가 늦게 로드되면 다시 그린다
+  if (window.UIKit) UIKit.onFont = () => { if (S) { render(); paintChecks(); } };   // 글꼴을 받으면 다시 그린다 (줄바꿈·폭도 다시 잰다)
+  // 이미지 소스 페이지·다른 탭에서 바뀐 UI·이미지를 돌아올 때 다시 읽는다
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadUi(); loadStock(); } });
+
   await loadLibrary();
   await loadStock();
+  await loadUi();
   await switchType('popup');
   await loadPlanList();
+
+  // PPT 리모콘 — 정렬·간격·붙여정렬·그리드 복사·도형 클립보드 (../shared/ppt-remote.js)
+  if (window.PPTRemote) PPTRemote.mount({
+    app: 'banner', label: '배너 스튜디오',
+    docName: () => $('#projName').value || (SPECS[S.type] && SPECS[S.type].label) || '',
+    selected: selLayers,
+    box: bboxOf,
+    move(l, dx, dy) { if (!l.lockX) l.x += dx; l.y += dy; },
+    insert(layers, select) {
+      const ids = layers.map(l => { l.id = uid(); delete l.homeY; return l.id; });
+      S.layers.push(...layers);
+      if (select) { sel = ids[ids.length - 1]; multi.clear(); multiFor = sel; ids.slice(0, -1).forEach(id => multi.add(id)); }
+    },
+    commit() { preloadImgs().then(() => { render(); paintChecks(); measureKB(); }); push(); render(); paintLayers(); paintProps(); paintChecks(); measureKB(); },
+    toolbar: $('#top'), before: $('#btnTheme'),
+  });
 
   // ?plan=<bannerId>&view=clean — 기획안을 바로 열어 미리보기 (헤드리스 캡처·공유 링크용)
   const qs = new URLSearchParams(location.search);
   if (qs.get('view') === 'clean') { $('#guideMode').value = 'clean'; syncGuideControls(); }
+  if (qs.get('editUi')) await openUiEditor(qs.get('editUi'));
   if (qs.get('plan')) {
     if ($('#planSel')._rows.has(qs.get('plan'))) { $('#planSel').value = qs.get('plan'); await openPlan(qs.get('plan')); }
     else toast('기획안을 찾지 못했습니다 — ' + qs.get('plan'), true);
