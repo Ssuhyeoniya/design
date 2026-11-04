@@ -250,6 +250,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .layer-item .lname{flex:1;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .layer-item .ldel{border:none;background:none;color:var(--text-faint);cursor:pointer;font-size:13px;}
   .layer-item .ldel:hover{color:var(--danger);}
+  .layer-item .llock{opacity:0;font-size:11px;} .layer-item:hover .llock,.layer-item .llock.on{opacity:1;}
   .align-group{display:flex;border:1px solid var(--border-strong);border-radius:7px;overflow:hidden;}
   .align-group button{flex:1;border:none;background:#fff;padding:6px 0;cursor:pointer;font-size:11.5px;color:var(--text-sub);font-weight:600;}
   .align-group button.on{background:var(--accent-soft);color:var(--accent);}
@@ -380,6 +381,35 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   #shapePop button:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);}
   #shapePop svg{width:22px;height:22px;display:block;}
   .layer-item .ico svg{width:13px;height:13px;display:block;}
+  /* ===== 속성 패널 — 컴팩트 필드 (Claude Design 스타일) ===== */
+  .sec h3{font-size:.66rem;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem;}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;}
+  .g2>select{height:28px;padding:0 .4rem;font-size:.75rem;background:#f3f4f6;border-color:transparent;border-radius:6px;}
+  .nf{display:flex;align-items:center;height:28px;border:1px solid transparent;background:#f3f4f6;border-radius:6px;overflow:hidden;min-width:0;}
+  .nf:hover{border-color:var(--border-strong);}
+  .nf:focus-within{border-color:var(--accent);background:#fff;box-shadow:0 0 0 2px var(--accent-soft);}
+  .nf .nf-l{flex:0 0 auto;min-width:22px;padding:0 4px 0 7px;font-size:.66rem;font-weight:600;color:var(--text-faint);cursor:ew-resize;user-select:none;text-align:center;line-height:28px;}
+  .nf .nf-l:hover{color:var(--text-sub);}
+  .nf input[type=text]{flex:1;min-width:0;width:100%;height:26px;border:none;background:transparent;box-shadow:none;padding:0 6px 0 0;font-size:.75rem;font-variant-numeric:tabular-nums;border-radius:0;}
+  .nf input[type=text]:focus{box-shadow:none;}
+  .nf .nf-u{font-size:.62rem;color:var(--text-faint);padding-right:6px;}
+  .nf.dis{opacity:.55;} .nf.dis .nf-l{cursor:default;}
+  body.scrubbing,body.scrubbing *{cursor:ew-resize!important;}
+  .ib-row{display:flex;gap:3px;flex-wrap:wrap;align-items:center;margin-bottom:6px;}
+  .ib{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:6px;background:#f3f4f6;color:var(--text-sub);cursor:pointer;padding:0;flex-shrink:0;}
+  .ib:hover{border-color:var(--border-strong);color:var(--text);}
+  .ib.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);}
+  .ib:disabled{opacity:.35;cursor:default;}
+  .ib svg{width:16px;height:16px;display:block;}
+  .ib-sep{width:1px;height:20px;background:var(--border);margin:0 2px;}
+  .cc{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+  .cc input[type=color]{width:28px;height:28px;padding:1px;flex:0 0 28px;border-radius:6px;}
+  .cc .cc-h{flex:1;min-width:0;height:28px;font-size:.75rem;font-family:ui-monospace,Menlo,Consolas,monospace;text-transform:uppercase;padding:0 7px;background:#f3f4f6;border:1px solid transparent;border-radius:6px;}
+  .cc .cc-h:focus{background:#fff;border-color:var(--accent);}
+  .cc-sw{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;}
+  .cc-sw button{width:18px;height:18px;border-radius:5px;border:1px solid rgba(0,0,0,.18);cursor:pointer;padding:0;}
+  .cc-sw button.on{outline:2px solid var(--accent);outline-offset:1px;}
+  .mini-l{font-size:.66rem;color:var(--text-faint);margin:4px 0 4px;font-weight:600;}
 </style>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <style>/* 잘난고딕(JalnanGothic) — 원본 OTF 전체 글리프 woff2 변환 후 내장. 외부 네트워크 불필요 */
@@ -741,6 +771,22 @@ function alignSelection(mode){
   const list=LS(s).filter(x=>ids.has(x.id));
   if(!list.length)return;
   const P=curP(s);
+  if(mode==='dh'||mode==='dv'){
+    if(list.length<3)return;
+    const ax=mode==='dh';
+    const items=list.map(l=>({l,b:visBox(l)})).sort((a,b)=>ax?a.b.x-b.b.x:a.b.y-b.b.y);
+    const f=items[0].b, z=items[items.length-1].b;
+    const span=ax?(z.x+z.w-f.x):(z.y+z.h-f.y);
+    const tot=items.reduce((a,it)=>a+(ax?it.b.w:it.b.h),0);
+    const gap=(span-tot)/(items.length-1);
+    let pos=ax?f.x:f.y;
+    items.forEach(it=>{
+      const d=pos-(ax?it.b.x:it.b.y);
+      if(ax)it.l.x=Math.round(it.l.x+d); else it.l.y=Math.round(it.l.y+d);
+      pos+=(ax?it.b.w:it.b.h)+gap;
+    });
+    renderAll(); recordHistory(); return;
+  }
   let ref, anchor=null;
   if(list.length>=2){
     anchor=list.reduce((a,b)=>{
@@ -1325,6 +1371,7 @@ function renderCanvas(){
   $('#moBtn').disabled=!isThumb && !moLayers(s);
   if(!isThumb&&!moLayers(s)&&viewMode==='mo'){viewMode='pc';syncViewToggle();}
   fitZoom();
+  syncGeomFields();
   recordHistory();
 }
 function syncViewToggle(){
@@ -1459,6 +1506,167 @@ function renderSlideList(){
   recordHistory();
 }
 
+/* ================= 속성 패널 컴포넌트 (Claude Design 스타일) =================
+   nf(): 회색 라벨 프리픽스가 붙은 컴팩트 숫자 필드. 라벨 좌우 드래그(scrub)·↑↓(Shift 10배)·
+         Enter/blur 적용·Esc 취소·잘못된 값은 이전 값 복원·간단한 사칙연산 수식(100+20) 허용.
+   colorCtl(): 네이티브 컬러 피커 + HEX 입력 + 브랜드 스와치. */
+const SWATCHES=['#1f2328','#3d4450','#6b7280','#ffffff','#00e31e','#4ea72e','#e7ffeb','#0068ff','#ff2110','#ffc400'];
+const _I=(d)=>`<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${d}</svg>`;
+const ICO={
+  al_l:_I('<rect x="1.5" y="1" width="1.4" height="14"/><rect x="4.5" y="3.5" width="9" height="3" rx="1"/><rect x="4.5" y="9.5" width="5.5" height="3" rx="1"/>'),
+  al_cx:_I('<rect x="7.3" y="1" width="1.4" height="14"/><rect x="2.5" y="3.5" width="11" height="3" rx="1"/><rect x="4.5" y="9.5" width="7" height="3" rx="1"/>'),
+  al_r:_I('<rect x="13.1" y="1" width="1.4" height="14"/><rect x="2.5" y="3.5" width="9" height="3" rx="1"/><rect x="6" y="9.5" width="5.5" height="3" rx="1"/>'),
+  al_t:_I('<rect x="1" y="1.5" width="14" height="1.4"/><rect x="3.5" y="4.5" width="3" height="9" rx="1"/><rect x="9.5" y="4.5" width="3" height="5.5" rx="1"/>'),
+  al_cy:_I('<rect x="1" y="7.3" width="14" height="1.4"/><rect x="3.5" y="2.5" width="3" height="11" rx="1"/><rect x="9.5" y="4.5" width="3" height="7" rx="1"/>'),
+  al_b:_I('<rect x="1" y="13.1" width="14" height="1.4"/><rect x="3.5" y="2.5" width="3" height="9" rx="1"/><rect x="9.5" y="6" width="3" height="5.5" rx="1"/>'),
+  ds_h:_I('<rect x="1" y="1.5" width="1.4" height="13"/><rect x="13.6" y="1.5" width="1.4" height="13"/><rect x="6.2" y="4" width="3.6" height="8" rx="1"/>'),
+  ds_v:_I('<rect x="1.5" y="1" width="13" height="1.4"/><rect x="1.5" y="13.6" width="13" height="1.4"/><rect x="4" y="6.2" width="8" height="3.6" rx="1"/>'),
+  ta_l:_I('<rect x="1.5" y="2.5" width="13" height="1.6" rx=".8"/><rect x="1.5" y="6.2" width="8.5" height="1.6" rx=".8"/><rect x="1.5" y="9.9" width="13" height="1.6" rx=".8"/><rect x="1.5" y="13.6" width="6" height="1.6" rx=".8"/>'),
+  ta_c:_I('<rect x="1.5" y="2.5" width="13" height="1.6" rx=".8"/><rect x="3.75" y="6.2" width="8.5" height="1.6" rx=".8"/><rect x="1.5" y="9.9" width="13" height="1.6" rx=".8"/><rect x="5" y="13.6" width="6" height="1.6" rx=".8"/>'),
+  ta_r:_I('<rect x="1.5" y="2.5" width="13" height="1.6" rx=".8"/><rect x="6" y="6.2" width="8.5" height="1.6" rx=".8"/><rect x="1.5" y="9.9" width="13" height="1.6" rx=".8"/><rect x="8.5" y="13.6" width="6" height="1.6" rx=".8"/>'),
+  none:_I('<rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 13L13 3" stroke="#dc2626" stroke-width="1.5"/>')
+};
+function fmtNum(v,dec){ v=+v||0; return dec?String(+v.toFixed(dec)):String(Math.round(v)); }
+/* 사칙연산 수식 계산기 (eval 미사용) — 숫자·+ - * / ( ) 만 허용 */
+function evalExpr(str){
+  const t=String(str==null?'':str).replace(/,/g,'').replace(/\s+/g,'').replace(/[px°%]|em$/gi,'');
+  if(!t||!/^[-+*/().\d]+$/.test(t))return NaN;
+  let i=0;
+  const num=()=>{
+    if(t[i]==='('){i++;const v=add();if(t[i++]!==')')throw 0;return v;}
+    if(t[i]==='-'){i++;return -num();}
+    if(t[i]==='+'){i++;return num();}
+    const m=/^(\d+\.?\d*|\.\d+)/.exec(t.slice(i)); if(!m)throw 0;
+    i+=m[0].length; return parseFloat(m[0]);
+  };
+  const mul=()=>{let v=num();while(t[i]==='*'||t[i]==='/'){const o=t[i++];const r=num();v=o==='*'?v*r:v/r;}return v;};
+  const add=()=>{let v=mul();while(t[i]==='+'||t[i]==='-'){const o=t[i++];const r=mul();v=o==='+'?v+r:v-r;}return v;};
+  try{const v=add();return (i===t.length&&isFinite(v))?v:NaN;}catch(e){return NaN;}
+}
+function nf(key,label,val,o={}){
+  return `<div class="nf${o.dis?' dis':''}" title="${esc(o.title||'')}"><span class="nf-l" data-scrub="${key}">${label}</span>`
+    +`<input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-nf="${key}" value="${fmtNum(val,o.dec)}"${o.dis?' disabled':''} aria-label="${esc(o.title||label)}">`
+    +`${o.unit?`<span class="nf-u">${o.unit}</span>`:''}</div>`;
+}
+function colorCtl(key,val,o={}){
+  const has=!!val, v=has?toHex6(val).toLowerCase():'#000000';
+  const sw=[...new Set([...(o.brand?[toHex6(o.brand).toLowerCase()]:[]),...SWATCHES])];
+  return `<div class="ccw" data-cc="${key}"><div class="cc"><input type="color" ${o.id?`id="${o.id}" `:''}value="${v}" title="색 선택">`
+    +`<input type="text" class="cc-h" value="${has?v.toUpperCase():''}" placeholder="${o.none?'없음':'#RRGGBB'}" maxlength="7" spellcheck="false" aria-label="HEX 색상">`
+    +`${o.none?`<button type="button" class="ib" data-none="1" title="없음(투명)">${ICO.none}</button>`:''}</div>`
+    +`<div class="cc-sw">${sw.map(c=>`<button type="button" data-c="${c}" title="${c.toUpperCase()}" style="background:${c}" class="${has&&v===c?'on':''}"></button>`).join('')}</div></div>`;
+}
+function parseHex(v){
+  const m=/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(v||'').trim()); if(!m)return null;
+  let h=m[1].toLowerCase(); if(h.length===3)h=h.split('').map(c=>c+c).join('');
+  return '#'+h;
+}
+function liveRefresh(final){ renderCanvas(); if(final)renderSlideList(); }
+function bindNums(defs){
+  props.querySelectorAll('input[data-nf]').forEach(inp=>{
+    const d=defs[inp.dataset.nf]; if(!d||inp.disabled)return;
+    const clamp=v=>{ if(d.min!=null)v=Math.max(d.min,v); if(d.max!=null)v=Math.min(d.max,v); return d.dec?+v.toFixed(d.dec):Math.round(v); };
+    const show=()=>{inp.value=fmtNum(d.get(),d.dec);};
+    const apply=(v,final)=>{ d.set(clamp(v)); show(); liveRefresh(final); };
+    let prev=d.get();
+    inp.addEventListener('focus',()=>{prev=d.get();setTimeout(()=>inp.select(),0);});
+    const commit=()=>{
+      const v=evalExpr(inp.value);
+      if(isNaN(v)){ show(); return; }   // 잘못된 값 → 직전 값 복원
+      apply(v,true);
+    };
+    inp.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){e.preventDefault();commit();inp.select();}
+      else if(e.key==='Escape'){e.preventDefault();d.set(prev);show();liveRefresh(true);inp.blur();}
+      else if(e.key==='ArrowUp'||e.key==='ArrowDown'){
+        e.preventDefault();
+        const base=evalExpr(inp.value), cur0=isNaN(base)?d.get():base;
+        const st=(d.step||1)*(e.shiftKey?10:1);
+        apply(cur0+(e.key==='ArrowUp'?st:-st),false);
+      }
+    });
+    inp.addEventListener('blur',()=>{ if(inp.isConnected)commit(); });
+    const lab=inp.parentElement.querySelector('.nf-l');
+    if(lab)lab.addEventListener('mousedown',e=>{
+      if(e.button!==0)return;
+      e.preventDefault();
+      const sx=e.clientX, v0=d.get(); let moved=false;
+      document.body.classList.add('scrubbing');
+      const mv=ev=>{
+        const dx=ev.clientX-sx; if(Math.abs(dx)>=2)moved=true; if(!moved)return;
+        const st=(d.step||1)*(ev.shiftKey?10:1);
+        apply(v0+Math.round(dx/2)*st,false);                 // 2px 당 1단계
+      };
+      const up=()=>{
+        document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);
+        document.body.classList.remove('scrubbing');
+        if(moved){prev=d.get();liveRefresh(true);} else {inp.focus();}
+      };
+      document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
+    });
+  });
+}
+function bindColors(defs){
+  props.querySelectorAll('.ccw[data-cc]').forEach(w=>{
+    const d=defs[w.dataset.cc]; if(!d)return;
+    const pk=w.querySelector('input[type=color]'), hx=w.querySelector('.cc-h');
+    const paint=()=>{
+      const v=d.get(), has=!!v, hv=has?toHex6(v).toLowerCase():null;
+      if(has)pk.value=hv; hx.value=has?hv.toUpperCase():'';
+      w.querySelectorAll('.cc-sw button').forEach(b=>b.classList.toggle('on',has&&b.dataset.c===hv));
+    };
+    const setV=(v,final)=>{ d.set(v); paint(); liveRefresh(final); };
+    pk.addEventListener('input',()=>setV(pk.value,false));
+    pk.addEventListener('change',()=>setV(pk.value,true));
+    const commitHex=()=>{
+      const raw=hx.value.trim();
+      if(!raw&&d.none){setV(null,true);return;}
+      const v=parseHex(raw); if(!v){paint();return;}          // 잘못된 HEX → 이전 값 복원
+      setV(v,true);
+    };
+    hx.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();commitHex();hx.select();} else if(e.key==='Escape'){e.preventDefault();paint();hx.blur();} });
+    hx.addEventListener('blur',()=>{ if(hx.isConnected)commitHex(); });
+    w.querySelectorAll('.cc-sw button').forEach(b=>b.addEventListener('click',()=>setV(b.dataset.c,true)));
+    const nb=w.querySelector('[data-none]'); if(nb)nb.addEventListener('click',()=>setV(null,true));
+  });
+}
+/* 캔버스 드래그·리사이즈·회전 중 패널 위치·크기 값 실시간 동기화 (편집 중인 필드는 건드리지 않음) */
+function geomVals(l){
+  const b=layerBBox(l);
+  return {gx:l.x,gy:l.y,gw:l.w,gh:(l.type==='t'||l.type==='i')?b.h:l.h,gr:l.rot||0};
+}
+function syncGeomFields(){
+  const s=slides[cur]; if(!s||!props)return;
+  const l=LS(s).find(x=>x.id===selLayer); if(!l)return;
+  const g=geomVals(l);
+  props.querySelectorAll('input[data-nf]').forEach(inp=>{
+    const k=inp.dataset.nf; if(!(k in g)||inp===document.activeElement)return;
+    inp.value=fmtNum(g[k]);
+  });
+}
+/* 서식 바(부분 서식)로 칠한 글자색 제거 — 패널의 '텍스트 색'은 레이어 전체에 적용(피그마와 동일) */
+function stripRichColor(html){
+  const t=document.createElement('template'); t.innerHTML=html;
+  t.content.querySelectorAll('[style]').forEach(n=>{n.style.color='';if(!n.getAttribute('style'))n.removeAttribute('style');});
+  t.content.querySelectorAll('font[color]').forEach(n=>n.removeAttribute('color'));
+  return t.innerHTML;
+}
+function geomSection(l){
+  const b=layerBBox(l), line=isLine(l), hDis=l.type==='t';
+  const hv=(l.type==='t'||l.type==='i')?b.h:l.h;
+  return `
+  <div class="sec" id="geoSec"><h3>위치 · 크기</h3>
+    <div class="g2">
+      ${nf('gx','X',l.x,{title:'X 위치 (px)'})}${nf('gy','Y',l.y,{title:'Y 위치 (px)'})}
+      ${nf('gw','W',l.w,{title:l.type==='f'?'하단 너비 (px)':l.type==='i'?'너비 (px, 비율 유지)':l.type==='t'?'텍스트 박스 너비 (px)':'너비 (px)'})}
+      ${nf('gh','H',hv,{title:hDis?'텍스트 높이는 줄 수·행간으로 자동 결정돼':'높이 (px)',dis:hDis})}
+      ${line?'':nf('gr','R',l.rot||0,{title:'회전 (도)',unit:'°'})}
+      ${nf('gop','투명',Math.round((l.opacity!=null?l.opacity:1)*100),{title:'불투명도 (%)',unit:'%'})}
+    </div>
+    <label class="chkline"><input type="checkbox" id="pLock"${l.locked?' checked':''}> 잠금 — 캔버스에서 이동·크기 조절 안 됨</label>
+    <div class="hint">라벨(X·Y·W·H)을 좌우로 끌면 값이 바뀌어 · ↑↓ 1, Shift 10 · 수식 입력 가능 (예: 100+20)</div>
+  </div>`;
+}
 function selCount(){ const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer); return ids.size; }
 function renderProps(){
   const s=slides[cur];
@@ -1488,12 +1696,14 @@ function renderProps(){
     </div>
     <div class="field" style="margin-top:9px"><label>배경 직접 지정</label><input type="color" id="bgPick" value="${toHex6(s.bg)}"></div>
   </div>
+  <!--LAYERS-->
   <div class="sec">
     <h3>레이어</h3>
     <div class="layer-list">
       ${LS(s).slice().reverse().map(x=>`
         <div class="layer-item${x.id===selLayer?' on':''}" data-lid="${x.id}">
           <span class="ico">${lico(x)}</span><span class="lname">${esc(lname(x))}</span>
+          <button class="ldel llock${x.locked?' on':''}" data-llock="${x.id}" title="${x.locked?'잠금 해제':'잠금'}">${x.locked?'🔒':'🔓'}</button>
           <button class="ldel" data-ldel="${x.id}">✕</button>
         </div>`).join('')}
     </div>
@@ -1510,74 +1720,55 @@ function renderProps(){
     </div>
     <div class="hint" style="margin-top:6px">목록 <b>위쪽일수록 화면 앞</b>에 그려져 (PPT·피그마와 같음). 이미지·도형·텍스트 모두 되고, Shift+클릭으로 여러 개 골라도 상대 순서를 지킨 채 같이 움직여.</div>
   </div>
+  <!--ALIGN-->
   <div class="sec">
-    <h3>정렬 ${selCount()>=2?'(가장 큰 요소 기준)':'(캔버스 기준)'}</h3>
-    <div class="btn-row" style="margin-bottom:6px">
-      <button class="btn small" data-al="l" title="왼쪽 맞춤">⇤ 왼쪽</button>
-      <button class="btn small" data-al="cx" title="가로 중앙">↔ 가로 중앙</button>
-      <button class="btn small" data-al="r" title="오른쪽 맞춤">오른쪽 ⇥</button>
-    </div>
-    <div class="btn-row" style="margin-bottom:6px">
-      <button class="btn small" data-al="t" title="위 맞춤">⤒ 위</button>
-      <button class="btn small" data-al="cy" title="세로 중앙">↕ 세로 중앙</button>
-      <button class="btn small" data-al="b" title="아래 맞춤">아래 ⤓</button>
+    <h3>정렬 · ${selCount()>=2?'가장 큰 요소 기준':'캔버스 기준'}</h3>
+    <div class="ib-row" role="group" aria-label="정렬">
+      <button class="ib" data-al="l" title="왼쪽 맞춤">${ICO.al_l}</button>
+      <button class="ib" data-al="cx" title="가로 가운데">${ICO.al_cx}</button>
+      <button class="ib" data-al="r" title="오른쪽 맞춤">${ICO.al_r}</button>
+      <span class="ib-sep"></span>
+      <button class="ib" data-al="t" title="위 맞춤">${ICO.al_t}</button>
+      <button class="ib" data-al="cy" title="세로 중간">${ICO.al_cy}</button>
+      <button class="ib" data-al="b" title="아래 맞춤">${ICO.al_b}</button>
+      <span class="ib-sep"></span>
+      <button class="ib" data-al="dh" title="가로 균등 분배 (3개 이상)"${selCount()<3?' disabled':''}>${ICO.ds_h}</button>
+      <button class="ib" data-al="dv" title="세로 균등 분배 (3개 이상)"${selCount()<3?' disabled':''}>${ICO.ds_v}</button>
     </div>
     <div class="btn-row">
-      <button class="btn small primary" id="snapTxtBtn">텍스트를 도형 중앙에</button>
+      <button class="btn small" id="snapTxtBtn">텍스트를 도형 중앙에</button>
     </div>
-    <div class="hint" style="margin-top:6px">Shift+클릭으로 도형과 텍스트를 함께 고른 뒤 눌러도 되고, 텍스트만 고르면 겹친 도형을 자동으로 찾아 맞춰.</div>
+    <div class="hint" style="margin-top:6px">하나만 고르면 캔버스 기준, Shift+클릭·드래그 박스로 여러 개 고르면 가장 큰 요소 기준으로 맞춰.</div>
   </div>`;
-
+  const brand=SERVICES[s.service]||'#00e31e';
+  if(l) html+=geomSection(l);
   if(l&&l.type==='t'){
+    const nT=_selTexts().length;
     html+=`
-  <div class="sec"><h3>텍스트 편집</h3>
-    <div class="field"><label>내용</label><textarea id="pText">${esc(l.text)}</textarea></div>
-    <div class="row">
-      <div class="field"><label>크기 (px)${_selTexts().length>1?` <span style="color:#00901a">· ${_selTexts().length}개 일괄</span>`:""}</label><input type="number" id="pSize" min="8" value="${l.size}"></div>
-      <div class="field"><label>굵기</label>
-        <select id="pWeight">${[300,400,500,600,700,800,900].map(w=>`<option value="${w}"${l.weight==w?' selected':''}>${w}</option>`).join('')}</select></div>
+  <div class="sec" id="textSec"><h3>텍스트${nT>1?` <span style="color:#00901a;text-transform:none">· ${nT}개 일괄</span>`:''}</h3>
+    <div class="field"><textarea id="pText" aria-label="내용">${esc(l.text)}</textarea></div>
+    <div class="field"><select id="pFont" aria-label="폰트">${FONTS.map(([v,n])=>`<option value="${esc(v)}"${(l.font||'')===v?' selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="g2">
+      ${nf('tsize','크기',l.size,{title:'글자 크기 (px)',unit:'px'})}
+      <select id="pWeight" title="굵기" aria-label="굵기">${[300,400,500,600,700,800,900].map(w=>`<option value="${w}"${l.weight==w?' selected':''}>${w}</option>`).join('')}</select>
+      ${nf('tlh','행간',l.lh,{title:'행간 (배수)',dec:2})}
+      ${nf('tls','자간',l.ls,{title:'자간 (em)',dec:3,unit:'em'})}
     </div>
+    <div class="ib-row" role="group" aria-label="텍스트 정렬">${['left','center','right'].map(a=>`<button class="ib${l.align===a?' on':''}" data-align="${a}" title="${a==='left'?'왼쪽':a==='center'?'가운데':'오른쪽'} 정렬">${ICO['ta_'+a[0]]}</button>`).join('')}</div>
+    <div class="mini-l">색상</div>
+    ${colorCtl('tcolor',l.color,{id:'pColor',brand})}
+    <div class="hint" style="margin-top:-4px;margin-bottom:8px">패널 색은 레이어 전체에 적용돼(서식 바로 칠한 부분 색도 통일). 일부 글자만 칠하려면 더블클릭 후 위쪽 서식 바를 써.</div>
     <div class="row">
-      <div class="field"><label>색상</label><input type="color" id="pColor" value="${toHex6(l.color)}"></div>
-      <div class="field"><label>부분 강조 색</label><input type="color" id="pAccent" value="${toHex6(l.accent||'#00e31e')}"></div>
+      <div class="field"><label>부분 강조 색 [[ ]]</label><input type="color" id="pAccent" value="${toHex6(l.accent||'#00e31e')}"></div>
+      <div class="field" id="hlColorField" style="${l.hl?'':'visibility:hidden'}"><label>형광펜 색</label><input type="color" id="pHlColor" value="${toHex6(l.hlColor)}"></div>
     </div>
-    <div class="hint" style="margin-top:-4px;margin-bottom:8px">내용에서 <b>[[텍스트]]</b>로 감싼 부분만 강조 색으로 표시돼. 예: 매일 [[1,000원]] 아끼는</div>
     <div class="field"><label class="chkline"><input type="checkbox" id="pHl"${l.hl?' checked':''}> 형광펜(배경 강조)</label></div>
-    <div class="field" id="hlColorField" style="${l.hl?'':'display:none'}"><label>강조 색</label><input type="color" id="pHlColor" value="${toHex6(l.hlColor)}"></div>
-    <div class="field"><label>정렬</label>
-      <div class="align-group">${['left','center','right'].map(a=>`<button data-align="${a}" class="${l.align===a?'on':''}">${a==='left'?'왼쪽':a==='center'?'가운데':'오른쪽'}</button>`).join('')}</div></div>
-    <div class="row">
-      <div class="field"><label>X</label><input type="number" id="pX" value="${Math.round(l.x)}"></div>
-      <div class="field"><label>Y</label><input type="number" id="pY" value="${Math.round(l.y)}"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>박스 너비</label><input type="number" id="pW" value="${Math.round(l.w)}"></div>
-      <div class="field"><label>행간</label><input type="number" id="pLh" step="0.05" value="${l.lh}"></div>
-    </div>
-    <div class="field"><label>자간(em)</label><input type="number" id="pLs" step="0.01" value="${l.ls}"></div>
-    <div class="field"><label>폰트</label>
-      <select id="pFont">${FONTS.map(([v,n])=>`<option value="${esc(v)}"${(l.font||'')===v?' selected':''}>${n}</option>`).join('')}</select></div>
-    <div class="hint" style="margin-top:-4px;margin-bottom:8px">프리텐다드 외 폰트는 웹폰트라 인터넷 연결이 필요해. 로딩된 뒤에 PNG를 뽑아야 제대로 나와.</div>
-    <div class="row">
-      <div class="field"><label>회전 (도)</label><input type="number" id="pRot" step="1" value="${l.rot||0}"></div>
-      <div class="field"><label>&nbsp;</label><button class="btn small" id="pRotReset" style="width:100%">회전 0°로</button></div>
-    </div>
-    <button class="btn small" id="centerBtn">가로 중앙 배치</button>
+    <div class="hint">내용에서 <b>[[텍스트]]</b>로 감싼 부분만 강조 색으로 표시돼. 프리텐다드 외 폰트는 웹폰트라 로딩된 뒤 PNG를 뽑아야 해.</div>
   </div>`;
   }else if(l&&l.type==='i'){
     html+=`
-  <div class="sec"><h3>이미지 편집</h3>
-    <div class="row">
-      <div class="field"><label>X</label><input type="number" id="pX" value="${Math.round(l.x)}"></div>
-      <div class="field"><label>Y</label><input type="number" id="pY" value="${Math.round(l.y)}"></div>
-    </div>
-    <div class="field"><label>너비 (비율 유지)</label><input type="number" id="pW" value="${Math.round(l.w)}"></div>
-    <div class="row">
-      <div class="field"><label>회전 (도)</label><input type="number" id="pRot" step="1" value="${l.rot||0}"></div>
-      <div class="field"><label>&nbsp;</label><button class="btn small" id="pRotReset" style="width:100%">회전 0°로</button></div>
-    </div>
+  <div class="sec"><h3>이미지</h3>
     <div class="btn-row">
-      <button class="btn small" id="centerBtn">가로 중앙 배치</button>
       <button class="btn small" id="imgReplBtn">이미지 교체</button>
       <button class="btn small" id="cropBtn">자르기</button>
       <button class="btn small" id="cropResetBtn">자르기 해제</button>
@@ -1587,35 +1778,35 @@ function renderProps(){
   </div>`;
   }else if(l&&l.type==='r'){
     html+=`
-  <div class="sec"><h3>박스 편집</h3>
-    <div class="row">
-      <div class="field"><label>X</label><input type="number" id="pX" value="${Math.round(l.x)}"></div>
-      <div class="field"><label>Y</label><input type="number" id="pY" value="${Math.round(l.y)}"></div>
+  <div class="sec"><h3>채우기</h3>${colorCtl('rfill',l.fill,{id:'pFill',brand})}</div>
+  <div class="sec"><h3>테두리 · 모양</h3>
+    ${colorCtl('rstroke',l.stroke,{none:true,brand})}
+    <div class="g2">
+      ${nf('rsw','두께',l.stroke?(l.strokeW||3):0,{title:'테두리 굵기 (0 = 없음)',unit:'px'})}
+      ${nf('rrad','반경',l.radius||0,{title:'모서리 라운드 (px)'})}
     </div>
-    <div class="row">
-      <div class="field"><label>너비</label><input type="number" id="pW" value="${Math.round(l.w)}"></div>
-      <div class="field"><label>높이</label><input type="number" id="pH" value="${Math.round(l.h)}"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>채움색</label><input type="color" id="pFill" value="${toHex6(l.fill)}"></div>
-      <div class="field"><label>라운드</label><input type="number" id="pRad" value="${l.radius}"></div>
-    </div>
-    <div class="field"><button class="btn small" id="pToArrow" style="width:100%">${l.shape==='arrow'?'사각형으로 되돌리기':'화살표로 변환'}</button></div>
+    <div class="field"><button class="btn small" id="pToArrow" style="width:100%">${l.shape==='arrow'?'사각형으로 되돌리기':'블록 화살표로 변환'}</button></div>
     ${l.shape==='arrow'?`<div class="row">
       <div class="field"><label>화살촉 길이</label><input type="range" id="pHeadW" min="12" max="80" value="${Math.round((l.headW!=null?l.headW:0.36)*100)}"></div>
       <div class="field"><label>몸통 두께</label><input type="range" id="pThick" min="10" max="90" value="${Math.round((l.thick!=null?l.thick:0.42)*100)}"></div>
     </div>`:''}
-    <div class="row">
-      <div class="field"><label>테두리 색</label><input type="color" id="pStroke" value="${toHex6(l.stroke||'#bdf0a6')}"></div>
-      <div class="field"><label>테두리 굵기</label><input type="number" id="pStrokeW" min="0" value="${l.stroke?(l.strokeW||3):0}"></div>
-    </div>
-    <div class="field"><label>회전 (도)</label><input type="number" id="pRot" value="${l.rot||0}"></div>
     <div class="field"><label class="chkline"><input type="checkbox" id="pTail"${l.tail?' checked':''}> 말풍선 꼬리</label></div>
-    <div class="row" id="tailRow" style="${l.tail?'':'display:none'}">
-      <div class="field"><label>꼬리 위치 (%)</label><input type="number" id="pTailX" min="0" max="100" value="${Math.round((l.tailX!=null?l.tailX:0.5)*100)}"></div>
-      <div class="field"><label>꼬리 크기</label><input type="number" id="pTailW" min="4" value="${l.tailW||Math.round(l.h*0.22)}"></div>
+    <div class="g2" id="tailRow" style="${l.tail?'':'display:none'}">
+      ${nf('rtx','꼬리 위치',Math.round((l.tailX!=null?l.tailX:0.5)*100),{title:'꼬리 위치 (%)',unit:'%'})}
+      ${nf('rtw','꼬리 크기',l.tailW||Math.round(l.h*0.22),{title:'꼬리 크기 (px)'})}
     </div>
-    <button class="btn small" id="centerBtn">가로 중앙 배치</button>
+  </div>`;
+  }else if(l&&l.type==='shape'){
+    const line=isLine(l), hasRad=['rect','roundrect','bubble'].includes(l.shape);
+    html+=`
+  ${line?'':`<div class="sec" id="fillSec"><h3>채우기 · ${esc(lname(l))}</h3>${colorCtl('sfill',l.fill,{none:true,brand})}</div>`}
+  <div class="sec" id="strokeSec"><h3>${line?'선 · '+esc(lname(l)):'테두리'}</h3>
+    ${colorCtl('sstroke',l.stroke,{none:!line,brand})}
+    <div class="g2">
+      ${nf('ssw','두께',line?(l.strokeW||4):(l.stroke?(l.strokeW||0):0),{title:line?'선 두께 (px)':'테두리 두께 (px, 0 = 없음)',unit:'px'})}
+      ${hasRad?nf('srad','반경',l.radius||0,{title:'모서리 반경 (px)'}):''}
+    </div>
+    ${line?'<div class="hint">양 끝 동그라미 핸들을 끌어 방향·길이를 바꿔. Shift = 45° 단위.</div>':'<div class="hint">모서리·변 핸들로 크기 조절(Shift = 비율 유지), 바깥 동그라미로 회전(Shift = 15°).</div>'}
   </div>`;
   }else if(l&&l.type==='f'){
     if(!l.grad)l.grad={type:'linear',angle:90,rotateWith:true,stops:[{pos:0,color:'#ffffff',alpha:8,bright:100},{pos:100,color:'#ffffff',alpha:20,bright:100}]};
@@ -1628,19 +1819,8 @@ function renderProps(){
       :[['0.5,0.5','가운데'],['0,0','좌상단'],['1,0','우상단'],['0,1','좌하단'],['1,1','우하단']]
         .map(([v,t])=>`<option value="${v}"${(gr.cx||0.5)+','+(gr.cy||0.5)==v?' selected':''}>${t}</option>`).join('');
     html+=`
-  <div class="sec"><h3>스포트라이트 편집</h3>
-    <div class="row">
-      <div class="field"><label>X</label><input type="number" id="pX" value="${Math.round(l.x)}"></div>
-      <div class="field"><label>Y</label><input type="number" id="pY" value="${Math.round(l.y)}"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>상단 너비</label><input type="number" id="pTopW" value="${Math.round(l.topW)}"></div>
-      <div class="field"><label>하단 너비</label><input type="number" id="pW" value="${Math.round(l.w)}"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>높이</label><input type="number" id="pH" value="${Math.round(l.h)}"></div>
-      <div class="field"><label>회전 (도)</label><input type="number" id="pRot" value="${l.rot||0}"></div>
-    </div>
+  <div class="sec"><h3>스포트라이트</h3>
+    <div class="g2">${nf('ftw','상단',l.topW||0,{title:'상단 너비 (px) — 하단 너비는 W'})}</div>
   </div>
   <div class="sec"><h3>그라데이션</h3>
     <div class="field"><label>그라데이션 미리 설정</label>
@@ -1686,7 +1866,6 @@ function renderProps(){
       <div class="field"><input type="range" id="gBriR" min="-100" max="100" value="${sel.bright}"></div></div></div>
     <div class="field"><label class="chkline"><input type="checkbox" id="gRotW"${gr.rotateWith!==false?' checked':''}> 도형과 함께 회전</label></div>
     <div class="btn-row" style="margin-top:6px">
-      <button class="btn small" id="centerBtn">가로 중앙 배치</button>
       <button class="btn small" id="tplSaveBtn">⭐ 템플릿 기본값으로 저장</button>
     </div>
     <div class="hint">사각형·경로형은 SVG 특성상 방사형 근사로 표현돼. 저장 시 이후 모든 Q&A 페이지에 영구 적용.</div>
@@ -1694,7 +1873,13 @@ function renderProps(){
   }else{
     html+=`<div class="empty-note">캔버스에서 요소를 클릭하면<br>세부 편집 옵션이 열려.</div>`;
   }
+  if(l){ // 선택이 있으면 선택 요소 편집을 맨 위로 (피그마식) — 레이어 목록 → 페이지 설정 순
+    const i1=html.indexOf('<!--LAYERS-->'), i2=html.indexOf('<!--ALIGN-->');
+    html=html.slice(i2)+html.slice(i1,i2)+html.slice(0,i1);
+  }
+  const keepScroll=props.scrollTop;
   props.innerHTML=html;
+  props.scrollTop=keepScroll;
   bindProps(s,l);
 }
 
@@ -1787,6 +1972,11 @@ function bindProps(s,l){
   });
   $('#bgPick').oninput=e=>{s.bg=e.target.value;renderCanvas();renderSlideList();$('#infoBg').textContent=s.bg;};
   props.querySelectorAll('.layer-item').forEach(it=>it.onclick=e=>{
+    if(e.target.dataset.llock){
+      const L=LS(s).find(x=>x.id==e.target.dataset.llock);
+      if(L){ if(L.locked)delete L.locked; else L.locked=true; }
+      renderAll();return;
+    }
     if(e.target.dataset.ldel){
       setLS(s,LS(s).filter(x=>x.id!=e.target.dataset.ldel));
       if(selLayer==e.target.dataset.ldel)selLayer=null;
@@ -1815,34 +2005,58 @@ function bindProps(s,l){
   };
   if(!l)return;
   const rc=()=>{renderCanvas();renderSlideList();};
+  const selL=()=>{const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer); return LS(s).filter(x=>ids.has(x.id));};
+  const N={}, C={};
+  // 위치·크기 (모든 레이어 공통)
+  N.gx={get:()=>l.x,set:v=>{l.x=v;}};
+  N.gy={get:()=>l.y,set:v=>{l.y=v;}};
+  N.gw={get:()=>l.w,min:isLine(l)?0:1,set:v=>{l.w=v; if(l.type==='shape'&&l.shape==='circle')l.h=v;}};
+  if(l.type==='i') N.gh={get:()=>l.w/(l.ar||1),min:1,set:v=>{l.w=v*(l.ar||1);}};
+  else if(l.type!=='t') N.gh={get:()=>l.h,min:isLine(l)?0:1,set:v=>{
+    const rs=l.type==='r'?selL().filter(x=>x.type==='r'):[];
+    if(rs.length>1)rs.forEach(x=>x.h=v); else l.h=v;          // 박스 다중 선택 시 높이 일괄
+    if(l.type==='shape'&&l.shape==='circle')l.w=v;
+  }};
+  N.gr={get:()=>l.rot||0,step:1,set:v=>{
+    v=((v%360)+360)%360; if(v>180)v-=360;
+    if(v){l.rot=v;l.rotOrigin='center center';}else{delete l.rot;delete l.rotOrigin;}
+  }};
+  N.gop={get:()=>Math.round((l.opacity!=null?l.opacity:1)*100),min:0,max:100,set:v=>{
+    selL().forEach(x=>{ if(v>=100)delete x.opacity; else x.opacity=v/100; });
+  }};
+  if($('#pLock'))$('#pLock').onchange=e=>{ selL().forEach(x=>{if(e.target.checked)x.locked=true; else delete x.locked;}); renderAll(); };
   if(l.type==='t'){
-    $('#pText').oninput=e=>{l.text=e.target.value;rc();};
-    $('#pSize').oninput=e=>{_applyText('size',Math.max(8,+e.target.value||8),l);rc();};
+    $('#pText').oninput=e=>{l.text=e.target.value;if(l.rich)delete l.rich;rc();};
     $('#pWeight').onchange=e=>{_applyText('weight',+e.target.value,l);rc();};
-    $('#pColor').oninput=e=>{_applyText('color',e.target.value,l);rc();};
     $('#pAccent').oninput=e=>{l.accent=e.target.value;rc();};
-    $('#pHl').onchange=e=>{l.hl=e.target.checked;$('#hlColorField').style.display=l.hl?'':'none';rc();};
+    $('#pHl').onchange=e=>{l.hl=e.target.checked;$('#hlColorField').style.visibility=l.hl?'':'hidden';rc();};
     $('#pHlColor').oninput=e=>{l.hlColor=e.target.value;rc();};
     props.querySelectorAll('[data-align]').forEach(b=>b.onclick=()=>{_applyText('align',b.dataset.align,l);renderAll();});
-    $('#pLh').onchange=e=>{_applyText('lh',+e.target.value,l);rc();};
-    $('#pLs').onchange=e=>{_applyText('ls',+e.target.value,l);rc();};
+    $('#pFont').onchange=e=>{const v=e.target.value;if(v)l.font=v;else delete l.font;rc();};
+    N.tsize={get:()=>l.size,min:8,max:2000,set:v=>_applyText('size',v,l)};
+    N.tlh={get:()=>l.lh,dec:2,step:0.05,min:0.5,max:5,set:v=>_applyText('lh',v,l)};
+    N.tls={get:()=>l.ls,dec:3,step:0.01,min:-0.5,max:2,set:v=>_applyText('ls',v,l)};
+    C.tcolor={get:()=>l.color,set:v=>{
+      const ts=_selTexts(); (ts.length?ts:[l]).forEach(x=>{
+        x.color=v;
+        if(x.rich){ x.rich=stripRichColor(x.rich); }
+      });
+    }};
   }
   if(l.type==='r'){
-    $('#pH').onchange=e=>{
-      const v=+e.target.value, s0=slides[cur];
-      const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer);
-      const ts=LS(s0).filter(x=>x.type==='r'&&ids.has(x.id));
-      if(ts.length>1) ts.forEach(x=>x.h=v); else l.h=v;
-      rc();};
-    $('#pFill').oninput=e=>{l.fill=e.target.value;rc();};
+    C.rfill={get:()=>l.fill,set:v=>{l.fill=v;}};
+    C.rstroke={get:()=>l.stroke,none:true,set:v=>{ if(!v){delete l.stroke;delete l.strokeW;} else {l.stroke=v;if(!l.strokeW)l.strokeW=3;} }};
+    N.rsw={get:()=>l.stroke?(l.strokeW||3):0,min:0,max:200,set:v=>{ if(v<=0){delete l.stroke;delete l.strokeW;} else {if(!l.stroke)l.stroke='#bdf0a6';l.strokeW=v;} }};
+    N.rrad={get:()=>l.radius||0,min:0,set:v=>{l.radius=v;}};
+    N.rtx={get:()=>Math.round((l.tailX!=null?l.tailX:0.5)*100),min:0,max:100,set:v=>{l.tailX=v/100;}};
+    N.rtw={get:()=>l.tailW||Math.round(l.h*0.22),min:4,set:v=>{l.tailW=v;}};
     if(l.shape==='arrow'){
       $('#pHeadW').oninput=e=>{l.headW=(+e.target.value)/100;rc();};
       $('#pThick').oninput=e=>{l.thick=(+e.target.value)/100;rc();};
     }
     $('#pToArrow').onclick=()=>{
       // 선택된 도형 전부에 적용 (Shift 다중 선택 지원)
-      const ids=new Set(selSet||[]); if(selLayer)ids.add(selLayer);
-      const ts=LS(s).filter(x=>x.type==='r'&&ids.has(x.id));
+      const ts=selL().filter(x=>x.type==='r');
       const on=l.shape!=='arrow';
       ts.forEach(x=>{
         if(on){
@@ -1854,18 +2068,27 @@ function bindProps(s,l){
       });
       renderAll(); recordHistory();
     };
-    $('#pRad').onchange=e=>{l.radius=+e.target.value;rc();};
-    $('#pStroke').oninput=e=>{l.stroke=e.target.value;if(!l.strokeW)l.strokeW=3;rc();};
-    $('#pStrokeW').onchange=e=>{const v=+e.target.value;if(v<=0){delete l.stroke;delete l.strokeW;}else l.strokeW=v;rc();};
-    $('#pRot').onchange=e=>{const v=+e.target.value;if(v){l.rot=v;l.rotOrigin='center center';}else{delete l.rot;delete l.rotOrigin;}rc();};
     $('#pTail').onchange=e=>{
       l.tail=e.target.checked;
       if(l.tail&&l.tailX==null)l.tailX=0.5;
       if(!l.tail)delete l.tail;
       renderAll();
     };
-    if($('#pTailX'))$('#pTailX').onchange=e=>{l.tailX=Math.min(100,Math.max(0,+e.target.value))/100;rc();};
-    if($('#pTailW'))$('#pTailW').onchange=e=>{l.tailW=Math.max(4,+e.target.value);rc();};
+  }
+  if(l.type==='shape'){
+    const line=isLine(l);
+    const shapes=()=>{const a=selL().filter(x=>x.type==='shape');return a.length?a:[l];};
+    C.sfill={get:()=>l.fill,none:true,set:v=>{shapes().forEach(x=>{if(!isLine(x))x.fill=v||null;});}};
+    C.sstroke={get:()=>l.stroke,none:!line,set:v=>{shapes().forEach(x=>{
+      if(!v&&!isLine(x)){x.stroke=null;return;}
+      if(!v)return;
+      x.stroke=v; if(!(+x.strokeW>0))x.strokeW=isLine(x)?4:Math.max(2,Math.round(Math.min(x.w,x.h)*0.03));
+    });}};
+    N.ssw={get:()=>line?(l.strokeW||4):(l.stroke?(+l.strokeW||0):0),min:line?1:0,max:200,set:v=>{shapes().forEach(x=>{
+      if(!isLine(x)&&v>0&&!x.stroke)x.stroke='#1f2328';
+      x.strokeW=v;
+    });}};
+    N.srad={get:()=>l.radius||0,min:0,set:v=>{l.radius=v;}};
   }
   if(l.type==='f'){
     const gr=l.grad;
@@ -1886,9 +2109,8 @@ function bindProps(s,l){
       gr.stops.sort((a,b)=>a.pos-b.pos);
       l._gsel=gr.stops.indexOf(cur2);
     };
-    $('#pTopW').onchange=e=>{l.topW=Math.max(0,+e.target.value);refresh();};
-    $('#pH').onchange=e=>{l.h=Math.max(10,+e.target.value);refresh();};
-    $('#pRot').onchange=e=>{const v=+e.target.value;if(v){l.rot=v;l.rotOrigin='center center';}else{delete l.rot;delete l.rotOrigin;}refresh();};
+    N.ftw={get:()=>l.topW||0,min:0,set:v=>{l.topW=v;}};
+    N.gh.min=10;
     $('#gPreset').onchange=e=>{
       const p=e.target.value;if(!p)return;
       const mk=(a,b,c)=>[{pos:0,color:'#ffffff',alpha:a,bright:100},{pos:50,color:'#ffffff',alpha:b,bright:100},{pos:100,color:'#ffffff',alpha:c,bright:100}];
@@ -1992,22 +2214,8 @@ function bindProps(s,l){
       inp.click();
     };
   }
-  if(l&&l.type==='t'&&$('#pFont')){
-    $('#pFont').onchange=e=>{const v=e.target.value;if(v)l.font=v;else delete l.font;rc();};
-  }
-  if(l&&(l.type==='t'||l.type==='i')&&$('#pRot')){
-    const setRot=v=>{ if(v){l.rot=v;l.rotOrigin='center center';} else {delete l.rot;delete l.rotOrigin;} rc(); };
-    $('#pRot').onchange=e=>setRot(+e.target.value||0);
-    $('#pRotReset').onclick=()=>setRot(0);
-  }
-  if(!$('#pX'))return;
-  $('#pX').onchange=e=>{l.x=+e.target.value;rc();};
-  $('#pY').onchange=e=>{l.y=+e.target.value;rc();};
-  $('#pW').onchange=e=>{l.w=+e.target.value;rc();};
-  $('#centerBtn').onclick=()=>{
-    const P=curP(s);
-    l.x=(P.W-l.w)/2;if(l.type==='t')l.align='center';renderAll();
-  };
+  bindNums(N);
+  bindColors(C);
 }
 /* ── 레이어 순서(앞으로/뒤로) ──
    배열 뒤쪽일수록 화면 앞에 그려진다. 다중 선택 시 블록 통째로 이동하며
@@ -2320,7 +2528,13 @@ function layerDblEdit(e){
       l.text=el.innerText.replace(/\n$/,'');
       l.rich=/<(span|b|strong|font)[\s>]/i.test(html)?sanitizeRich(html):null;
       if(!l.rich)delete l.rich;
-      renderAll();
+      const ae=document.activeElement;
+      if(ae&&ae.closest&&ae.closest('#props')){
+        // 패널(색·크기 등)을 누르는 중 — 패널을 다시 그리면 열린 컬러 피커·입력 포커스가 사라진다
+        renderCanvas(); renderSlideList();
+        const ta=$('#pText'); if(ta&&ta!==ae)ta.value=l.text;
+        const li=props.querySelector(`.layer-item[data-lid="${l.id}"] .lname`); if(li)li.textContent=lname(l);
+      }else renderAll();
     },0);
   },{once:false});
   el.addEventListener('keydown',ev=>{if(ev.key==='Escape')el.blur();});
