@@ -434,6 +434,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .ib.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);}
   .ib:disabled{opacity:.35;cursor:default;}
   .ib svg{width:16px;height:16px;display:block;}
+  .al-row{flex-wrap:nowrap;gap:2px;} .al-row .ib{width:22px;height:24px;} .al-row .ib-sep{margin:0 1px;}
   .ib-sep{width:1px;height:20px;background:var(--border);margin:0 2px;}
   .cc{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
   .cc input[type=color]{width:28px;height:28px;padding:1px;flex:0 0 28px;border-radius:6px;}
@@ -1504,7 +1505,7 @@ function layerHTML0(l){
  * 위가 앞. 그룹은 ▾/▸ 로 접고 펼치고 하위 요소는 들여 쓴다. 목록에서 고르면 캔버스도 같이 고른다(Shift = 여러 개).
  * 끌어다 놓아 순서 변경 · 그룹 머리줄 가운데 = 그 그룹 안 맨 앞 · 그룹 밖 위아래 = 그룹에서 빠짐 · 그룹 머리줄을 끌면 그룹째 */
 const layerTree=window.UIKit?UIKit.treeState():null;   // 접기 상태 (처음엔 접힘, 고른 것의 경로는 열림)
-let layerDragIds=null;
+let layerDragIds=null, _rowAnchor=null;
 function selIdsNow(){const ids=new Set(selSet||[]);if(selLayer!=null)ids.add(selLayer);return [...ids];}
 // 캔버스 클릭 — 아무것도 안 고른 상태면 맨 바깥 그룹, 그룹 안을 고르고 있으면 같은 단계의 형제
 function blogClickTarget(arr,l,cur){
@@ -1536,6 +1537,8 @@ function bindLayerRows(s){
     const gid=it.dataset.gid!=null?realG(it.dataset.gid):null, lid=it.dataset.lid?+it.dataset.lid:null;
     const members=()=>UIKit.groupMembers(LS(s),gid);
     it.onclick=e=>{
+      // 패널 행을 눌러 생긴 변화(선택·접기)는 다시 그린 뒤에도 그 행이 화면상 같은 자리에 있게 목록 스크롤을 보정한다
+      _rowAnchor={key:it.dataset.gid!=null?'g:'+it.dataset.gid:'l:'+it.dataset.lid,top:it.getBoundingClientRect().top};
       if(e.target.dataset.tw!=null&&gid!=null){layerTree.toggle(gid);renderAll();return;}
       if(e.target.dataset.llock){
         const L=LS(s).find(x=>x.id==e.target.dataset.llock);
@@ -1555,7 +1558,9 @@ function bindLayerRows(s){
       renderAll();
     };
     if(gid!=null)it.ondblclick=()=>{const mem=members(),g0=UIKit.gpOf(mem[0]),cur=UIKit.gpnOf(mem[0])[g0.indexOf(gid)];const v=prompt('그룹 이름',cur||'그룹');if(v==null)return;
-      mem.forEach(y=>{const g=UIKit.gpOf(y),n=UIKit.gpnOf(y);n[g.indexOf(gid)]=v.trim()||'그룹';UIKit.setGp(y,g,n);});renderAll();};
+      mem.forEach(y=>{const g=UIKit.gpOf(y),n=UIKit.gpnOf(y);n[g.indexOf(gid)]=v.trim()||'그룹';UIKit.setGp(y,g,n);});
+      _rowAnchor={key:'g:'+it.dataset.gid,top:it.isConnected?it.getBoundingClientRect().top:(props.querySelector(`.layer-item.grp[data-gid="${it.dataset.gid}"]`)||it).getBoundingClientRect().top};
+      renderAll();recordHistory();};
     it.addEventListener('dragstart',e=>{
       const sel=selIdsNow();
       layerDragIds={ids:gid!=null?members().map(y=>y.id):(sel.includes(lid)?sel:[lid]),group:gid};
@@ -1575,7 +1580,14 @@ function bindLayerRows(s){
     });
     it.addEventListener('dragend',()=>{layerDragIds=null;clear();});
   });
-  const cur=box.querySelector('.layer-item.on:not(.grp)');if(cur&&cur.scrollIntoView)cur.scrollIntoView({block:'nearest'});
+  const anc=_rowAnchor; _rowAnchor=null;
+  if(anc){                                       // 패널 행 클릭 → 클릭한 행 위치 고정 (scrollIntoView 생략)
+    const it=[...box.querySelectorAll('.layer-item')].find(x=>(x.dataset.gid!=null?'g:'+x.dataset.gid:'l:'+x.dataset.lid)===anc.key);
+    if(it){ box.scrollTop+=it.getBoundingClientRect().top-anc.top;
+      const d=it.getBoundingClientRect().top-anc.top; if(Math.abs(d)>=0.5)props.scrollTop+=d; }   // 목록 스크롤로 못 맞추면 패널 스크롤로
+    return;
+  }
+  const cur=box.querySelector('.layer-item.on:not(.grp)');if(cur&&cur.scrollIntoView)cur.scrollIntoView({block:'nearest'});   // 캔버스에서 고른 경우 — 행이 보이게
 }
 function lname(l){
   if(l.name&&l.type!=='t')return l.name;               // 피그마에서 가져온 레이어 이름 유지
@@ -1854,6 +1866,8 @@ const ICO={
   ta_l:_I('<rect x="1.5" y="2.5" width="13" height="1.6" rx=".8"/><rect x="1.5" y="6.2" width="8.5" height="1.6" rx=".8"/><rect x="1.5" y="9.9" width="13" height="1.6" rx=".8"/><rect x="1.5" y="13.6" width="6" height="1.6" rx=".8"/>'),
   ta_c:_I('<rect x="1.5" y="2.5" width="13" height="1.6" rx=".8"/><rect x="3.75" y="6.2" width="8.5" height="1.6" rx=".8"/><rect x="1.5" y="9.9" width="13" height="1.6" rx=".8"/><rect x="5" y="13.6" width="6" height="1.6" rx=".8"/>'),
   ta_r:_I('<rect x="1.5" y="2.5" width="13" height="1.6" rx=".8"/><rect x="6" y="6.2" width="8.5" height="1.6" rx=".8"/><rect x="1.5" y="9.9" width="13" height="1.6" rx=".8"/><rect x="8.5" y="13.6" width="6" height="1.6" rx=".8"/>'),
+  grp:_I('<rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2 1.6"/><rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="8" y="8" width="4" height="4" rx="1"/>'),
+  ungrp:_I('<rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.2"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.2"/><path d="M10 2.5h3.5V6M6 13.5H2.5V10" fill="none" stroke="currentColor" stroke-width="1.2"/>'),
   none:_I('<rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 13L13 3" stroke="#dc2626" stroke-width="1.5"/>')
 };
 function fmtNum(v,dec){ v=+v||0; return dec?String(+v.toFixed(dec)):String(Math.round(v)); }
@@ -1983,11 +1997,23 @@ function stripRichColor(html){
   t.content.querySelectorAll('font[color]').forEach(n=>n.removeAttribute('color'));
   return t.innerHTML;
 }
+/* 정렬 6종 · 균등 분배 2종 · 그룹/해제 — 위치·크기(고정) 섹션 안 한 줄. 선택 상태와 관계없이 자리는 늘 같고 비활성만 바뀐다 */
+function alignRowHTML(s,on){
+  const n=on?selCount():0, base=n>=2?'가장 큰 요소 기준':'캔버스 기준';
+  const hasG=on&&LS(s).some(x=>UIKit.gpOf(x).length&&(selSet.includes(x.id)||x.id===selLayer));
+  const b=(k,t,dis)=>`<button class="ib" data-al="${k}" title="${t} · ${base}"${(!on||dis)?' disabled':''}>${ICO[{l:'al_l',cx:'al_cx',r:'al_r',t:'al_t',cy:'al_cy',b:'al_b',dh:'ds_h',dv:'ds_v'}[k]]}</button>`;
+  return `<div class="ib-row al-row" role="group" aria-label="정렬·그룹">${b('l','왼쪽 맞춤')}${b('cx','가로 가운데')}${b('r','오른쪽 맞춤')}<span class="ib-sep"></span>`
+    +`${b('t','위 맞춤')}${b('cy','세로 중간')}${b('b','아래 맞춤')}<span class="ib-sep"></span>`
+    +`${b('dh','가로 균등 분배 (3개 이상)',n<3)}${b('dv','세로 균등 분배 (3개 이상)',n<3)}<span class="ib-sep"></span>`
+    +`<button class="ib" id="grpBtn" title="그룹 (Ctrl+G, 2개 이상)"${n<2?' disabled':''}>${ICO.grp}</button>`
+    +`<button class="ib" id="ungrpBtn" title="그룹 해제 (Ctrl+Shift+G)"${hasG?'':' disabled'}>${ICO.ungrp}</button></div>`;
+}
 /* 선택이 없을 때 — 같은 높이의 비활성 자리표시(레이아웃 점프 방지) */
 function geomPlaceholder(){
   const f=(k,lab,u)=>nf(k,lab,0,{dis:true,unit:u,title:'레이어를 선택하면 편집할 수 있어'}).replace('value="0"','value="" placeholder="–"');
   return `
   <div class="sec" id="geoSec"><h3>위치 · 크기</h3>
+    ${alignRowHTML(slides[cur],false)}
     <div class="g2">${f('gx','X')}${f('gy','Y')}${f('gw','W')}${f('gh','H')}${f('gr','R','°')}${f('gop','투명','%')}</div>
     <label class="chkline"><input type="checkbox" id="pLock" disabled> 잠금 — 캔버스에서 이동·크기 조절 안 됨</label>
     <div class="btn-row" style="margin:6px 0">
@@ -2003,6 +2029,7 @@ function geomSection(l){
   const hv=(l.type==='t'||l.type==='i')?b.h:l.h;
   return `
   <div class="sec" id="geoSec"><h3>위치 · 크기</h3>
+    ${alignRowHTML(slides[cur],true)}
     <div class="g2">
       ${nf('gx','X',l.x,{title:'X 위치 (px)'})}${nf('gy','Y',l.y,{title:'Y 위치 (px)'})}
       ${nf('gw','W',l.w,{title:l.type==='f'?'하단 너비 (px)':l.type==='i'?'너비 (px, 비율 유지)':l.type==='t'?'텍스트 박스 너비 (px)':'너비 (px)'})}
@@ -2079,26 +2106,11 @@ function renderProps(){
   </div>
   <!--ALIGN-->
   <div class="sec">
-    <h3>정렬 · ${selCount()>=2?'가장 큰 요소 기준':'캔버스 기준'}</h3>
-    <div class="ib-row" role="group" aria-label="정렬">
-      <button class="ib" data-al="l" title="왼쪽 맞춤">${ICO.al_l}</button>
-      <button class="ib" data-al="cx" title="가로 가운데">${ICO.al_cx}</button>
-      <button class="ib" data-al="r" title="오른쪽 맞춤">${ICO.al_r}</button>
-      <span class="ib-sep"></span>
-      <button class="ib" data-al="t" title="위 맞춤">${ICO.al_t}</button>
-      <button class="ib" data-al="cy" title="세로 중간">${ICO.al_cy}</button>
-      <button class="ib" data-al="b" title="아래 맞춤">${ICO.al_b}</button>
-      <span class="ib-sep"></span>
-      <button class="ib" data-al="dh" title="가로 균등 분배 (3개 이상)"${selCount()<3?' disabled':''}>${ICO.ds_h}</button>
-      <button class="ib" data-al="dv" title="세로 균등 분배 (3개 이상)"${selCount()<3?' disabled':''}>${ICO.ds_v}</button>
-    </div>
+    <h3>텍스트 · 도형 도구</h3>
     <div class="btn-row">
       <button class="btn small" id="snapTxtBtn">텍스트를 도형 중앙에</button>
       <button class="btn small" id="autoFitBtn" title="도형이 글자 길이 + 패딩에 맞춰 늘고 줄어들게 묶기">🧩 오토 레이아웃</button>
-      <button class="btn small" id="grpBtn" title="그룹 (Ctrl+G)"${selCount()<2?' disabled':''}>그룹</button>
-      <button class="btn small" id="ungrpBtn" title="그룹 해제 (Ctrl+Shift+G)"${LS(s).some(x=>UIKit.gpOf(x).length&&(selSet.includes(x.id)||x.id===selLayer))?'':' disabled'}>그룹 해제</button>
     </div>
-    <div class="hint" style="margin-top:6px">하나만 고르면 캔버스 기준, Shift+클릭·드래그 박스로 여러 개 고르면 가장 큰 요소 기준으로 맞춰.</div>
   </div>
   <!--PROPS-->`;
   const brand=SERVICES[s.service]||'#00e31e';
