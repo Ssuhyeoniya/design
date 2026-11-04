@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>이미지 소스 라이브러리 · 이미지 스튜디오</title>
+<link rel="stylesheet" href="shared/app-header.css?v=20261104-1">
 <style>
   /* 컴포넌트 썸네일·잘린 글자를 그림으로 구울 때 스튜디오와 같은 글꼴을 쓴다 */
 @font-face{font-family:Pretendard;src:url("banner_studio/fonts/Pretendard/Pretendard-Thin.otf")format("opentype");font-weight:100;font-display:swap}
@@ -91,7 +92,7 @@
   .gchip.on b{color:#c9ced6;}
   /* UI 컴포넌트 — 왼쪽 그룹 목록(그룹 안 그룹) + 오른쪽 카드 */
   .ui-wrap{display:flex;gap:18px;align-items:flex-start;}
-  #gtree{flex:0 0 230px;position:sticky;top:70px;max-height:calc(100vh - 90px);overflow:auto;background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px;}
+  #gtree{flex:0 0 230px;position:sticky;top:calc(var(--app-hdr-h,48px) + 12px);max-height:calc(100vh - 90px);overflow:auto;background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px;}
   .ui-main{flex:1;min-width:0;}
   .gt-row{display:flex;align-items:center;gap:5px;padding:6px 8px;border-radius:7px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text-sub);user-select:none;}
   .gt-row:hover{background:#f3f5f8;}
@@ -157,9 +158,9 @@
 </style>
 </head>
 <body>
-  <div id="navbar">
-    <div class="brand">이미지 <span>라이브러리</span></div>
-    <nav class="nav" aria-label="페이지 이동">
+  <div id="navbar" class="app-hdr">
+    <div class="brand app-brand">이미지 <span>라이브러리</span></div>
+    <nav class="nav app-nav" aria-label="페이지 이동">
       <a id="toStudio" href="blog_image_studio_v4_5.html">🎨 블로그 이미지 제작</a>
       <a href="banner_studio/index.html">🪧 배너 스튜디오</a>
       <a class="on" href="library.html">🖼 이미지 소스</a>

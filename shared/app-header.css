@@ -1,0 +1,36 @@
+/* 공통 상단 헤더 고정 — 블로그 이미지 제작 · 배너 스튜디오 · 이미지 소스(library) 세 화면이 같이 쓴다.
+ * 목적: 화면을 오가거나 창 폭·웹폰트 로딩·툴바 내용이 바뀌어도 헤더 높이와 메뉴 3개의 위치·크기가 그대로이게.
+ *  - 높이 고정(줄바꿈 없음, 넘치면 줄어들거나 잘림) · 화면 맨 위에 붙음(sticky)
+ *  - 브랜드 폭 고정 → 메뉴 시작 x 가 세 화면에서 같다
+ *  - 메뉴 항목 폭·높이·글자 크기 px 고정 → 웹폰트가 늦게 들어와도 위치가 안 바뀐다
+ * 각 화면의 색·테마는 건드리지 않고 크기·위치만 고정한다(그래서 !important). */
+:root { --app-hdr-h: 48px; }
+.app-hdr {
+  height: var(--app-hdr-h) !important; min-height: var(--app-hdr-h) !important; max-height: var(--app-hdr-h) !important;
+  box-sizing: border-box !important; padding: 0 14px !important; gap: 8px !important; row-gap: 0 !important;
+  display: flex !important; flex-wrap: nowrap !important; align-items: center !important;
+  position: sticky !important; top: 0 !important; z-index: 60 !important; flex-shrink: 0 !important;
+  overflow: hidden; white-space: nowrap;
+}
+.app-hdr > * { flex-shrink: 0; }
+.app-hdr .app-brand {
+  flex: 0 0 132px !important; width: 132px !important; margin: 0 !important; padding: 0 !important;
+  font: 800 15px/20px 'Pretendard', -apple-system, sans-serif !important; letter-spacing: -.02em !important;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.app-hdr .app-nav {
+  flex: 0 0 auto !important; display: flex !important; gap: 4px !important; padding: 3px !important; margin: 0 !important;
+  height: 34px !important; box-sizing: border-box !important; border-width: 1px !important; border-style: solid !important; border-radius: 8px !important;
+}
+.app-hdr .app-nav > a, .app-hdr .app-nav > button {
+  box-sizing: border-box !important; height: 26px !important; padding: 0 6px !important; margin: 0 !important;
+  font: 700 12.5px/26px 'Pretendard', -apple-system, sans-serif !important; letter-spacing: 0 !important;
+  text-align: center !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;
+  border-radius: 6px !important; display: block !important; text-decoration: none !important;
+}
+.app-hdr .app-nav > :nth-child(1) { width: 138px !important; }
+.app-hdr .app-nav > :nth-child(2) { width: 112px !important; }
+.app-hdr .app-nav > :nth-child(3) { width: 100px !important; }
+/* 헤더 안 나머지 버튼·입력은 폭이 모자라면 줄어든다(줄바꿈 대신) */
+.app-hdr .app-shrink { flex: 0 1 auto !important; min-width: 0 !important; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 900px) { .app-hdr { overflow-x: auto; } }

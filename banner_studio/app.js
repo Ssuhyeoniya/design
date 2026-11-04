@@ -795,7 +795,7 @@ function paintSpecInfo() {
     $('#specInfo').innerHTML = [['노출 위치', sp.placement], ['캔버스', `${S.w}×${S.h}px (자유)`],
       ['포맷', (sp.formats || []).join(' / ')], ['규정 · 검수', '없음']]
       .map(([k, v]) => `<div class="kv"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('');
-    $('#verTag').textContent = '자유 캔버스 · 규정 없음';
+    $('#verTag').textContent = $('#verTag').title = '자유 캔버스 · 규정 없음';   // 헤더 폭이 좁아 말줄임될 때 툴팁으로 전체
     $('#rules').innerHTML = ''; $('#zoneList').innerHTML = '';
     return;
   }
@@ -809,7 +809,7 @@ function paintSpecInfo() {
     ['용량', `${sp.max_kb >= 1024 ? (sp.max_kb / 1024) + 'MB' : sp.max_kb + 'KB'} 이하`],
   ];
   $('#specInfo').innerHTML = rows.map(([k, v]) => `<div class="kv"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('');
-  $('#verTag').textContent = `${sp.track || ''} · ${sp.guideline_version || ''}`;
+  $('#verTag').textContent = $('#verTag').title = `${sp.track || ''} · ${sp.guideline_version || ''}`;
 
   $('#rules').innerHTML = (sp.rules || []).map(r => `<li>${esc(r)}</li>`).join('') +
     (sp.note ? `<li style="color:var(--warn)">${esc(sp.note)}</li>` : '') +

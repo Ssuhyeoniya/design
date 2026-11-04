@@ -5,23 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>배너 스튜디오 · 이미지 스튜디오</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=20261025-2">
+<link rel="stylesheet" href="style.css?v=20261104-1">
+<link rel="stylesheet" href="../shared/app-header.css?v=20261104-1">
 <style id="fontface"></style>
 </head>
 <body>
 <div id="app">
 
-  <div id="top">
-    <span class="brand">배너 스튜디오</span>
-    <nav class="topnav" aria-label="페이지 이동">
+  <div id="top" class="app-hdr">
+    <span class="brand app-brand">배너 스튜디오</span>
+    <nav class="topnav app-nav" aria-label="페이지 이동">
       <a href="../blog_image_studio_v4_5.html">🎨 블로그 이미지 제작</a>
       <a class="on" href="index.html" aria-current="page">🪧 배너 스튜디오</a>
       <a href="../library.html">🖼 이미지 소스</a>
     </nav>
-    <span class="ver" id="verTag">규격 로딩 중…</span>
+    <span class="ver" id="verTag" style="flex:0 1 190px;width:190px;min-width:96px;overflow:hidden;text-overflow:ellipsis">규격 로딩 중…</span>
     <span class="sp"></span>
     <button class="btn" id="btnTheme" title="다크 / 라이트 전환">🌙</button>
-    <input type="text" id="projName" placeholder="프로젝트명" style="width:170px">
+    <input type="text" id="projName" placeholder="프로젝트명" style="flex:0 1 170px;width:170px;min-width:72px">
     <button class="btn" id="btnSave">저장</button>
     <button class="btn" id="btnOpen">열기</button>
     <button class="btn" id="btnReset">초기화</button>
@@ -215,6 +216,6 @@
 <script src="../shared/ppt-remote.js?v=20261015-1"></script>
 <script src="../shared/ui-kit.js?v=20261025-16"></script>
 <script src="plans.js?v=20261015-5"></script>
-<script src="app.js?v=20261025-11"></script>
+<script src="app.js?v=20261104-1"></script>
 </body>
 </html>

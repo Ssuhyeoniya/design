@@ -69,7 +69,7 @@ body {
 button, input, select, textarea { font-family: inherit; font-size: 12px; color: var(--fg); }
 
 /* ---------- 레이아웃 ---------- */
-#app { display: grid; grid-template-rows: 46px 1fr; height: 100vh; }
+#app { display: grid; grid-template-rows: var(--app-hdr-h, 48px) 1fr; height: 100vh; }   /* 헤더 높이는 shared/app-header.css 와 같이 */
 #top {
   display: flex; align-items: center; gap: 10px; padding: 0 14px;
   background: var(--panel); border-bottom: 1px solid var(--line);
