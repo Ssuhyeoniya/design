@@ -1586,7 +1586,7 @@ function bindLayerRows(s){
   // 목록 안쪽 스크롤 우선순위: ① 패널 행 클릭(앵커) — 클릭한 행을 화면상 제자리에 ② 드롭 — 옮긴 행이 보이게
   // ③ 캔버스 등에서 선택이 바뀜 — 고른 행이 보이게(N3) ④ 그 밖의 다시 그리기(삭제·Undo·접기 등) — 직전 스크롤 유지
   { const k=_listKeep; _listKeep=null;
-    if(k&&k.slide===s.id) box.scrollTop=Math.min(k.top,Math.max(0,box.scrollHeight-box.clientHeight)); }   // 짧아졌으면 최대값으로
+    if(k&&k.slide===String(s.id)) box.scrollTop=Math.min(k.top,Math.max(0,box.scrollHeight-box.clientHeight)); }   // 짧아졌으면 최대값으로
   const selKey=s.id+':'+selIdsNow().slice().sort((a,b)=>a-b).join(','), selChanged=selKey!==_lastSelKey; _lastSelKey=selKey;
   const anc=_rowAnchor; _rowAnchor=null;
   const dropTo=_scrollToId; _scrollToId=null;
@@ -2105,7 +2105,7 @@ function renderProps(){
   <div class="sec${_layerFold?' fold':''}" id="layerSec">
     <h3 class="fold-h" id="layerFoldBtn" title="눌러서 접기·펼치기 · 목록 위쪽일수록 화면 앞(PPT·피그마와 같음), Shift+클릭으로 여러 개"><span class="fold-tw">${_layerFold?'▸':'▾'}</span>레이어 <span class="lcnt">${LS(s).length}</span></h3>
     <div class="fold-body">
-    <div class="layer-list">${layerRowsHTML(s)}</div>
+    <div class="layer-list" data-slide="${s.id}">${layerRowsHTML(s)}</div>
     <div class="btn-row">
       <button class="btn small" id="addTextBtn">＋ 텍스트</button>
       <button class="btn small" id="addImgBtn2">＋ 이미지</button>
@@ -2276,7 +2276,8 @@ function renderProps(){
     // 위치·크기 → 페이지 설정(접기) → 레이어(접기) → 선택 요소 속성 → 정렬. 높이가 선택에 따라 바뀌는 것은 레이어 목록보다 아래에만 둔다
     html=geomSection(l||null)+html.slice(0,i1)+html.slice(i1,i2)+html.slice(i3)+html.slice(i2,i3); }
   const keepScroll=props.scrollTop;
-  { const lb=props.querySelector('.layer-list'); _listKeep=lb?{slide:s.id,top:lb.scrollTop}:null; }   // 레이어 목록 안쪽 스크롤도 유지
+  // 레이어 목록 안쪽 스크롤도 유지 — 이 목록을 그렸던 슬라이드(data-slide)를 기록해 두고, 슬라이드가 바뀌었으면 0부터
+  { const lb=props.querySelector('.layer-list'); _listKeep=lb?{slide:lb.dataset.slide,top:lb.scrollTop}:null; }
   props.innerHTML=html;
   // 고른 레이어 행을 scrollIntoView 할 때 위에 붙은 위치·크기 섹션 밑에 가리지 않게
   { const gs=$('#geoSec'); props.style.scrollPaddingTop=gs?gs.offsetHeight+'px':''; }
