@@ -11,9 +11,11 @@ function mockGitHub({ isPrivate = false, withData = false } = {}) {
   const refs = new Map([['main', 'c0']]); if (withData) refs.set('stock-data', 'c0');
   const commits = [];
   let conflictsLeft = 0, n = 0, failAuth = 0, failAll = 0;
+  const calls = { index: 0, raw: 0, all: 0 };
   const srv = http.createServer(async (req, res) => {
     const u = new URL(req.url, 'http://x');
     const send = (s, o, raw) => { res.statusCode = s; if (raw) { res.end(raw); return; } res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)); };
+    calls.all++; if (/index\.json/.test(u.pathname) && req.method === 'GET') calls.index++; if (/raw/.test(req.headers.accept || '')) calls.raw++;
     if (req.headers.authorization !== 'Bearer TEST_TOKEN') return send(401, { message: 'bad token' });
     if (failAuth > 0) { failAuth--; return send(401, { message: 'Bad credentials' }); }
     if (failAll > 0) { failAll--; return send(500, { message: 'boom' }); }
@@ -44,7 +46,7 @@ function mockGitHub({ isPrivate = false, withData = false } = {}) {
     if (req.method === 'DELETE') { if (!f) return send(404, {}); if (j.sha !== f.sha) return send(409, {}); files.delete(key); commits.push({ op: 'del', path, message: j.message, branch: br }); return send(200, {}); }
     send(405, {});
   });
-  return new Promise(rv => srv.listen(0, () => rv({ srv, files, refs, commits, url: `http://127.0.0.1:${srv.address().port}`,
+  return new Promise(rv => srv.listen(0, () => rv({ srv, files, refs, commits, calls, url: `http://127.0.0.1:${srv.address().port}`,
     conflict: k => { conflictsLeft = k; }, authFail: k => { failAuth = k; }, allFail: k => { failAll = k; } })));
 }
 // api 핸들러를 실제 HTTP 로 띄운다
@@ -210,28 +212,64 @@ test('데이터 브랜치 stock-data 자동 생성(main 의 지금 커밋에서)
   } finally { t.close(); }
 });
 
-test('캐시: 목록 s-maxage=15 · 15초 메모리 캐시 · ?t= 우회 · 쓰기 뒤 무효화, 프록시는 하루 immutable', async () => {
+test('캐시: 목록 s-maxage=15 · 메모리 15초 · 요청 헤더 no-cache·인증 없는 ?t= 로는 우회 안 됨 · 비밀번호 맞는 ?t= 만 우회 · 쓰기 뒤 무효화', async () => {
   const t = await setup({ isPrivate: true });
   try {
     const a = await fetch(t.api.url); assert.match(a.headers.get('cache-control'), /s-maxage=15, stale-while-revalidate=60/);
-    const b = await fetch(t.api.url); assert.equal(b.headers.get('x-stock-cache'), 'mem');
-    const c = await fetch(t.api.url + '?t=9'); assert.equal(c.headers.get('cache-control'), 'no-store'); assert.equal(c.headers.get('x-stock-cache'), null);
+    const n0 = t.gh.calls.index;
+    for (let i = 0; i < 10; i++) await fetch(t.api.url + '?t=' + i, { headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } });
+    for (let i = 0; i < 10; i++) await fetch(t.api.url, { cache: 'no-store' });
+    assert.equal(t.gh.calls.index, n0, '인증 없는 우회 시도 20회 → GitHub 목록 호출 0');
+    const wrong = await fetch(t.api.url + '?t=x', { headers: { 'x-stock-password': 'nope' } }); assert.equal(wrong.status, 401);
+    await new Promise(r => setTimeout(r, 1100));
+    const right = await fetch(t.api.url + '?t=y', { headers: { 'x-stock-password': 'pw-123' } });
+    assert.equal(right.status, 200); assert.equal(right.headers.get('cache-control'), 'private, no-store'); assert.equal(t.gh.calls.index, n0 + 1, '비밀번호 맞는 ?t= 만 새로 읽음');
     const j = await (await t.post({ action: 'upload', name: 'c.png', dataUrl: dataUrl(PNG) })).json();
     const d = await fetch(t.api.url); assert.equal(d.headers.get('x-stock-cache'), null); assert.equal((await d.json()).items.length, 1);   // 쓰기 뒤엔 새로 읽음
+    // 프록시: CDN 하루 immutable + 메모리 5분 — 같은 id 두 번째는 GitHub raw 호출 없음
+    const r0 = t.gh.calls.raw;
     const img = await fetch(t.api.url + '?file=' + j.item.id); assert.match(img.headers.get('cache-control'), /s-maxage=86400.*immutable/);
+    await fetch(t.api.url + '?file=' + j.item.id); await fetch(t.api.url + '?file=' + j.item.id);
+    assert.equal(t.gh.calls.raw, r0 + 1, '프록시 메모리 캐시');
   } finally { t.close(); }
 });
 
-test('비밀번호: 해시 비교 · 오답 800ms 지연 · 10분 20회 넘으면 429', async () => {
+test('비밀번호: 해시 비교 · 오답 800ms 지연 · 10분 20회 → 5분 잠금(429, Retry-After≤300)', async () => {
   const t = await setup();
   try {
     const h = require('../api/stock.js')._test;
     assert.equal(h.pwOk('pw-123', 'pw-123'), true); assert.equal(h.pwOk('pw-12', 'pw-123'), false); assert.equal(h.pwOk('', ''), false);
     const t0 = Date.now(); const r = await t.post({ action: 'hide', keys: ['a'] }, 'nope'); const dt = Date.now() - t0;
     assert.equal(r.status, 401); assert.ok(dt >= 780, '오답 지연 ' + dt + 'ms');
-    const many = await Promise.all(Array.from({ length: 19 }, () => t.post({ action: 'hide', keys: ['a'] }, 'nope')));
-    assert.ok(many.every(x => x.status === 401));
-    const over = await t.post({ action: 'hide', keys: ['a'] }, 'nope'); assert.equal(over.status, 429);
-    const evenRight = await t.post({ action: 'hide', keys: ['a'] }, 'pw-123'); assert.equal(evenRight.status, 429);   // 막힌 동안은 맞아도 거부
+    for (let i = 0; i < 19; i++) assert.equal((await t.post({ action: 'hide', keys: ['a'] }, 'nope')).status, 401);
+    const over = await t.post({ action: 'hide', keys: ['a'] }, 'nope'); assert.equal(over.status, 429); assert.ok(+over.headers.get('retry-after') <= 300 && +over.headers.get('retry-after') > 0);
+    assert.match((await over.json()).error, /같은 회사 공인 IP/);
+    assert.equal((await t.post({ action: 'hide', keys: ['a'] }, 'pw-123')).status, 429);   // 잠긴 동안은 맞아도 거부
+  } finally { t.close(); }
+});
+
+test('병렬 대입 차단: 같은 IP 의 동시 비밀번호 확인은 1개만(나머지 즉시 429)', async () => {
+  const t = await setup();
+  try {
+    const rs = await Promise.all(Array.from({ length: 5 }, () => t.post({ action: 'hide', keys: ['a'] }, 'nope')));
+    const st = rs.map(r => r.status).sort();
+    assert.deepEqual(st, [401, 429, 429, 429, 429]);
+  } finally { t.close(); }
+});
+
+test('IP: x-real-ip 우선, 없으면 x-forwarded-for 마지막 값 — 첫 값 위조로 잠금 우회·남 잠그기 불가', async () => {
+  const t = await setup();
+  try {
+    const h = require('../api/stock.js')._test;
+    assert.equal(h.clientIp({ headers: { 'x-real-ip': '9.9.9.9', 'x-forwarded-for': '1.1.1.1, 9.9.9.9' }, socket: {} }), '9.9.9.9');
+    assert.equal(h.clientIp({ headers: { 'x-forwarded-for': '1.1.1.1, 2.2.2.2' }, socket: {} }), '2.2.2.2');
+    assert.equal(h.clientIp({ headers: {}, socket: { remoteAddress: '3.3.3.3' } }), '3.3.3.3');
+    // 같은 x-real-ip 에서 첫 XFF 값을 바꿔 가며 틀려도 결국 잠김
+    const post = (pw, xff) => fetch(t.api.url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-stock-password': pw, 'x-real-ip': '7.7.7.7', 'x-forwarded-for': xff + ', 7.7.7.7' }, body: '{"action":"hide","keys":["a"]}' });
+    for (let i = 0; i < 20; i++) await post('nope', '10.0.0.' + i);
+    assert.equal((await post('pw-123', '10.9.9.9')).status, 429);
+    // 다른 사람(x-real-ip 다름)은 영향 없음 — 위조 XFF 로 남을 잠글 수 없음
+    const other = await fetch(t.api.url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-stock-password': 'pw-123', 'x-real-ip': '8.8.8.8', 'x-forwarded-for': '7.7.7.7' }, body: '{"action":"hide","keys":["a"]}' });
+    assert.equal(other.status, 200);
   } finally { t.close(); }
 });

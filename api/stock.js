@@ -7,21 +7,21 @@
  *   GITHUB_BRANCH   기본 'stock-data' — 이미지 커밋을 main 과 분리(main 배포·프로덕션 흐름을 건드리지 않음). 없으면 기본 브랜치에서 자동 생성
  *   STOCK_DIR       기본 'assets/user-stock'       GITHUB_API     기본 'https://api.github.com' (테스트용)
  *
- * GET  /api/stock            → { enabled, writable, public, branch, items:[…], hidden:[…] }   (CDN s-maxage=15, 인스턴스 메모리 15초. ?t= 가 있으면 캐시 우회)
- * GET  /api/stock?file=<id>  → 이미지 바이트 (비공개 저장소용 프록시, id 는 불변이라 하루 캐시)
+ * GET  /api/stock            → { enabled, writable, public, branch, items:[…], hidden:[…] }   (CDN s-maxage=15, 인스턴스 메모리 15초. 비밀번호가 맞는 ?t= 요청만 우회)
+ * GET  /api/stock?file=<id>  → 이미지 바이트 (비공개 저장소용 프록시, id 는 불변이라 CDN 하루 캐시 + 인스턴스 메모리 5분)
  * POST /api/stock  (헤더 x-stock-password)  { action:'upload'|'delete'|'hide', … }
  *
  * 오류 코드: 401 = 비밀번호 틀림(이것만) · 429 = 비밀번호 실패가 너무 많음 · 400 = 잘못된 요청 · 413/415 = 크기/형식
  *           502 + code:'upstream_auth' = GitHub 토큰 문제(만료·권한) · 502 + code:'upstream' = 그 밖의 GitHub 오류
  * 크기 3MB: Vercel 함수 요청 본문 한도 4.5MB, base64 로 보내면 약 1.37배.
- * 비밀번호 실패 제한(10분 20회)은 함수 인스턴스 메모리 기준이라 인스턴스가 여럿이면 각각 따로 센다.
+ * 비밀번호 실패 제한(10분 20회 → 5분 잠금, IP 당 동시 확인 1개)은 함수 인스턴스 메모리 기준이라 인스턴스가 여럿이면 각각 따로 센다.
  */
 'use strict';
 const crypto = require('crypto');
 
 const MAX_BYTES = 3 * 1024 * 1024;
-const LIST_TTL = 15 * 1000;
-const FAIL_WINDOW = 10 * 60 * 1000, FAIL_MAX = 20, FAIL_DELAY = 800;
+const LIST_TTL = 15 * 1000, FILE_TTL = 5 * 60 * 1000, FILE_CACHE_MAX = 24 * 1024 * 1024;
+const FAIL_WINDOW = 10 * 60 * 1000, FAIL_MAX = 20, FAIL_DELAY = 800, LOCK_MS = 5 * 60 * 1000, FAIL_MAP_MAX = 5000;
 const cfg = () => ({
   token: process.env.GITHUB_TOKEN || '',
   password: process.env.STOCK_PASSWORD || '',
@@ -109,7 +109,10 @@ async function updateJSON(g, path, empty, mutate, message, tries = 6) {   // sha
 
 // ── 인스턴스 메모리 상태 (함수 인스턴스가 살아 있는 동안만)
 let publicCache = null, branchReady = null, listCache = null;
-const fails = new Map();   // ip → [실패 시각…]
+const fileCache = new Map();   // id → { buf, mime, at } — 프록시 이미지 5분, 합계 24MB 상한(오래된 것부터 버림)
+let fileCacheBytes = 0;
+const fails = new Map();       // ip → { t:[실패 시각…], lock:잠금 해제 시각 }
+const inflight = new Set();    // 지금 비밀번호 확인 중인 ip
 async function isPublic(c, g) {
   if (publicCache && Date.now() - publicCache.t < 10 * 60 * 1000) return publicCache;
   try { const info = await g.repoInfo(); publicCache = { v: info.private === false, def: info.default_branch || 'main', t: Date.now() }; }
@@ -126,9 +129,45 @@ async function ensureBranch(c, g) {
   }
   branchReady = c.branch;
 }
-const clientIp = req => String((req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || '?');
-function tooMany(ip) { const now = Date.now(), a = (fails.get(ip) || []).filter(t => now - t < FAIL_WINDOW); fails.set(ip, a); return a.length >= FAIL_MAX; }
-function noteFail(ip) { const a = fails.get(ip) || []; a.push(Date.now()); fails.set(ip, a); }
+// 클라이언트 IP — x-forwarded-for 의 '첫' 값은 요청한 사람이 마음대로 넣을 수 있어(위조로 잠금 우회·남의 IP 잠그기) 쓰지 않는다.
+// Vercel 은 x-real-ip 를 직접 설정하므로(클라이언트가 보낸 값을 덮어씀) 그것을 먼저 쓰고, 없으면 x-forwarded-for 의 '마지막' 값
+// (가장 가까운 프록시가 붙인 값)을 쓴다. 둘 다 없으면 소켓 주소.
+function clientIp(req) {
+  const real = String(req.headers['x-real-ip'] || '').trim(); if (real) return real;
+  const xff = String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (xff.length) return xff[xff.length - 1];
+  return String((req.socket && req.socket.remoteAddress) || '?');
+}
+function pruneFails(now) {
+  for (const [ip, f] of fails) { f.t = f.t.filter(x => now - x < FAIL_WINDOW); if (!f.t.length && !(f.lock > now)) fails.delete(ip); }
+  if (fails.size > FAIL_MAP_MAX) { const old = [...fails.entries()].sort((a, b) => (a[1].t[0] || 0) - (b[1].t[0] || 0)); for (const [ip] of old.slice(0, fails.size - FAIL_MAP_MAX)) fails.delete(ip); }
+}
+function lockedFor(ip) { const f = fails.get(ip), now = Date.now(); return f && f.lock > now ? Math.ceil((f.lock - now) / 1000) : 0; }
+function noteFail(ip) {
+  const now = Date.now(); if (fails.size > FAIL_MAP_MAX || Math.random() < 0.05) pruneFails(now);
+  const f = fails.get(ip) || { t: [], lock: 0 }; f.t = f.t.filter(x => now - x < FAIL_WINDOW); f.t.push(now);
+  if (f.t.length >= FAIL_MAX) { f.lock = now + LOCK_MS; f.t = []; }   // 10분에 20회 → 5분 잠금
+  fails.set(ip, f);
+}
+// 비밀번호 확인 — IP 마다 동시에 1개만(병렬로 여러 개를 던져 지연·횟수 제한을 피하는 대입을 막는다).
+// 실패 횟수에 비례해 지연을 늘리는 방식은 병렬 요청에는 효과가 없고 정상 사용자의 오타 지연만 커져서, 동시 1개 제한을 골랐다.
+// 결과: 'ok' | 'bad'(401) | 'locked'(429) | 'busy'(429)
+async function checkPassword(req, c) {
+  const ip = clientIp(req);
+  if (lockedFor(ip)) return { r: 'locked', ip };
+  if (inflight.has(ip)) return { r: 'busy', ip };
+  inflight.add(ip);
+  try {
+    if (pwOk(req.headers['x-stock-password'] || '', c.password)) return { r: 'ok', ip };
+    noteFail(ip); await new Promise(r => setTimeout(r, FAIL_DELAY));
+    return { r: 'bad', ip };
+  } finally { inflight.delete(ip); }
+}
+function deny(res, chk) {
+  if (chk.r === 'locked') return send(res, 429, { error: `비밀번호를 너무 많이 틀렸어 — ${Math.ceil(lockedFor(chk.ip) / 60)}분 뒤 다시 시도해 줘 (같은 회사 공인 IP 를 쓰면 함께 잠길 수 있어)` }, { 'Retry-After': String(lockedFor(chk.ip)) });
+  if (chk.r === 'busy') return send(res, 429, { error: '이전 요청을 확인하는 중이야 — 잠시 뒤 다시 시도해 줘' }, { 'Retry-After': '1' });
+  return send(res, 401, { error: '비밀번호가 맞지 않아' });
+}
 
 async function readBody(req) {
   let raw;
@@ -158,32 +197,46 @@ async function handler(req, res) {
       const file = url.searchParams.get('file');
       if (file) {
         if (!/^[a-z0-9-]{6,64}$/.test(file)) return send(res, 400, { error: '잘못된 id' });
-        const idx = (await g.getJSON(idxPath)).data || { items: [] };
-        const it = (idx.items || []).find(x => x.id === file); if (!it) return send(res, 404, { error: '없는 이미지' });
-        const buf = await g.getRaw(it.path);
-        res.statusCode = 200; res.setHeader('Content-Type', MIME[it.ext] || 'application/octet-stream');
+        let hit = fileCache.get(file);
+        if (!hit || Date.now() - hit.at > FILE_TTL) {
+          if (hit) { fileCacheBytes -= hit.buf.length; fileCache.delete(file); }
+          const idx = listCache && Date.now() - listCache.at < LIST_TTL ? { items: listCache.raw } : ((await g.getJSON(idxPath)).data || { items: [] });
+          const it = (idx.items || []).find(x => x.id === file); if (!it) return send(res, 404, { error: '없는 이미지' });
+          hit = { buf: await g.getRaw(it.path), mime: MIME[it.ext] || 'application/octet-stream', at: Date.now() };
+          if (hit.buf.length <= FILE_CACHE_MAX / 4) {
+            fileCache.set(file, hit); fileCacheBytes += hit.buf.length;
+            for (const [k, v] of fileCache) { if (fileCacheBytes <= FILE_CACHE_MAX) break; fileCache.delete(k); fileCacheBytes -= v.buf.length; }   // 오래된 것부터
+          }
+        }
+        const buf = hit.buf;
+        res.statusCode = 200; res.setHeader('Content-Type', hit.mime);
         res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, immutable'); res.setHeader('X-Content-Type-Options', 'nosniff');
         return res.end(buf);
       }
-      const bust = url.searchParams.has('t') || /no-cache/.test(req.headers['cache-control'] || '');
-      if (!bust && listCache && Date.now() - listCache.at < LIST_TTL) return send(res, 200, listCache.body, { 'Cache-Control': 's-maxage=15, stale-while-revalidate=60', 'X-Stock-Cache': 'mem' });
+      // 캐시 우회는 비밀번호가 맞는 요청의 ?t= 만(방금 쓴 화면이 최신을 받게). 요청 헤더(no-cache·Pragma)나 인증 없는 ?t= 는 무시한다
+      // — 누구나 우회하면 GitHub 호출이 요청 수만큼 늘어난다. 우회 시도도 비밀번호 확인(지연·횟수 제한)을 거친다
+      let bust = false;
+      if (url.searchParams.has('t') && req.headers['x-stock-password'] && c.password) {
+        const chk = await checkPassword(req, c); if (chk.r !== 'ok') return deny(res, chk); bust = true;
+      }
+      const fresh = listCache && Date.now() - listCache.at < LIST_TTL;
+      if (fresh && !(bust && Date.now() - listCache.at > 1000)) return send(res, 200, listCache.body, { 'Cache-Control': bust ? 'private, no-store' : 's-maxage=15, stale-while-revalidate=60', 'X-Stock-Cache': 'mem' });
       const [idx, hid, pub] = await Promise.all([g.getJSON(idxPath), g.getJSON(hidPath), isPublic(c, g)]);
       const items = ((idx.data && idx.data.items) || []).map(it => Object.assign({}, it, {
         url: pub.v ? `https://raw.githubusercontent.com/${c.repo}/${encodeURIComponent(c.branch)}/${it.path.split('/').map(encodeURIComponent).join('/')}` : `/api/stock?file=${it.id}`,
       }));
       const body = { enabled: true, writable: !!c.password, public: pub.v, branch: c.branch, items, hidden: (hid.data && hid.data.keys) || [] };
-      listCache = { at: Date.now(), body };
-      return send(res, 200, body, { 'Cache-Control': bust ? 'no-store' : 's-maxage=15, stale-while-revalidate=60' });
+      listCache = { at: Date.now(), body, raw: (idx.data && idx.data.items) || [] };
+      return send(res, 200, body, { 'Cache-Control': bust ? 'private, no-store' : 's-maxage=15, stale-while-revalidate=60' });
     }
     if (req.method !== 'POST') return send(res, 405, { error: 'GET·POST 만 돼' }, { Allow: 'GET, POST' });
     if (!c.password) return send(res, 403, { error: '서버에 STOCK_PASSWORD 가 없어 업로드·삭제가 꺼져 있어' });
-    const ip = clientIp(req);
-    if (tooMany(ip)) return send(res, 429, { error: '비밀번호를 너무 많이 틀렸어 — 10분 뒤 다시 시도해 줘' }, { 'Retry-After': '600' });
-    if (!pwOk(req.headers['x-stock-password'] || '', c.password)) { noteFail(ip); await new Promise(r => setTimeout(r, FAIL_DELAY)); return send(res, 401, { error: '비밀번호가 맞지 않아' }); }
+    const chk = await checkPassword(req, c); if (chk.r !== 'ok') return deny(res, chk);
     const body = await readBody(req);
     if (!['upload', 'delete', 'hide'].includes(body.action)) return send(res, 400, { error: '알 수 없는 action' });
     await ensureBranch(c, g);
     listCache = null;
+    if (body.action === 'delete') { /* 지운 이미지는 프록시 메모리 캐시에서도 뺀다 */ (body.ids || []).forEach(id => { const h = fileCache.get(String(id)); if (h) { fileCacheBytes -= h.buf.length; fileCache.delete(String(id)); } }); }
     if (body.action === 'upload') {
       const m = /^data:([^;,]*)(;base64)?,(.*)$/s.exec(String(body.dataUrl || ''));
       if (!m || !m[2]) return send(res, 400, { error: 'dataUrl(base64) 이 필요해' });
@@ -228,4 +281,4 @@ async function handler(req, res) {
   }
 }
 module.exports = handler;
-module.exports._test = { sniff, cleanName, pwOk, MAX_BYTES, reset: () => { publicCache = null; branchReady = null; listCache = null; fails.clear(); } };
+module.exports._test = { sniff, cleanName, pwOk, clientIp, MAX_BYTES, reset: () => { publicCache = null; branchReady = null; listCache = null; fails.clear(); inflight.clear(); fileCache.clear(); fileCacheBytes = 0; }, failsSize: () => fails.size };
