@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="app-build" content="20261104-5">
 <title>이미지 소스 라이브러리 · 이미지 스튜디오</title>
 <link rel="stylesheet" href="shared/app-header.css?v=20261104-4">
 <style>
@@ -256,7 +257,7 @@
 
 <script src="shared/ui-kit.js?v=20261025-16"></script>
 <script src="shared/stock-kit.js?v=20261104-1"></script>
-<script src="shared/app-header.js?v=20261104-2"></script>
+<script src="shared/app-header.js?v=20261104-3"></script>
 <script>
 const $=s=>document.querySelector(s);
 
@@ -970,16 +971,7 @@ $('#stkRestore').onclick=()=>stkApply('restore',STK.filter(i=>stkSel.has(i.key))
 if(window.StockKit)StockKit.onChange(()=>{ if(tab==='stock')renderStock(); });
 try{const t0=localStorage.getItem('libTab');if(t0==='ui'||t0==='stock'){tab=t0;}}catch(e){}
 switchTab(tab);
-// 새 버전 알림 — 브라우저가 예전 페이지를 기억해 두면 예전 가져오기 코드로 돌아간다. 서버의 최신 페이지와 비교해 다르면 새로고침을 권한다
-(async()=>{try{
-  const mine=(document.querySelector('script[src*="ui-kit.js"]')||{}).getAttribute?.('src')||'';
-  const html=await (await fetch(location.pathname+'?_='+Date.now(),{cache:'no-store'})).text();
-  const live=(html.match(/src="(shared\/ui-kit\.js\?v=[^"]+)"/)||[])[1];
-  if(live&&mine&&live!==mine){const b=document.createElement('div');
-    b.style.cssText='position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:9999;background:#111827;color:#fff;padding:10px 14px;border-radius:10px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.25)';
-    b.innerHTML='새 버전이 있어 — <a href="#" style="color:#93c5fd;font-weight:700">새로고침</a> 후 다시 가져오면 피그마와 똑같이 나와';
-    b.querySelector('a').onclick=e=>{e.preventDefault();location.replace(location.pathname+'?v='+Date.now()+location.hash);};document.body.appendChild(b);}
-}catch(e){}})();
+// 새 버전 알림은 공용(shared/app-header.js · version.json)으로 옮겼다
 </script>
 </body>
 </html>

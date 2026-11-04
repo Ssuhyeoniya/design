@@ -60,7 +60,33 @@
     fit();
     h._appHdrFit = fit;
   }
+  /* 상단 페이지 메뉴는 항상 같은 탭으로 — Ctrl·Shift·Cmd 를 누른 채 클릭하거나 가운데(휠) 클릭해도 새 탭·새 창을 열지 않는다 */
+  function sameTabNav() {
+    const go = (e, a) => { e.preventDefault(); e.stopPropagation(); location.href = a.href; };
+    document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('.app-nav a[href]'); if (!a) return; if (e.button === 0 && (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) go(e, a); }, true);
+    document.addEventListener('auxclick', e => { const a = e.target.closest && e.target.closest('.app-nav a[href]'); if (a && e.button === 1) go(e, a); }, true);
+    document.addEventListener('mousedown', e => { if (e.button === 1 && e.target.closest && e.target.closest('.app-nav a[href], .app-nav button')) e.preventDefault(); }, true);   // 휠 클릭 자동 스크롤 방지
+    document.addEventListener('auxclick', e => { const b = e.target.closest && e.target.closest('.app-nav button'); if (b && e.button === 1) { e.preventDefault(); b.click(); } }, true);
+  }
+  /* 새 버전 알림 — 브라우저·CDN 이 예전 HTML 을 보여 주면(예: 메뉴가 새 탭으로 열리던 예전 화면) 새로고침을 권한다.
+   * 화면마다 <meta name="app-build"> 를 넣고, 같은 값을 루트 version.json(캐시 안 함)에 둔다. 다르면 배너. */
+  function versionCheck() {
+    const mine = (document.querySelector('meta[name="app-build"]') || {}).content; if (!mine) return;
+    const me = _scriptAtLoad || [...document.scripts].find(x => /shared\/app-header\.js/.test(x.src));
+    const url = new URL('../version.json', me && me.src ? me.src : location.href);
+    fetch(url.href + '?_=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(v => {
+      if (!v || !v.build || v.build === mine) return;
+      const b = document.createElement('div'); b.id = 'appVerBanner'; b.setAttribute('role', 'status');
+      b.style.cssText = 'position:fixed;left:50%;top:56px;transform:translateX(-50%);z-index:9999;background:#111827;color:#fff;padding:10px 14px;border-radius:10px;font:600 13px/1.4 Pretendard,-apple-system,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.25)';
+      b.innerHTML = '새 버전이 있어요 — <a href="#" style="color:#93c5fd;font-weight:800">새로고침</a> <span style="opacity:.6;font-weight:400">(지금 ' + mine + ' · 최신 ' + String(v.build).replace(/[<>&"]/g, '') + ')</span>';
+      b.querySelector('a').onclick = e => { e.preventDefault(); location.replace(location.pathname + '?v=' + Date.now() + location.hash); };
+      document.body.appendChild(b);
+    }).catch(() => { });
+  }
+  const _scriptAtLoad = document.currentScript;
+  sameTabNav();
   const run = () => document.querySelectorAll('.app-hdr, .app-tools').forEach(setup);   // .app-tools = 블로그의 헤더 아래 도구 줄
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+  const boot = () => { run(); versionCheck.call(null); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
   window.AppHeader = { refit: () => document.querySelectorAll('.app-hdr, .app-tools').forEach(h => h._appHdrFit && h._appHdrFit()) };
 })();

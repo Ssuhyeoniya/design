@@ -1,0 +1,40 @@
+{
+  "headers": [
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/(.*\\.html)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/banner_studio/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/version.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
+}
