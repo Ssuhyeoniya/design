@@ -614,6 +614,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
 <script src="shared/ppt-remote.js?v=20261015-1"></script>
 <script src="shared/ui-kit.js?v=20261025-16"></script>
+<script src="shared/stock-kit.js?v=20261104-1"></script>
 <script>
 /* ================= 상수/데이터 ================= */
 const SERVICES = {
@@ -4322,10 +4323,10 @@ async function loadStockStatic(){
   const getJ=u=>fetch(u,{cache:'no-cache'}).then(r=>r.ok?r.json():null).catch(()=>null);
   const [lib,man]=await Promise.all([getJ('assets/campaign-library/metadata/assets.json'),getJ('banner_studio/stock/manifest.json')]);
   const libItems=((lib&&lib.assets)||[]).filter(a=>a.reusable!==false).map(a=>({
-    name:a.fileName,category:'라이브러리 · '+a.category,url:encPath(a.path),kb:Math.round((a.bytes||0)/1024),
+    key:a.path,name:a.fileName,category:'라이브러리 · '+a.category,url:encPath(a.path),kb:Math.round((a.bytes||0)/1024),
     builtin:true,assetId:a.assetId,description:a.description}));
   const inLib=new Set(libItems.map(i=>i.url));
-  const base=((man&&man.items)||[]).map(i=>({name:i.name,category:i.category,kb:i.kb,builtin:true,
+  const base=((man&&man.items)||[]).map(i=>({key:'banner_studio/stock/'+i.rel,name:i.name,category:i.category,kb:i.kb,builtin:true,
     url:'banner_studio/stock/'+encPath(i.rel)})).filter(i=>!inLib.has(i.url));
   stockStatic={lib:libItems,base};
   return stockStatic;
@@ -4335,9 +4336,11 @@ async function loadStock(){
   let mine=[],stars=[];
   try{mine=(await bsDo('readonly',os=>os.getAll())).map(i=>({id:i.id,name:i.name,category:i.category||'기본',url:i.src,kb:i.kb,ts:i.ts||0})).sort((a,b)=>b.ts-a.ts);}catch(e){}
   try{stars=(await assetList()).map(a=>({name:a.name,category:'⭐ 블로그 보관함',url:a.src,builtin:true,star:true}));}catch(e){}
-  STOCK=[...st.lib,...mine,...st.base,...stars];
+  const hid=window.StockKit?StockKit.hiddenSet():new Set();   // 이미지 소스 페이지에서 숨긴 저장소 기본 이미지는 빼고
+  const lib=st.lib.filter(i=>!hid.has(i.key)), base=st.base.filter(i=>!hid.has(i.key));
+  STOCK=[...lib,...mine,...base,...stars];
   $('#stockCnt').textContent=STOCK.length?'· '+STOCK.length+'장':'';
-  $('#stockSrc').textContent=[['라이브러리',st.lib.length],['기본',st.base.length],['내 이미지',mine.length]].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(' · ')||'배너 스튜디오와 같은 보관함';
+  $('#stockSrc').textContent=[['라이브러리',lib.length],['기본',base.length],['내 이미지',mine.length]].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(' · ')||'배너 스튜디오와 같은 보관함';
   const sel=$('#stockCat'),curC=sel.value;
   const cats=[...new Set(STOCK.map(i=>i.category))].sort();
   sel.innerHTML='<option value="">전체 카테고리</option>'+cats.map(c=>`<option${c===curC?' selected':''}>${esc(c)}</option>`).join('');
@@ -4364,7 +4367,7 @@ function paintStock(){
       ev.stopPropagation();
       const yes=await askConfirm(`"${it.name}"\n\n공통 보관함에서 영구 삭제할까요?\n배너 스튜디오에서도 함께 사라져.`,'영구 삭제');
       if(!yes)return;
-      try{await bsDo('readwrite',os=>os.delete(it.id));}catch(err){alert('삭제 실패: '+err.message);}
+      try{await bsDo('readwrite',os=>os.delete(it.id));if(window.StockKit)StockKit.notify('mine');}catch(err){alert('삭제 실패: '+err.message);}
       loadStock();
     };
     g.appendChild(d);
@@ -4431,6 +4434,7 @@ $('#stockFold').onclick=()=>{
 try{if(localStorage.getItem('blogStockFold')){$('#stockbar').classList.add('fold');$('#stockFold').textContent='▶';}}catch(e){}
 // 다른 탭(배너 스튜디오)에서 등록한 이미지도 돌아오면 반영
 window.addEventListener('focus',()=>{loadStock();});
+if(window.StockKit)StockKit.onChange(()=>loadStock());   // 이미지 소스 페이지(다른 탭)에서 삭제·숨기기·복원하면 바로 반영
 loadStock();
 
 /* ================= UI 컴포넌트 (shared/ui-kit.js — 배너 스튜디오와 공용) =================

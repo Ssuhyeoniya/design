@@ -1504,7 +1504,7 @@ async function loadLibrary() {
   library = await fetch(LIB_REG, { cache: 'no-cache' }).then(r => r.ok ? r.json() : { assets: [] }).catch(() => ({ assets: [] }));
   // 라이브러리 이미지는 원본 파일을 그대로 가리킨다 — 보관함이나 배너별로 복제하지 않는다
   libraryStock = (library.assets || []).filter(a => a.reusable !== false).map(a => ({
-    rel: a.path, name: a.fileName, category: '라이브러리 · ' + a.category,
+    key: a.path, rel: a.path, name: a.fileName, category: '라이브러리 · ' + a.category,
     kb: Math.round((a.bytes || 0) / 1024), builtin: true, mtime: 0,
     url: BannerPlans.assetUrl(a, ROOT), assetId: a.assetId, description: a.description,
   }));
@@ -1513,7 +1513,7 @@ async function loadStock() {
   if (!builtinStock) {
     const m = await fetch('stock/manifest.json').then(r => r.json()).catch(() => ({ items: [] }));
     builtinStock = (m.items || []).map(i => ({
-      ...i, builtin: true, mtime: 0,
+      ...i, builtin: true, mtime: 0, key: 'banner_studio/stock/' + i.rel,
       url: 'stock/' + i.rel.split('/').map(encodeURIComponent).join('/'),
     }));
   }
@@ -1535,7 +1535,9 @@ async function loadStock() {
   } catch { /* 이미지 소스 저장소가 아직 없으면 건너뛴다 */ }
   // 라이브러리에 등록된 기본 스톡은 라이브러리 항목(Asset ID 있음)으로만 보여준다
   const inLib = new Set(libraryStock.map(i => i.url));
-  stock = [...libraryStock, ...srcs, ...mine, ...builtinStock.filter(i => !inLib.has(i.url))];
+  // 이미지 소스 페이지에서 숨긴 저장소 기본 이미지(라이브러리·기본 스톡)는 빼고 보여준다 (shared/stock-kit.js)
+  const hid = window.StockKit ? StockKit.hiddenSet() : new Set();
+  stock = [...libraryStock.filter(i => !hid.has(i.key)), ...srcs, ...mine, ...builtinStock.filter(i => !inLib.has(i.url) && !hid.has(i.key))];
   const categories = [...new Set(stock.map(i => i.category))].sort();
   $('#stockDir').textContent = '라이브러리 ' + libraryStock.length + '장 · 기본 ' + builtinStock.length + '장 + 내 이미지 ' + mine.length + '장' +
     (srcs.length ? ' + 이미지 소스 ' + srcs.length + '장' : '');
@@ -1564,7 +1566,7 @@ function paintStock() {
     if (!it.builtin) d.querySelector('.del').onclick = async ev => {
       ev.stopPropagation();
       if (!confirm(`보관함에서 삭제합니다.\n\n${it.rel}\n\n이 브라우저 보관함에서 영구 삭제됩니다. 계속할까요?`)) return;
-      try { await dbDel('stock', it.id); toast('삭제했습니다'); }
+      try { await dbDel('stock', it.id); toast('삭제했습니다'); if (window.StockKit) StockKit.notify('mine'); }
       catch (e) { toast('삭제 실패 — ' + e.message, true); }
       loadStock();
     };
@@ -2209,6 +2211,7 @@ async function boot() {
   if (window.UIKit) UIKit.onFont = () => { if (S) { render(); paintChecks(); } };   // 글꼴을 받으면 다시 그린다 (줄바꿈·폭도 다시 잰다)
   // 이미지 소스 페이지·다른 탭에서 바뀐 UI·이미지를 돌아올 때 다시 읽는다
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadUi(); loadStock(); } });
+  if (window.StockKit) StockKit.onChange(() => loadStock());   // 이미지 소스 페이지에서 삭제·숨기기·복원하면 바로 반영
 
   await loadLibrary();
   await loadStock();

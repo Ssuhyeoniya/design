@@ -64,6 +64,26 @@
   .src-card .sc-acts button:hover{background:#f3f4f6;}
   .src-card .sc-acts .sc-del{color:var(--danger);border-color:var(--danger);}
   .src-card .sc-acts .sc-del:hover{background:var(--danger);color:#fff;}
+  /* 스톡 이미지 탭 */
+  #actStock{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 26px;background:var(--panel);border-bottom:1px solid var(--border);}
+  #actStock .btn{white-space:nowrap;}
+  .stk-note{font-size:12px;color:var(--text-sub);background:#f6f7f9;border:1px solid var(--border);border-radius:10px;padding:10px 13px;margin-bottom:14px;line-height:1.7;}
+  .stk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;}
+  .stk-card{position:relative;border:1.5px solid var(--border);border-radius:10px;background:#fff;overflow:hidden;cursor:pointer;}
+  .stk-card.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,104,255,.18);}
+  .stk-card.hid{opacity:.5;}
+  .stk-card .th{height:118px;background:repeating-conic-gradient(#f1f2f5 0 25%,#fff 0 50%) 0 0/14px 14px;display:flex;align-items:center;justify-content:center;}
+  .stk-card .th img{max-width:92%;max-height:108px;object-fit:contain;}
+  .stk-card .meta{padding:7px 9px 9px;}
+  .stk-card .nm{font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .stk-card .sub{font-size:10.5px;color:var(--text-faint);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .stk-card .badge{position:absolute;left:7px;top:7px;font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;color:#fff;}
+  .stk-card .badge.lib{background:#6b5bd2;} .stk-card .badge.base{background:#4b5563;} .stk-card .badge.mine{background:#00a316;}
+  .stk-card .badge.h{left:auto;right:7px;background:#b45309;}
+  .stk-card input.ck{position:absolute;right:7px;bottom:46px;width:16px;height:16px;}
+  .stk-card .act{position:absolute;right:6px;top:6px;border:1px solid var(--border-strong);background:#fff;border-radius:6px;font:inherit;font-size:11px;font-weight:600;padding:2px 7px;cursor:pointer;opacity:0;}
+  .stk-card:hover .act{opacity:1;}
+  .stk-card .act.del{color:var(--danger);border-color:var(--danger);}
   .empty{padding:70px 0;text-align:center;color:var(--text-faint);font-size:13px;line-height:1.9;}
   .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff;}
   .btn.pri:hover{background:#0057d9;}
@@ -168,6 +188,7 @@
     <div id="tabs" role="tablist">
       <button class="on" data-tab="img">이미지</button>
       <button data-tab="ui">🧩 UI 컴포넌트</button>
+      <button data-tab="stock">📦 스톡 이미지</button>
     </div>
     <span class="cnt" id="count"></span>
     <div class="actions" id="actImg">
@@ -180,6 +201,17 @@
       <button class="btn small" id="uiImport" title="다른 PC·팀원이 내보낸 UI 컴포넌트 파일(.json) 가져오기">⤒ 가져오기</button>
       <button class="btn small" id="uiExportAll" title="모든 UI 컴포넌트를 .json 파일로 내려받기">⤓ 전체 내보내기</button>
     </div>
+  </div>
+  <!-- 스톡 이미지 탭 도구 줄 — 헤더(높이 고정)에 넣으면 넘치므로 헤더 아래 별도 줄 -->
+    <div id="actStock" style="display:none">
+    <input type="search" id="stkQ" placeholder="이름·카테고리·ID 검색" style="width:170px;padding:6px 9px;border:1px solid var(--border-strong);border-radius:8px;font:inherit;font-size:12px">
+    <select id="stkSrc" style="padding:6px 8px;border:1px solid var(--border-strong);border-radius:8px;font:inherit;font-size:12px">
+      <option value="">전체 출처</option><option value="lib">라이브러리</option><option value="base">기본 스톡</option><option value="mine">내 이미지</option>
+    </select>
+    <label style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="stkShowHidden"> 숨긴 항목 보기</label>
+    <button class="btn small" id="stkAll" title="지금 보이는 항목 전체 선택/해제">☑ 전체 선택</button>
+    <button class="btn small danger" id="stkDel" disabled>선택 삭제·숨기기</button>
+    <button class="btn small" id="stkRestore" disabled>선택 복원</button>
   </div>
   <input type="file" id="upInput" accept="image/*" multiple hidden>
   <input type="file" id="uiImportInput" accept=".json,application/json" hidden>
@@ -223,6 +255,7 @@
   </div></div>
 
 <script src="shared/ui-kit.js?v=20261025-16"></script>
+<script src="shared/stock-kit.js?v=20261104-1"></script>
 <script>
 const $=s=>document.querySelector(s);
 
@@ -332,6 +365,7 @@ const DROP='<div id="upDrop">이미지를 여기로 끌어다 놓거나 클릭�
 function bindDrop(){ const d=$('#upDrop'); if(d)d.onclick=()=>$('#upInput').click(); }
 async function render(){
   if(tab==='ui')return renderUi();
+  if(tab==='stock')return renderStock();
   const body=$('#body'),cntEl=$('#count');
   let list;
   try{list=await assetList();}
@@ -433,6 +467,7 @@ function switchTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
   $('#actImg').style.display=t==='img'?'':'none';
   $('#actUi').style.display=t==='ui'?'':'none';
+  $('#actStock').style.display=t==='stock'?'flex':'none';
   try{localStorage.setItem('libTab',t);}catch(e){}
   render();
 }
@@ -867,7 +902,72 @@ $('#clearAll').onclick=async()=>{
   try{await assetClear();await render();}
   catch(err){alert('전체 삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
 };
-try{if(localStorage.getItem('libTab')==='ui'){tab='ui';}}catch(e){}
+/* ===== 스톡 이미지 탭 (shared/stock-kit.js) — 블로그·배너 스튜디오 보관함과 같은 세 출처 =====
+   ③ 내 이미지는 IndexedDB 에서 실제 삭제, ①·② 저장소 정적 파일은 '숨김'(파일은 저장소에 남고 세 화면 보관함에서만 빠짐) */
+let STK=[], stkSel=new Set();
+const STK_SRC={lib:'라이브러리',base:'기본 스톡',mine:'내 이미지'};
+async function renderStock(){
+  const body=$('#body'),cntEl=$('#count');
+  if(!window.StockKit){body.innerHTML='<div class="empty">스톡 로더(shared/stock-kit.js)를 불러오지 못했어.</div>';return;}
+  let all;
+  try{all=await StockKit.loadAll('',{includeHidden:true,throwOnDb:false});}catch(e){all=[];}
+  STK=all;
+  const q=($('#stkQ').value||'').trim().toLowerCase(), src=$('#stkSrc').value, showH=$('#stkShowHidden').checked;
+  const list=all.filter(i=>(showH||!i.hidden)&&(!src||i.source===src)&&(!q||[i.name,i.category,i.assetId,i.key].some(v=>String(v||'').toLowerCase().includes(q))));
+  stkSel=new Set([...stkSel].filter(k=>list.some(i=>i.key===k)));
+  const n=s=>all.filter(i=>i.source===s&&!i.hidden).length, nh=all.filter(i=>i.hidden).length;
+  cntEl.textContent=`라이브러리 ${n('lib')} · 기본 ${n('base')} · 내 이미지 ${n('mine')}${nh?` · 숨김 ${nh}`:''}`;
+  body.innerHTML=`<div class="stk-note">블로그 이미지 제작·배너 스튜디오의 <b>스톡 이미지 보관함</b>과 같은 목록이야.
+    <b>내 이미지</b>는 삭제하면 이 브라우저 보관함에서 영구히 지워지고, <b>라이브러리·기본 스톡</b>(저장소에 들어 있는 기본 이미지)은
+    <b>숨김 처리</b>만 돼 — 파일 자체는 저장소에 그대로 남고, '숨긴 항목 보기'에서 언제든 복원할 수 있어.
+    이미 작업에 넣은 이미지는 작업 파일 안에 복사돼 있거나(내 이미지) 저장소 파일을 그대로 가리켜서(기본 이미지) 삭제·숨기기로 깨지지 않아.</div>`+
+    (list.length?'<div class="stk-grid" id="stkGrid"></div>':`<div class="empty">${all.length?'조건에 맞는 스톡 이미지가 없어.':'스톡 이미지가 없어.'}</div>`);
+  const g=$('#stkGrid');
+  list.forEach(it=>{
+    const d=document.createElement('div');d.className='stk-card'+(stkSel.has(it.key)?' sel':'')+(it.hidden?' hid':'');d.dataset.key=it.key;
+    d.title=`${STK_SRC[it.source]} · ${it.category} / ${it.name}${it.kb?' · '+it.kb+'KB':''}${it.assetId?'\n'+it.assetId+(it.description?' — '+it.description:''):''}`;
+    d.innerHTML=`<div class="th"><img src="${esc(it.url)}" loading="lazy" alt=""></div><span class="badge ${it.source}">${STK_SRC[it.source]}</span>${it.hidden?'<span class="badge h">숨김</span>':''}`+
+      `<button class="act${it.source==='mine'?' del':''}" data-act="${it.source==='mine'?'del':it.hidden?'restore':'hide'}">${it.source==='mine'?'삭제':it.hidden?'복원':'숨기기'}</button>`+
+      `<input type="checkbox" class="ck"${stkSel.has(it.key)?' checked':''} aria-label="선택">`+
+      `<div class="meta"><div class="nm">${esc(it.name||'')}</div><div class="sub"><span class="dim"></span>${it.kb?it.kb+'KB · ':''}${esc(it.category||'')}</div></div>`;
+    const im=d.querySelector('img');im.onload=()=>{const s=d.querySelector('.dim');if(s)s.textContent=im.naturalWidth+'×'+im.naturalHeight+' · ';};
+    d.querySelector('.act').onclick=e=>{e.stopPropagation();stkApply(e.target.dataset.act,[it]);};
+    d.onclick=e=>{ if(e.target.closest('.act'))return; if(stkSel.has(it.key))stkSel.delete(it.key);else stkSel.add(it.key); stkPaintSel(); };
+    g.appendChild(d);
+  });
+  stkPaintSel();
+}
+function stkPaintSel(){
+  document.querySelectorAll('.stk-card').forEach(c=>{const on=stkSel.has(c.dataset.key);c.classList.toggle('sel',on);const ck=c.querySelector('.ck');if(ck)ck.checked=on;});
+  const picked=STK.filter(i=>stkSel.has(i.key));
+  $('#stkDel').disabled=!picked.some(i=>i.source==='mine'||!i.hidden);
+  $('#stkRestore').disabled=!picked.some(i=>i.hidden);
+  $('#stkDel').textContent=picked.length?`선택 삭제·숨기기 (${picked.filter(i=>i.source==='mine'||!i.hidden).length})`:'선택 삭제·숨기기';
+}
+async function stkApply(act,items){
+  const mine=items.filter(i=>i.source==='mine'), stat=items.filter(i=>i.source!=='mine');
+  if(act==='restore'){ const ks=stat.filter(i=>i.hidden).map(i=>i.key); if(!ks.length)return; StockKit.setHidden(ks,false); toast(`${ks.length}개를 보관함에 다시 보이게 했어`); stkSel.clear(); return renderStock(); }
+  const hide=stat.filter(i=>!i.hidden);
+  if(!mine.length&&!hide.length)return;
+  const msg=[mine.length?`내 이미지 ${mine.length}개를 이 브라우저 보관함에서 영구 삭제해 (되돌릴 수 없음).`:'',
+    hide.length?`저장소 기본 이미지 ${hide.length}개는 숨김 처리돼 — 파일 자체는 저장소에 남고, '숨긴 항목 보기'에서 복원할 수 있어.`:'',
+    '블로그 이미지 제작·배너 스튜디오 보관함에서도 함께 빠져. 이미 작업에 넣은 이미지는 영향 없어.'].filter(Boolean).join('\n\n');
+  if(!await askConfirm(msg,mine.length?'삭제':'숨기기'))return;
+  try{
+    if(mine.length)await StockKit.delMine(mine.map(i=>i.id));
+    if(hide.length)StockKit.setHidden(hide.map(i=>i.key),true);
+    toast([mine.length?`${mine.length}개 삭제`:'',hide.length?`${hide.length}개 숨김`:''].filter(Boolean).join(' · ')+'했어');
+  }catch(err){ alert('처리 실패: '+(err&&err.message||err)); }
+  stkSel.clear(); renderStock();
+}
+$('#stkQ').oninput=()=>renderStock();
+$('#stkSrc').onchange=()=>renderStock();
+$('#stkShowHidden').onchange=()=>renderStock();
+$('#stkAll').onclick=()=>{ const vis=[...document.querySelectorAll('.stk-card')].map(c=>c.dataset.key); const allOn=vis.length&&vis.every(k=>stkSel.has(k)); vis.forEach(k=>allOn?stkSel.delete(k):stkSel.add(k)); stkPaintSel(); };
+$('#stkDel').onclick=()=>stkApply('del',STK.filter(i=>stkSel.has(i.key)));
+$('#stkRestore').onclick=()=>stkApply('restore',STK.filter(i=>stkSel.has(i.key)));
+if(window.StockKit)StockKit.onChange(()=>{ if(tab==='stock')renderStock(); });
+try{const t0=localStorage.getItem('libTab');if(t0==='ui'||t0==='stock'){tab=t0;}}catch(e){}
 switchTab(tab);
 // 새 버전 알림 — 브라우저가 예전 페이지를 기억해 두면 예전 가져오기 코드로 돌아간다. 서버의 최신 페이지와 비교해 다르면 새로고침을 권한다
 (async()=>{try{
