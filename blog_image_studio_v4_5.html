@@ -23,7 +23,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-build" content="20261123-1">
+<meta name="app-build" content="20261123-2">
 <title>블로그 이미지 스튜디오 v4</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <script>
@@ -4480,10 +4480,11 @@ async function loadStock(){
   if(RM.error) mine=[];                                                     // 공용 저장에 연결 못 함 — 로컬로 떨어지지 않는다
   else if(RM.on) mine=StockKit.sharedItems(RM).map(i=>({sharedId:i.sharedId,shared:true,name:i.name,category:i.category,url:i.url,kb:i.kb,ts:i.ts})).sort((a,b)=>b.ts-a.ts);
   else try{mine=(await bsDo('readonly',os=>os.getAll())).map(i=>({id:i.id,name:i.name,category:i.category||'기본',url:i.src,kb:i.kb,ts:i.ts||0})).sort((a,b)=>b.ts-a.ts);}catch(e){}
-  try{stars=(await assetList()).map(a=>({name:a.name,category:'⭐ 블로그 보관함',url:a.src,builtin:true,star:true}));}catch(e){}
+  try{stars=(await assetList()).map(a=>({starId:a.id,name:a.name,category:'⭐ 블로그 보관함',url:a.src,builtin:true,star:true}));}catch(e){}
   const hid=RM.on?new Set(RM.hidden||[]):(window.StockKit?StockKit.hiddenSet():new Set());   // 이미지 소스 페이지에서 숨긴 저장소 기본 이미지는 빼고
   const lib=st.lib.filter(i=>!hid.has(i.key)), base=st.base.filter(i=>!hid.has(i.key));
   STOCK=[...lib,...mine,...base,...stars];
+  STOCK.forEach(i=>{ i.sk=i.key||(i.star?'star:'+i.starId:i.shared?'shared:'+i.sharedId:'mine:'+i.id); });   // 드래그용 고유 키
   $('#stockCnt').textContent=STOCK.length?'· '+STOCK.length+'장':'';
   $('#stockSrc').textContent=([['라이브러리',lib.length],['기본',base.length],[RM.on?'공용':'내 이미지',mine.length]].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(' · ')||'배너 스튜디오와 같은 보관함')
     +(RM.on?' · 공용 저장 켜짐':' · 공용 저장 꺼짐(이 브라우저만)');
@@ -4503,15 +4504,15 @@ function paintStock(){
   items.forEach(it=>{
     const d=document.createElement('div');d.className='stk';
     d.title=`${it.description?it.description+'\n':''}${it.category} / ${it.name}${it.kb?' · '+it.kb+'KB':''}${it.assetId?' · '+it.assetId:''}\n클릭하면 캔버스에 추가 · 캔버스로 끌어다 놓아도 돼`;
-    d.innerHTML=`<img src="${esc(it.url)}" loading="lazy" draggable="true" alt="${esc(it.description||it.name||'')}">`+(it.builtin?'':'<span class="del" title="보관함에서 삭제">×</span>');
-    const img=d.querySelector('img');
+    d.innerHTML=`<img src="${esc(it.url)}" loading="lazy" draggable="true" alt="">`+(it.builtin?'':'<span class="del" title="보관함에서 삭제">×</span>');
+    const img=d.querySelector('img');img.alt=it.description||it.name||'';
     img.onclick=()=>{
       const s0=slides[cur], tg=stockFillTarget&&s0&&LS(s0).find(x=>x.id===stockFillTarget);
       stockFillTarget=null;
       if(tg)return setImageFill(tg,it.url);
       insertStock(it);
     };
-    img.addEventListener('dragstart',ev=>{ev.dataTransfer.setData('text/x-stock',String(STOCK.indexOf(it)));ev.dataTransfer.effectAllowed='copy';});
+    img.addEventListener('dragstart',ev=>{ev.dataTransfer.setData('text/x-stock',it.sk);/* 순번 대신 고유 키 — 드래그 중 목록이 다시 만들어져도 같은 이미지 */ev.dataTransfer.effectAllowed='copy';});
     if(!it.builtin)d.querySelector('.del').onclick=async ev=>{
       ev.stopPropagation();
       const yes=await askConfirm(it.shared?`"${it.name}"\n\n공용 보관함(design 저장소)에서 삭제할까요?\n모든 컴퓨터의 블로그·배너 스튜디오에서 함께 사라져.`:`"${it.name}"\n\n공통 보관함에서 영구 삭제할까요?\n배너 스튜디오에서도 함께 사라져.`,'영구 삭제');
@@ -4572,7 +4573,7 @@ canvas.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('te
 canvas.addEventListener('drop',e=>{
   const k=e.dataTransfer.getData('text/x-stock');if(k==='')return;
   e.preventDefault();e.stopPropagation();
-  const it=STOCK[+k];if(!it)return;
+  const it=STOCK.find(i=>i.sk===k);if(!it)return;
   const z=canvas._z||1,rc=canvas.getBoundingClientRect();
   const at={x:(e.clientX-rc.left)/z-curOffX(slides[cur]),y:(e.clientY-rc.top)/z};
   // 도형 위에 놓으면 그 도형을 이미지로 채운다 (피그마와 같다)
@@ -4706,7 +4707,7 @@ $('#assetUpInput').onchange=async e=>{
 };
 
 /* ================= 유틸 ================= */
-function esc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function esc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}   // 속성값("…")에 넣어도 안전하게 따옴표까지
 function sanitizeRich(html){
   return String(html)
     .replace(/<(script|style)[\s\S]*?<\/\1>/gi,'')
