@@ -407,6 +407,424 @@
           "planVersion": 2
         }
       ]
+    },
+    {
+      "assetId": "asset-shared-002",
+      "fileName": "asset-shared-002.png",
+      "originalName": "광고대장.png",
+      "category": "shared",
+      "description": "광고대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "광고대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 110,
+      "ratio": "50:11",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"광고대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-002.png",
+      "checksum": "46044921eadaf417ffad54bf8b97b94183069aae220cf14ee4880d85d40241ef",
+      "bytes": 7597,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-003",
+      "fileName": "asset-shared-003.png",
+      "originalName": "단체선물대장.png",
+      "category": "shared",
+      "description": "단체선물대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "단체선물대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 82,
+      "ratio": "250:41",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"단체선물대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-003.png",
+      "checksum": "b34f13b8481da27039d8315a80dbbe26466daa8d39a73c334daa7c85055a024d",
+      "bytes": 6703,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-004",
+      "fileName": "asset-shared-004.png",
+      "originalName": "매점대장.png",
+      "category": "shared",
+      "description": "매점대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "매점대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 110,
+      "ratio": "50:11",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"매점대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-004.png",
+      "checksum": "69c3585a445f31f8888d2f49a5feab89df5e157ae1e0c51a21da9186460efcae",
+      "bytes": 6785,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-005",
+      "fileName": "asset-shared-005.png",
+      "originalName": "문자대장.png",
+      "category": "shared",
+      "description": "문자대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "문자대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 110,
+      "ratio": "50:11",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"문자대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-005.png",
+      "checksum": "47b57a968485acb09d9d201d62e874f703fcce560d5529576b458a74e072f091",
+      "bytes": 6915,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-006",
+      "fileName": "asset-shared-006.png",
+      "originalName": "배달대장.png",
+      "category": "shared",
+      "description": "배달대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "배달대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 110,
+      "ratio": "50:11",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"배달대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-006.png",
+      "checksum": "f33feab2644eeb1c30c3691a5fb5875c9f84249c88d4cee83e44ae9ef6950b51",
+      "bytes": 6472,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-007",
+      "fileName": "asset-shared-007.png",
+      "originalName": "복지대장.png",
+      "category": "shared",
+      "description": "복지대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "복지대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 110,
+      "ratio": "50:11",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"복지대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-007.png",
+      "checksum": "766f01605d1b006ba9f41dee305e9382a0756ba682959f02a44b98f01b2972dc",
+      "bytes": 6864,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-008",
+      "fileName": "asset-shared-008.png",
+      "originalName": "사무기기대장.png",
+      "category": "shared",
+      "description": "사무기기대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "사무기기대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 82,
+      "ratio": "250:41",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"사무기기대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-008.png",
+      "checksum": "92d9e207d320ac20138a1e2355420a1ad8c927f047cf33d8aabc5706b0a5b7e4",
+      "bytes": 6435,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-009",
+      "fileName": "asset-shared-009.png",
+      "originalName": "식권대장.png",
+      "category": "shared",
+      "description": "식권대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "식권대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 110,
+      "ratio": "50:11",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"식권대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-009.png",
+      "checksum": "17fb8b4360d26c3e24cf0f26901fe53f77d0892cd95dece9614489bde0ad8478",
+      "bytes": 7118,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-010",
+      "fileName": "asset-shared-010.png",
+      "originalName": "의무교육대장.png",
+      "category": "shared",
+      "description": "의무교육대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "의무교육대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 82,
+      "ratio": "250:41",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"의무교육대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-010.png",
+      "checksum": "e05197d8f7f4602d2e4d107421ef32fa0cd2b5835bdb6e986d458472a7829b3e",
+      "bytes": 6922,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-011",
+      "fileName": "asset-shared-011.png",
+      "originalName": "커피대장.png",
+      "category": "shared",
+      "description": "커피대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "커피대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 110,
+      "ratio": "50:11",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"커피대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-011.png",
+      "checksum": "db1cb4312a99f23cb203e0d9123f199e51fee332d6514ea98cfabfcf1fe6264d",
+      "bytes": 7411,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-012",
+      "fileName": "asset-shared-012.png",
+      "originalName": "퀵대장.png",
+      "category": "shared",
+      "description": "퀵대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "퀵대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 132,
+      "ratio": "125:33",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"퀵대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-012.png",
+      "checksum": "f9a735a59f528faef47b939faee911f3b37b3fca8612db2e93c91ad223c29c07",
+      "bytes": 7301,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-013",
+      "fileName": "asset-shared-013.png",
+      "originalName": "푸드트럭대장.png",
+      "category": "shared",
+      "description": "푸드트럭대장 서비스 로고 (블로그 스튜디오 내장본 SERVICE_LOGOS)",
+      "keywords": [
+        "푸드트럭대장",
+        "서비스 로고",
+        "로고",
+        "BI",
+        "현대벤디스",
+        "블로그 스튜디오"
+      ],
+      "width": 500,
+      "height": 82,
+      "ratio": "250:41",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html SERVICE_LOGOS[\"푸드트럭대장\"] dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-013.png",
+      "checksum": "3a98e0fe5759d9952119f98bc849cd5fc7d3d5042a5d51354ae4effc3591d88d",
+      "bytes": 5552,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
+    },
+    {
+      "assetId": "asset-shared-014",
+      "fileName": "asset-shared-014.webp",
+      "originalName": "QNA_MOCKUP.webp",
+      "category": "shared",
+      "description": "Q&A 목업 — 식권대장 앱 홈 화면 폰 목업 (블로그 스튜디오 내장본 QNA_MOCKUP)",
+      "keywords": [
+        "QNA_MOCKUP",
+        "Q&A",
+        "QnA",
+        "목업",
+        "폰 목업",
+        "앱 화면",
+        "식권대장",
+        "블로그 스튜디오"
+      ],
+      "width": 640,
+      "height": 1295,
+      "ratio": "128:259",
+      "generator": {
+        "tool": "extract-from-blog-studio",
+        "model": null,
+        "prompt": "blog_image_studio_v4_5.html QNA_MOCKUP dataURL 디코드"
+      },
+      "createdAt": "2026-11-23",
+      "path": "assets/campaign-library/shared/asset-shared-014.webp",
+      "checksum": "de0d0674b90d24f072cc1c10e344e4965c28bc13292aa5b74e657a6ffd4c79b4",
+      "bytes": 52010,
+      "license": "사내 서비스 BI — 블로그 스튜디오 내장본 추출 · 사내 재사용",
+      "reusable": true,
+      "parentAssetId": null,
+      "relation": null,
+      "usage": []
     }
   ]
 }
