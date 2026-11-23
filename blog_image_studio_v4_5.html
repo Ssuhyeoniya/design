@@ -23,7 +23,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-build" content="20261104-8">
+<meta name="app-build" content="20261123-1">
 <title>블로그 이미지 스튜디오 v4</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <script>
@@ -116,7 +116,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   #stockbar.fold .head{flex-direction:column;padding:.75rem 0;}
   #stockDrop{border:1.5px dashed var(--border-strong);border-radius:8px;padding:8px 6px;text-align:center;font-size:.69rem;color:var(--text-sub);cursor:pointer;line-height:1.5;}
   #stockDrop:hover,#stockDrop.over{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);}
-  #stockCat{width:100%;}
+  #stockCat,#stockQ{width:100%;}
+  #stockQ{box-sizing:border-box;border:1px solid var(--border-strong);border-radius:6px;padding:4px 7px;font:inherit;font-size:.72rem;}
   #stockGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
   .stk{position:relative;aspect-ratio:1/1;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;cursor:pointer;
     background:repeating-conic-gradient(#f1f2f5 0 25%,#fff 0 50%) 0 0/12px 12px;}
@@ -528,6 +529,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <div class="sb-body">
       <div id="stockDrop">이미지를 끌어다 놓거나 클릭해서 등록<br><span id="stockSrc"></span></div>
       <input type="file" id="stockUpInput" accept="image/*" multiple style="display:none">
+      <input type="search" id="stockQ" placeholder="이름·서비스명 검색" aria-label="스톡 이미지 검색">
       <select id="stockCat"><option value="">전체 카테고리</option></select>
       <div id="stockGrid"></div>
       <p id="stockEmpty">아직 등록된 이미지가 없어. 위 영역에 끌어다 놓으면 배너 스튜디오와 같은 보관함에 저장돼.</p>
@@ -2793,11 +2795,11 @@ function bindProps(s,l){
         const list=await assetList();
         const hit=list.find(a=>a.src===l.src);
         if(hit){ // 저장 취소 → 보관함에서 제거
-          await assetDel(hit.id);paintStar(false);
+          await assetDel(hit.id);paintStar(false);starChanged();
         }else{
           const d=new Date();
           const auto=`에셋 ${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-          await assetAdd(auto,l.src);paintStar(true); // 이름은 보관함에서 클릭해 수정 가능
+          await assetAdd(auto,l.src);paintStar(true);starChanged(); // 이름은 보관함에서 클릭해 수정 가능
         }
       }catch(err){alert('보관함 오류: '+(err&&err.message?err.message:'브라우저에서 직접 열어 사용해줘.'));}
     };
@@ -4278,6 +4280,9 @@ function idb(){
     q.onerror=()=>rej(q.error);
   });
 }
+// ⭐ 보관함이 바뀌면 이 화면 스톡 패널과 열린 다른 화면(이미지 소스 페이지)에 알린다 — BroadcastChannel 'stock-kit'
+// (notify 는 이 화면 구독자에게도 바로 전달돼 아래 onChange 가 스톡 패널·보관함 창을 다시 그린다)
+function starChanged(){ if(window.StockKit)StockKit.notify('star'); else if(typeof loadStock==='function')loadStock(); }
 async function assetAdd(name,src){
   const db=await idb();
   return new Promise((res,rej)=>{
@@ -4317,7 +4322,7 @@ async function settingGet(key){
     const list=await assetList();
     const junk=list.filter(a=>/^참고 소스/.test(a.name||''));
     for(const j of junk)await assetDel(j.id);
-    if(junk.length)console.log('보관함 정리: 참고 소스 '+junk.length+'건 삭제');
+    if(junk.length){console.log('보관함 정리: 참고 소스 '+junk.length+'건 삭제');starChanged();}
   }catch(e){}
 })();
 // 인페이지 확인 모달 (네이티브 confirm 차단 대응)
@@ -4398,14 +4403,14 @@ async function renderAssets(){
     nmEl.addEventListener('blur',async()=>{
       const nv=nmEl.textContent.trim()||'이름없음';
       if(nv===item.name)return;
-      try{await assetRename(id,nv);item.name=nv;}catch(e){nmEl.textContent=item.name;}
+      try{await assetRename(id,nv);item.name=nv;starChanged();}catch(e){nmEl.textContent=item.name;}
     });
     card.querySelector('.th').onclick=insert;
     card.querySelector('.ins').onclick=insert;
     card.querySelector('.del').onclick=async()=>{
       const yes=await askConfirm(`"${item.name}"\n\n보관함에서 영구 삭제할까요?\n삭제하면 복구할 수 없습니다.`,'영구 삭제');
       if(!yes)return;
-      try{await assetDel(id);await renderAssets();}
+      try{await assetDel(id);await renderAssets();starChanged();}
       catch(err){alert('삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
     };
   });
@@ -4418,7 +4423,7 @@ $('#assetClearBtn').onclick=async()=>{
   if(!list.length){alert('보관함이 비어 있습니다.');return;}
   const yes=await askConfirm(`보관함의 이미지 ${list.length}개를 모두 영구 삭제할까요?\n삭제하면 복구할 수 없습니다.`,'전체 영구 삭제');
   if(!yes)return;
-  try{await assetClear();await renderAssets();}
+  try{await assetClear();await renderAssets();starChanged();}
   catch(err){alert('전체 삭제 실패: '+(err&&err.message?err.message:'보관함 접근 오류'));}
 };
 
@@ -4491,14 +4496,14 @@ async function loadStock(){
   paintStock();
 }
 function paintStock(){
-  const cat=$('#stockCat').value;
-  const items=STOCK.filter(i=>!cat||i.category===cat);
+  const cat=$('#stockCat').value, q=($('#stockQ').value||'').trim().toLowerCase();
+  const items=STOCK.filter(i=>(!cat||i.category===cat)&&(!q||[i.name,i.description,i.category,i.assetId].some(v=>String(v||'').toLowerCase().includes(q))));
   const g=$('#stockGrid');g.innerHTML='';
   $('#stockEmpty').style.display=STOCK.length?'none':'block';
   items.forEach(it=>{
     const d=document.createElement('div');d.className='stk';
-    d.title=`${it.category} / ${it.name}${it.kb?' · '+it.kb+'KB':''}${it.assetId?' · '+it.assetId+(it.description?'\n'+it.description:''):''}\n클릭하면 캔버스에 추가 · 캔버스로 끌어다 놓아도 돼`;
-    d.innerHTML=`<img src="${esc(it.url)}" loading="lazy" draggable="true">`+(it.builtin?'':'<span class="del" title="보관함에서 삭제">×</span>');
+    d.title=`${it.description?it.description+'\n':''}${it.category} / ${it.name}${it.kb?' · '+it.kb+'KB':''}${it.assetId?' · '+it.assetId:''}\n클릭하면 캔버스에 추가 · 캔버스로 끌어다 놓아도 돼`;
+    d.innerHTML=`<img src="${esc(it.url)}" loading="lazy" draggable="true" alt="${esc(it.description||it.name||'')}">`+(it.builtin?'':'<span class="del" title="보관함에서 삭제">×</span>');
     const img=d.querySelector('img');
     img.onclick=()=>{
       const s0=slides[cur], tg=stockFillTarget&&s0&&LS(s0).find(x=>x.id===stockFillTarget);
@@ -4556,6 +4561,7 @@ async function uploadStock(files){
   if(n)loadStock();
 }
 $('#stockCat').onchange=paintStock;
+$('#stockQ').oninput=paintStock;
 $('#stockDrop').onclick=()=>$('#stockUpInput').click();
 $('#stockUpInput').onchange=e=>{uploadStock([...e.target.files]);e.target.value='';};
 ['dragover','dragenter'].forEach(t=>$('#stockDrop').addEventListener(t,e=>{e.preventDefault();$('#stockDrop').classList.add('over');}));
@@ -4583,7 +4589,10 @@ $('#stockFold').onclick=()=>{
 try{if(localStorage.getItem('blogStockFold')){$('#stockbar').classList.add('fold');$('#stockFold').textContent='▶';}}catch(e){}
 // 다른 탭(배너 스튜디오)에서 등록한 이미지도 돌아오면 반영
 window.addEventListener('focus',()=>{loadStock();});
-if(window.StockKit)StockKit.onChange(()=>loadStock());   // 이미지 소스 페이지(다른 탭)에서 삭제·숨기기·복원하면 바로 반영
+// 이미지 소스 페이지(다른 탭)에서 삭제·숨기기·복원, ⭐ 보관함 등록·삭제('star')하면 바로 반영. 연달아 와도 한 번만 다시 읽는다
+let stockRq=0;
+if(window.StockKit)StockKit.onChange(why=>{ clearTimeout(stockRq); stockRq=setTimeout(()=>{ loadStock();
+  if(why==='star'&&$('#assetBack').classList.contains('show')&&!$('#assetBody').contains(document.activeElement))renderAssets(); },30); });   // 이름 수정 중이면 그대로 둔다
 loadStock();
 
 /* ================= UI 컴포넌트 (shared/ui-kit.js — 배너 스튜디오와 공용) =================
@@ -4693,7 +4702,7 @@ $('#assetUpInput').onchange=async e=>{
       await assetAdd(f.name.replace(/\.[^.]+$/,''),d);
     }
   }catch(err){alert('저장 실패: 이 브라우저 환경에서는 보관함을 사용할 수 없어.');}
-  e.target.value='';renderAssets();
+  e.target.value='';renderAssets();starChanged();
 };
 
 /* ================= 유틸 ================= */
